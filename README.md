@@ -8,7 +8,7 @@ Check our official helm charts repo https://github.com/castai/castai-helm-charts
 
 ## Community
 
-- [Slack](http://slack.cast.ai/)
+- [Twitter](https://twitter.com/cast_ai)
 - [Discord](https://discord.gg/4sFCFVJ)
 
 ## Contributing
