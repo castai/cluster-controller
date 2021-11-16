@@ -2,7 +2,6 @@ package actions
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/sirupsen/logrus"
@@ -12,7 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/castai/cluster-controller/telemetry"
+	"github.com/castai/cluster-controller/castai"
 )
 
 func TestDeleteNodeHandler(t *testing.T) {
@@ -36,12 +35,11 @@ func TestDeleteNodeHandler(t *testing.T) {
 			cfg:       deleteNodeConfig{},
 		}
 
-		req := telemetry.AgentActionDeleteNode{
+		req := &castai.ActionDeleteNode{
 			NodeName: "node1",
 		}
-		reqData, _ := json.Marshal(req)
 
-		err := h.Handle(context.Background(), reqData)
+		err := h.Handle(context.Background(), req)
 		r.NoError(err)
 
 		_, err = clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
@@ -64,12 +62,10 @@ func TestDeleteNodeHandler(t *testing.T) {
 			cfg:       deleteNodeConfig{},
 		}
 
-		req := telemetry.AgentActionDeleteNode{
+		req := &castai.ActionDeleteNode{
 			NodeName: "already-deleted-node",
 		}
-		reqData, _ := json.Marshal(req)
-
-		err := h.Handle(context.Background(), reqData)
+		err := h.Handle(context.Background(), req)
 		r.NoError(err)
 
 		_, err = clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})

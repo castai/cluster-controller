@@ -2,7 +2,7 @@ package actions
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
 
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
@@ -10,7 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/castai/cluster-controller/telemetry"
+	"github.com/castai/cluster-controller/castai"
 )
 
 func newPatchNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface) ActionHandler {
@@ -25,10 +25,10 @@ type patchNodeHandler struct {
 	clientset kubernetes.Interface
 }
 
-func (h *patchNodeHandler) Handle(ctx context.Context, data []byte) error {
-	var req telemetry.AgentActionPatchNode
-	if err := json.Unmarshal(data, &req); err != nil {
-		return err
+func (h *patchNodeHandler) Handle(ctx context.Context, data interface{}) error {
+	req, ok := data.(*castai.ActionPatchNode)
+	if !ok {
+		return fmt.Errorf("unexpected type %T for delete patch handler", data)
 	}
 
 	log := h.log.WithField("node_name", req.NodeName)

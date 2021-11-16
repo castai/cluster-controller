@@ -2,7 +2,7 @@ package actions
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -11,7 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/castai/cluster-controller/telemetry"
+	"github.com/castai/cluster-controller/castai"
 )
 
 type deleteNodeConfig struct {
@@ -36,11 +36,12 @@ type deleteNodeHandler struct {
 	cfg       deleteNodeConfig
 }
 
-func (h *deleteNodeHandler) Handle(ctx context.Context, data []byte) error {
-	var req telemetry.AgentActionDeleteNode
-	if err := json.Unmarshal(data, &req); err != nil {
-		return err
+func (h *deleteNodeHandler) Handle(ctx context.Context, data interface{}) error {
+	req, ok := data.(*castai.ActionDeleteNode)
+	if !ok {
+		return fmt.Errorf("unexpected type %T for delete node handler", data)
 	}
+
 	log := h.log.WithField("node_name", req.NodeName)
 	log.Info("deleting kubernetes node")
 

@@ -2,7 +2,6 @@ package actions
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -17,7 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/castai/cluster-controller/telemetry"
+	"github.com/castai/cluster-controller/castai"
 )
 
 var (
@@ -50,10 +49,10 @@ type drainNodeHandler struct {
 	cfg       drainNodeConfig
 }
 
-func (h *drainNodeHandler) Handle(ctx context.Context, data []byte) error {
-	var req telemetry.AgentActionDrainNode
-	if err := json.Unmarshal(data, &req); err != nil {
-		return err
+func (h *drainNodeHandler) Handle(ctx context.Context, data interface{}) error {
+	req, ok := data.(*castai.ActionDrainNode)
+	if !ok {
+		return fmt.Errorf("unexpected type %T for delete drain handler", data)
 	}
 
 	log := h.log.WithField("node_name", req.NodeName)
