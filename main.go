@@ -14,10 +14,10 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
-	"github.com/castai/castai-cluster-controller/actions"
-	"github.com/castai/castai-cluster-controller/config"
-	"github.com/castai/castai-cluster-controller/telemetry"
-	"github.com/castai/castai-cluster-controller/version"
+	"github.com/castai/cluster-controller/actions"
+	"github.com/castai/cluster-controller/config"
+	"github.com/castai/cluster-controller/telemetry"
+	"github.com/castai/cluster-controller/version"
 )
 
 // These should be set via `go build` during a release.

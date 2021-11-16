@@ -15,7 +15,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	ktest "k8s.io/client-go/testing"
 
-	"github.com/castai/castai-cluster-controller/telemetry"
+	"github.com/castai/cluster-controller/telemetry"
 )
 
 func TestDrainNodeHandler(t *testing.T) {

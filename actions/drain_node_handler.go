@@ -17,7 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/castai/castai-cluster-controller/telemetry"
+	"github.com/castai/cluster-controller/telemetry"
 )
 
 var (
