@@ -34,7 +34,7 @@ func main() {
 	logLevel := logrus.Level(cfg.Log.Level)
 	logger.SetLevel(logrus.Level(cfg.Log.Level))
 
-	telemetryClient := telemetry.NewClient(logger, telemetry.NewDefaultClient(cfg.API.TelemetryURL, cfg.API.Key, logLevel))
+	telemetryClient := telemetry.NewClient(logger, telemetry.NewDefaultClient(cfg.API.URL, cfg.API.Key, logLevel))
 
 	log := logrus.WithFields(logrus.Fields{})
 	if err := run(signals.SetupSignalHandler(), telemetryClient, logger, cfg); err != nil {

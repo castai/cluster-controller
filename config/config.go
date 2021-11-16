@@ -22,7 +22,6 @@ type Log struct {
 type API struct {
 	Key          string
 	URL          string
-	TelemetryURL string
 }
 
 var cfg *Config
@@ -37,7 +36,6 @@ func Get() Config {
 
 	_ = viper.BindEnv("api.key", "API_KEY")
 	_ = viper.BindEnv("api.url", "API_URL")
-	_ = viper.BindEnv("api.telemetryurl", "API_TELEMETRY_URL")
 	_ = viper.BindEnv("clusterid", "CLUSTER_ID")
 
 	_ = viper.BindEnv("kubeconfig")
@@ -58,9 +56,6 @@ func Get() Config {
 	}
 	if cfg.API.URL == "" {
 		required("API_URL")
-	}
-	if cfg.API.TelemetryURL == "" {
-		required("API_TELEMETRY_URL")
 	}
 	if cfg.ClusterID == "" {
 		required("CLUSTER_ID")
