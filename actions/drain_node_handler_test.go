@@ -2,7 +2,6 @@ package actions
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/sirupsen/logrus"
@@ -15,7 +14,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	ktest "k8s.io/client-go/testing"
 
-	"github.com/castai/cluster-controller/telemetry"
+	"github.com/castai/cluster-controller/castai"
 )
 
 func TestDrainNodeHandler(t *testing.T) {
@@ -36,14 +35,13 @@ func TestDrainNodeHandler(t *testing.T) {
 			cfg:       drainNodeConfig{},
 		}
 
-		req := telemetry.AgentActionDrainNode{
+		req := &castai.ActionDrainNode{
 			NodeName:            "node1",
 			DrainTimeoutSeconds: 1,
 			Force:               true,
 		}
-		reqData, _ := json.Marshal(req)
 
-		err := h.Handle(context.Background(), reqData)
+		err := h.Handle(context.Background(), req)
 		r.NoError(err)
 
 		n, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
@@ -67,14 +65,13 @@ func TestDrainNodeHandler(t *testing.T) {
 			cfg:       drainNodeConfig{},
 		}
 
-		req := telemetry.AgentActionDrainNode{
+		req := &castai.ActionDrainNode{
 			NodeName:            "already-deleted-node",
 			DrainTimeoutSeconds: 1,
 			Force:               true,
 		}
-		reqData, _ := json.Marshal(req)
 
-		err := h.Handle(context.Background(), reqData)
+		err := h.Handle(context.Background(), req)
 		r.NoError(err)
 
 		_, err = clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
@@ -93,14 +90,13 @@ func TestDrainNodeHandler(t *testing.T) {
 			cfg:       drainNodeConfig{},
 		}
 
-		req := telemetry.AgentActionDrainNode{
+		req := &castai.ActionDrainNode{
 			NodeName:            "node1",
 			DrainTimeoutSeconds: 1,
 			Force:               true,
 		}
-		reqData, _ := json.Marshal(req)
 
-		err := h.Handle(context.Background(), reqData)
+		err := h.Handle(context.Background(), req)
 		r.EqualError(err, "evicting pods: evicting pod pod1 in namespace default: internal")
 
 		n, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})

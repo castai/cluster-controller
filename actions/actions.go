@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/castai/cluster-controller/telemetry"
+	"github.com/castai/cluster-controller/castai"
 )
 
 type Config struct {
@@ -27,32 +28,33 @@ type Service interface {
 }
 
 type ActionHandler interface {
-	Handle(ctx context.Context, data []byte) error
+	Handle(ctx context.Context, data interface{}) error
 }
 
 func NewService(
 	log logrus.FieldLogger,
 	cfg Config,
 	clientset *kubernetes.Clientset,
-	telemetryClient telemetry.Client,
+	castaiClient castai.Client,
 ) Service {
 	return &service{
-		log:             log,
-		cfg:             cfg,
-		telemetryClient: telemetryClient,
-		actionHandlers: map[telemetry.AgentActionType]ActionHandler{
-			telemetry.AgentActionTypeDeleteNode: newDeleteNodeHandler(log, clientset),
-			telemetry.AgentActionTypeDrainNode:  newDrainNodeHandler(log, clientset),
-			telemetry.AgentActionTypePatchNode:  newPatchNodeHandler(log, clientset),
+		log:          log,
+		cfg:          cfg,
+		castaiClient: castaiClient,
+		actionHandlers: map[reflect.Type]ActionHandler{
+			reflect.TypeOf(&castai.ActionDeleteNode{}): newDeleteNodeHandler(log, clientset),
+			reflect.TypeOf(&castai.ActionDrainNode{}):  newDrainNodeHandler(log, clientset),
+			reflect.TypeOf(&castai.ActionPatchNode{}):  newPatchNodeHandler(log, clientset),
 		},
 	}
 }
 
 type service struct {
-	log             logrus.FieldLogger
-	cfg             Config
-	telemetryClient telemetry.Client
-	actionHandlers  map[telemetry.AgentActionType]ActionHandler
+	log          logrus.FieldLogger
+	cfg          Config
+	castaiClient castai.Client
+
+	actionHandlers map[reflect.Type]ActionHandler
 }
 
 func (s *service) Run(ctx context.Context) {
@@ -96,17 +98,17 @@ func (s *service) doWork(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) pollActions(ctx context.Context) ([]*telemetry.AgentAction, error) {
+func (s *service) pollActions(ctx context.Context) ([]*castai.ClusterAction, error) {
 	ctx, cancel := context.WithTimeout(ctx, s.cfg.PollTimeout)
 	defer cancel()
-	actions, err := s.telemetryClient.GetActions(ctx, s.cfg.ClusterID)
+	actions, err := s.castaiClient.GetActions(ctx, s.cfg.ClusterID)
 	if err != nil {
 		return nil, err
 	}
 	return actions, nil
 }
 
-func (s *service) handleActions(ctx context.Context, actions []*telemetry.AgentAction) error {
+func (s *service) handleActions(ctx context.Context, actions []*castai.ClusterAction) error {
 	for _, action := range actions {
 		var err error
 		handleErr := s.handleAction(ctx, action)
@@ -125,30 +127,30 @@ func (s *service) handleActions(ctx context.Context, actions []*telemetry.AgentA
 	return nil
 }
 
-func (s *service) handleAction(ctx context.Context, action *telemetry.AgentAction) (err error) {
-	s.log.Infof("handling action, id=%s, type=%s", action.ID, action.Type)
-	handler, ok := s.actionHandlers[action.Type]
+func (s *service) handleAction(ctx context.Context, action *castai.ClusterAction) (err error) {
+	data := action.Data()
+	actionType := reflect.TypeOf(data)
+	s.log.Infof("handling action, id=%s, type=%s", action.ID, actionType)
+	handler, ok := s.actionHandlers[actionType]
 	if !ok {
-		return fmt.Errorf("handler not found for agent action=%s", action.Type)
+		return fmt.Errorf("handler not found for agent action=%s", actionType)
 	}
 
-	if err := handler.Handle(ctx, action.Data); err != nil {
+	if err := handler.Handle(ctx, data); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s *service) ackAction(ctx context.Context, action *telemetry.AgentAction, handleErr error) error {
-	s.log.Infof("ack action, id=%s, type=%s", action.ID, action.Type)
+func (s *service) ackAction(ctx context.Context, action *castai.ClusterAction, handleErr error) error {
+	actionType := reflect.TypeOf(action.Data())
+	s.log.Infof("ack action, id=%s, type=%s", action.ID, actionType)
 
 	return backoff.RetryNotify(func() error {
 		ctx, cancel := context.WithTimeout(ctx, s.cfg.AckTimeout)
 		defer cancel()
-		return s.telemetryClient.AckActions(ctx, s.cfg.ClusterID, []*telemetry.AgentActionAck{
-			{
-				ID:    action.ID,
-				Error: getHandlerError(handleErr),
-			},
+		return s.castaiClient.AckAction(ctx, s.cfg.ClusterID, action.ID, &castai.AckClusterActionRequest{
+			Error: getHandlerError(handleErr),
 		})
 	}, backoff.WithContext(
 		backoff.WithMaxRetries(
