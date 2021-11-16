@@ -1,4 +1,4 @@
-module github.com/castai/castai-cluster-controller
+module github.com/castai/cluster-controller
 
 go 1.16
 

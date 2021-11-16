@@ -11,7 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/castai/castai-cluster-controller/telemetry"
+	"github.com/castai/cluster-controller/telemetry"
 )
 
 func TestPatchNodeHandler(t *testing.T) {

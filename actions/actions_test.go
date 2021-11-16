@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 
-	"github.com/castai/castai-cluster-controller/telemetry"
+	"github.com/castai/cluster-controller/telemetry"
 )
 
 func TestMain(m *testing.M) {
