@@ -32,7 +32,7 @@ func NewClient(log *logrus.Logger, rest *resty.Client) Client {
 // NewDefaultClient configures a default instance of the resty.Client used to do HTTP requests.
 func NewDefaultClient(url, key string, level logrus.Level) *resty.Client {
 	client := resty.New()
-	client.SetHostURL(fmt.Sprintf("https://%s", url))
+	client.SetHostURL(url)
 	client.Header.Set(hdrAPIKey, key)
 	if level == logrus.TraceLevel {
 		client.SetDebug(true)
