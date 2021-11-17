@@ -71,7 +71,7 @@ func run(ctx context.Context, client castai.Client, logger *logrus.Logger, cfg c
 		Version:   Version,
 	}
 
-	e := ctrlog.NewExporter(client)
+	e := ctrlog.NewExporter(logger, client)
 	logger.AddHook(e)
 	logrus.RegisterExitHandler(e.Wait)
 

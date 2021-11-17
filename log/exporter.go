@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/sirupsen/logrus"
 
 	"github.com/castai/cluster-controller/castai"
@@ -19,14 +20,16 @@ type Exporter interface {
 	Wait()
 }
 
-func NewExporter(client castai.Client) Exporter {
+func NewExporter(logger *logrus.Logger, client castai.Client) Exporter {
 	return &exporter{
+		logger: logger,
 		client: client,
 		wg:     sync.WaitGroup{},
 	}
 }
 
 type exporter struct {
+	logger *logrus.Logger
 	client castai.Client
 	wg     sync.WaitGroup
 }
@@ -67,5 +70,12 @@ func (e *exporter) sendLogEvent(log *logrus.Entry) {
 		Fields:  log.Data,
 	}
 
-	_ = e.client.SendLogs(ctx, req)
+	b := backoff.WithContext(backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 3), ctx)
+	err := backoff.Retry(func() error {
+		return e.client.SendLogs(ctx, req)
+	}, b)
+
+	if err != nil {
+		e.logger.Debugf("sending logs: %v", err)
+	}
 }

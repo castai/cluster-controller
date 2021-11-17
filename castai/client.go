@@ -14,8 +14,7 @@ const (
 )
 
 var (
-	hdrAPIKey         = http.CanonicalHeaderKey(headerAPIKey)
-	defaultRetryCount = 3
+	hdrAPIKey = http.CanonicalHeaderKey(headerAPIKey)
 )
 
 type Client interface {
@@ -36,7 +35,6 @@ func NewClient(log *logrus.Logger, rest *resty.Client, clusterID string) Client 
 func NewDefaultClient(url, key string, level logrus.Level) *resty.Client {
 	client := resty.New()
 	client.SetHostURL(url)
-	client.SetRetryCount(defaultRetryCount)
 	client.Header.Set(hdrAPIKey, key)
 	if level == logrus.TraceLevel {
 		client.SetDebug(true)
