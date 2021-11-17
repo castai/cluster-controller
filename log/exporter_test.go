@@ -38,5 +38,5 @@ func TestLogExporter(t *testing.T) {
 	it.Equal(client.Logs[0].Fields, logrus.Fields{"cluster_id": "test-cluster"})
 	it.Equal(client.Logs[1].Message, "failed to add node")
 	it.Equal(client.Logs[1].Level, "error")
-	it.Equal(client.Logs[1].Level, logrus.Fields{"cluster_id": "test-cluster"})
+	it.Equal(client.Logs[1].Fields, logrus.Fields{"cluster_id": "test-cluster"})
 }
