@@ -18,14 +18,16 @@ var (
 )
 
 type Client interface {
-	GetActions(ctx context.Context, clusterID string) ([]*ClusterAction, error)
-	AckAction(ctx context.Context, clusterID, actionID string, req *AckClusterActionRequest) error
+	GetActions(ctx context.Context) ([]*ClusterAction, error)
+	AckAction(ctx context.Context, actionID string, req *AckClusterActionRequest) error
+	SendLogs(ctx context.Context, req *LogEvent) error
 }
 
-func NewClient(log *logrus.Logger, rest *resty.Client) Client {
+func NewClient(log *logrus.Logger, rest *resty.Client, clusterID string) Client {
 	return &client{
-		log:  log,
-		rest: rest,
+		log:       log,
+		rest:      rest,
+		clusterID: clusterID,
 	}
 }
 
@@ -42,16 +44,33 @@ func NewDefaultClient(url, key string, level logrus.Level) *resty.Client {
 }
 
 type client struct {
-	log  *logrus.Logger
-	rest *resty.Client
+	log       *logrus.Logger
+	rest      *resty.Client
+	clusterID string
 }
 
-func (c *client) GetActions(ctx context.Context, clusterID string) ([]*ClusterAction, error) {
+func (c *client) SendLogs(ctx context.Context, req *LogEvent) error {
+	resp, err := c.rest.R().
+		SetBody(req).
+		SetContext(ctx).
+		Post(fmt.Sprintf("/v1/kubernetes/clusters/%s/actions/logs", c.clusterID))
+
+	if err != nil {
+		return fmt.Errorf("sending logs: %w", err)
+	}
+	if resp.IsError() {
+		return fmt.Errorf("sending logs: request error status_code=%d body=%s", resp.StatusCode(), resp.Body())
+	}
+
+	return nil
+}
+
+func (c *client) GetActions(ctx context.Context) ([]*ClusterAction, error) {
 	res := &GetClusterActionsResponse{}
 	resp, err := c.rest.R().
 		SetContext(ctx).
 		SetResult(res).
-		Get(fmt.Sprintf("/v1/kubernetes/clusters/%s/actions", clusterID))
+		Get(fmt.Sprintf("/v1/kubernetes/clusters/%s/actions", c.clusterID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to request cluster-actions: %w", err)
 	}
@@ -61,11 +80,11 @@ func (c *client) GetActions(ctx context.Context, clusterID string) ([]*ClusterAc
 	return res.Items, nil
 }
 
-func (c *client) AckAction(ctx context.Context, clusterID, actionID string, req *AckClusterActionRequest) error {
+func (c *client) AckAction(ctx context.Context, actionID string, req *AckClusterActionRequest) error {
 	resp, err := c.rest.R().
 		SetContext(ctx).
 		SetBody(req).
-		Post(fmt.Sprintf("/v1/kubernetes/clusters/%s/actions/%s/ack", clusterID, actionID))
+		Post(fmt.Sprintf("/v1/kubernetes/clusters/%s/actions/%s/ack", c.clusterID, actionID))
 	if err != nil {
 		return fmt.Errorf("failed to request cluster-actions ack: %v", err)
 	}

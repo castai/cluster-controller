@@ -12,6 +12,7 @@ import (
 	"go.uber.org/goleak"
 
 	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/castai/mock"
 )
 
 func TestMain(m *testing.M) {
@@ -32,8 +33,8 @@ func TestActions(t *testing.T) {
 		ClusterID:       uuid.New().String(),
 	}
 
-	newTestService := func(handler ActionHandler, telemetryClient castai.Client) Service {
-		svc := NewService(log, cfg, nil, telemetryClient)
+	newTestService := func(handler ActionHandler, client castai.Client) Service {
+		svc := NewService(log, cfg, nil, client)
 		handlers := svc.(*service).actionHandlers
 		// Patch handlers with a mock one.
 		for k := range handlers {
@@ -66,16 +67,16 @@ func TestActions(t *testing.T) {
 				},
 			},
 		}
-		telemetryClient := newMockTelemetryClient(apiActions)
+		client := mock.NewMockAPIClient(apiActions)
 		handler := &mockAgentActionHandler{}
-		svc := newTestService(handler, telemetryClient)
+		svc := newTestService(handler, client)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
 		defer func() {
 			cancel()
-			r.Len(telemetryClient.acks, 3)
-			r.Equal("a1", telemetryClient.acks[0].actionID)
-			r.Equal("a2", telemetryClient.acks[1].actionID)
-			r.Equal("a3", telemetryClient.acks[2].actionID)
+			r.Len(client.Acks, 3)
+			r.Equal("a1", client.Acks[0].ActionID)
+			r.Equal("a2", client.Acks[1].ActionID)
+			r.Equal("a3", client.Acks[2].ActionID)
 		}()
 		svc.Run(ctx)
 	})
@@ -90,16 +91,16 @@ func TestActions(t *testing.T) {
 				},
 			},
 		}
-		telemetryClient := newMockTelemetryClient(apiActions)
+		client := mock.NewMockAPIClient(apiActions)
 		handler := &mockAgentActionHandler{err: errors.New("ups")}
-		svc := newTestService(handler, telemetryClient)
+		svc := newTestService(handler, client)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
 		defer func() {
 			cancel()
-			r.Empty(telemetryClient.actions)
-			r.Len(telemetryClient.acks, 1)
-			r.Equal("a1", telemetryClient.acks[0].actionID)
-			r.Equal("ups", *telemetryClient.acks[0].err)
+			r.Empty(client.Actions)
+			r.Len(client.Acks, 1)
+			r.Equal("a1", client.Acks[0].ActionID)
+			r.Equal("ups", *client.Acks[0].Err)
 		}()
 		svc.Run(ctx)
 	})
@@ -111,39 +112,4 @@ type mockAgentActionHandler struct {
 
 func (m *mockAgentActionHandler) Handle(ctx context.Context, data interface{}) error {
 	return m.err
-}
-
-func newMockTelemetryClient(actions []*castai.ClusterAction) *mockTelemetryClient {
-	return &mockTelemetryClient{actions: actions}
-}
-
-type mockAck struct {
-	actionID string
-	err      *string
-}
-
-type mockTelemetryClient struct {
-	actions []*castai.ClusterAction
-	acks    []*mockAck
-}
-
-func (m *mockTelemetryClient) GetActions(ctx context.Context, clusterID string) ([]*castai.ClusterAction, error) {
-	return m.actions, nil
-}
-
-func (m *mockTelemetryClient) AckAction(ctx context.Context, clusterID, actionID string, req *castai.AckClusterActionRequest) error {
-	m.removeAckedActions(actionID)
-
-	m.acks = append(m.acks, &mockAck{actionID: actionID, err: req.Error})
-	return nil
-}
-
-func (m *mockTelemetryClient) removeAckedActions(actionID string) {
-	var remaining []*castai.ClusterAction
-	for _, action := range m.actions {
-		if action.ID != actionID {
-			remaining = append(remaining, action)
-		}
-	}
-	m.actions = remaining
 }

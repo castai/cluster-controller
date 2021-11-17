@@ -17,6 +17,7 @@ import (
 	"github.com/castai/cluster-controller/actions"
 	"github.com/castai/cluster-controller/castai"
 	"github.com/castai/cluster-controller/config"
+	ctrlog "github.com/castai/cluster-controller/log"
 	"github.com/castai/cluster-controller/version"
 )
 
@@ -34,10 +35,14 @@ func main() {
 	logLevel := logrus.Level(cfg.Log.Level)
 	logger.SetLevel(logrus.Level(cfg.Log.Level))
 
-	telemetryClient := castai.NewClient(logger, castai.NewDefaultClient(cfg.API.URL, cfg.API.Key, logLevel))
+	client := castai.NewClient(
+		logger,
+		castai.NewDefaultClient(cfg.API.URL, cfg.API.Key, logLevel),
+		cfg.ClusterID,
+	)
 
 	log := logrus.WithFields(logrus.Fields{})
-	if err := run(signals.SetupSignalHandler(), telemetryClient, logger, cfg); err != nil {
+	if err := run(signals.SetupSignalHandler(), client, logger, cfg); err != nil {
 		logErr := &logContextErr{}
 		if errors.As(err, &logErr) {
 			log = logger.WithFields(logErr.fields)
@@ -46,7 +51,7 @@ func main() {
 	}
 }
 
-func run(ctx context.Context, telemetryClient castai.Client, logger *logrus.Logger, cfg config.Config) (reterr error) {
+func run(ctx context.Context, client castai.Client, logger *logrus.Logger, cfg config.Config) (reterr error) {
 	fields := logrus.Fields{}
 
 	defer func() {
@@ -65,6 +70,10 @@ func run(ctx context.Context, telemetryClient castai.Client, logger *logrus.Logg
 		GitRef:    GitRef,
 		Version:   Version,
 	}
+
+	e := ctrlog.NewExporter(logger, client)
+	logger.AddHook(e)
+	logrus.RegisterExitHandler(e.Wait)
 
 	fields["version"] = binVersion.Version
 	log := logger.WithFields(fields)
@@ -109,7 +118,7 @@ func run(ctx context.Context, telemetryClient castai.Client, logger *logrus.Logg
 		AckRetryWait:    1 * time.Second,
 		ClusterID:       cfg.ClusterID,
 	}
-	svc := actions.NewService(log, actionsConfig, clientset, telemetryClient)
+	svc := actions.NewService(log, actionsConfig, clientset, client)
 	svc.Run(ctx)
 
 	return nil

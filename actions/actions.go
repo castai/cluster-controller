@@ -101,7 +101,7 @@ func (s *service) doWork(ctx context.Context) error {
 func (s *service) pollActions(ctx context.Context) ([]*castai.ClusterAction, error) {
 	ctx, cancel := context.WithTimeout(ctx, s.cfg.PollTimeout)
 	defer cancel()
-	actions, err := s.castaiClient.GetActions(ctx, s.cfg.ClusterID)
+	actions, err := s.castaiClient.GetActions(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +149,7 @@ func (s *service) ackAction(ctx context.Context, action *castai.ClusterAction, h
 	return backoff.RetryNotify(func() error {
 		ctx, cancel := context.WithTimeout(ctx, s.cfg.AckTimeout)
 		defer cancel()
-		return s.castaiClient.AckAction(ctx, s.cfg.ClusterID, action.ID, &castai.AckClusterActionRequest{
+		return s.castaiClient.AckAction(ctx, action.ID, &castai.AckClusterActionRequest{
 			Error: getHandlerError(handleErr),
 		})
 	}, backoff.WithContext(
