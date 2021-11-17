@@ -6,4 +6,3 @@ push:
 	docker push castai/cluster-controller:$(VERSION)
 
 release: build push
-

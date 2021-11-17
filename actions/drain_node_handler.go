@@ -66,7 +66,7 @@ func (h *drainNodeHandler) Handle(ctx context.Context, data interface{}) error {
 		return err
 	}
 
-	log.Infof("draining node")
+	log.Infof("draining node, drain_timeout_seconds=%d, force=%v", req.DrainTimeoutSeconds, req.Force)
 
 	if err := h.taintNode(ctx, node); err != nil {
 		return fmt.Errorf("tainting node %q: %w", req.NodeName, err)
