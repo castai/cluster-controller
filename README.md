@@ -17,7 +17,7 @@ Deploy cluster-controller to already connected remote cluster.
 One time setup.
 ```shell
 DOCKER_SECRET_TMPL_PATH=./secret-pull-script.sh ./hack/remote/setup.sh
-````
+```
 
 Deploy.
 
