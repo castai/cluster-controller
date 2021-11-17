@@ -2,6 +2,8 @@ package castai
 
 import (
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 type GetClusterActionsResponse struct {
@@ -33,6 +35,13 @@ func (c *ClusterAction) Data() interface{} {
 		return c.ActionPatchNode
 	}
 	return nil
+}
+
+type LogEvent struct {
+	Level   string        `json:"level"`
+	Time    time.Time     `json:"time"`
+	Message string        `json:"message"`
+	Fields  logrus.Fields `json:"fields"`
 }
 
 type ActionDeleteNode struct {
