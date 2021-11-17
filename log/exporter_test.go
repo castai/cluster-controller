@@ -11,18 +11,19 @@ import (
 )
 
 func TestSetupLogExporter(t *testing.T) {
+	it := require.New(t)
 	logger, hook := test.NewNullLogger()
 	defer hook.Reset()
 
 	client := mock.NewMockAPIClient(nil)
-	SetupExporter(logger, client)
-
-	it := require.New(t)
+	e := NewExporter(client)
+	logger.AddHook(e)
 	log := logger.WithFields(logrus.Fields{
 		"cluster_id": "test-cluster",
 	})
 
 	log.Log(logrus.InfoLevel, "deleting kubernetes node")
+	e.Wait()
 
 	it.Len(client.Logs, 1)
 	it.Equal(client.Logs[0].Message, "deleting kubernetes node")

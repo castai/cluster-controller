@@ -71,7 +71,9 @@ func run(ctx context.Context, client castai.Client, logger *logrus.Logger, cfg c
 		Version:   Version,
 	}
 
-	ctrlog.SetupExporter(logger, client)
+	e := ctrlog.NewExporter(client)
+	logger.AddHook(e)
+	logrus.RegisterExitHandler(e.Wait)
 
 	fields["version"] = binVersion.Version
 	log := logger.WithFields(fields)

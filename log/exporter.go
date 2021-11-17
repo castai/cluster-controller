@@ -19,20 +19,16 @@ type Exporter interface {
 	Wait()
 }
 
-func SetupExporter(logger *logrus.Logger, client castai.Client) {
-	e := &exporter{
+func NewExporter(client castai.Client) Exporter {
+	return &exporter{
 		client: client,
 		wg:     sync.WaitGroup{},
 	}
-
-	logger.AddHook(e)
-	logrus.RegisterExitHandler(e.Wait)
 }
 
 type exporter struct {
-	client    castai.Client
-	wg        sync.WaitGroup
-	clusterID string
+	client castai.Client
+	wg     sync.WaitGroup
 }
 
 func (e *exporter) Levels() []logrus.Level {
