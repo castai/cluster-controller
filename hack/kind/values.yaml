@@ -1,0 +1,6 @@
+image:
+  repository: localhost:5000/castai-cluster-controller
+  pullPolicy: Always
+  tag: latest
+resources: null
+createNamespace: true
