@@ -65,7 +65,7 @@ func (c *client) AckAction(ctx context.Context, clusterID, actionID string, req 
 	resp, err := c.rest.R().
 		SetContext(ctx).
 		SetBody(req).
-		Delete(fmt.Sprintf("/v1/kubernetes/clusters/%s/actions/%s/ack", clusterID, actionID))
+		Post(fmt.Sprintf("/v1/kubernetes/clusters/%s/actions/%s/ack", clusterID, actionID))
 	if err != nil {
 		return fmt.Errorf("failed to request cluster-actions ack: %v", err)
 	}

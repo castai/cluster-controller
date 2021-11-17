@@ -32,3 +32,5 @@ helm template cluster-controller castai-helm/castai-cluster-controller \
   --set apiKey="$API_KEY" \
   --set apiURL="$API_URL" \
   --set clusterID="$CLUSTER_ID" | kubectl apply -f - -n castai-agent
+
+kubectl rollout restart deployment castai-cluster-controller -n castai-agent
