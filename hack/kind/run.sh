@@ -53,5 +53,3 @@ EOF
 dir="$(dirname $0)"
 kind get kubeconfig --name "$cluster_name" > "${dir}/kubeconfig-$cluster_name"
 
-
-

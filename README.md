@@ -8,6 +8,26 @@ Check our official helm charts repo https://github.com/castai/castai-helm-charts
 
 ## Testing
 
+### Remote
+
+Deploy cluster-controller to already connected remote cluster.
+
+*NOTE*: Make sure your kubectl context is pointing to your remote cluster.
+
+One time setup.
+```shell
+DOCKER_SECRET_TMPL_PATH=./secret-pull-script.sh ./hack/remote/setup.sh
+```
+
+Deploy.
+
+```shell
+API_KEY=your-api-key \
+API_URL=your-api-url \
+CLUSTER_ID=your-cluster-id \
+./hack/remote/deploy.sh
+```
+
 ### Local
 
 ```shell

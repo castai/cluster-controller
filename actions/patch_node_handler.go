@@ -42,6 +42,8 @@ func (h *patchNodeHandler) Handle(ctx context.Context, data interface{}) error {
 		return err
 	}
 
+	log.Infof("patching node, labels=%v, taints=%v", req.Labels, req.Taints)
+
 	return patchNode(ctx, h.clientset, node, func(n *v1.Node) error {
 		if n.Labels == nil {
 			n.Labels = map[string]string{}
