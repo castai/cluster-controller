@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	v1 "k8s.io/api/core/v1"
 )
 
 type GetClusterActionsResponse struct {
@@ -15,13 +16,14 @@ type AckClusterActionRequest struct {
 }
 
 type ClusterAction struct {
-	ID               string            `json:"id"`
-	ActionDeleteNode *ActionDeleteNode `json:"actionDeleteNode,omitempty"`
-	ActionDrainNode  *ActionDrainNode  `json:"actionDrainNode,omitempty"`
-	ActionPatchNode  *ActionPatchNode  `json:"actionPatchNode,omitempty"`
-	CreatedAt        time.Time         `json:"createdAt"`
-	DoneAt           *time.Time        `json:"doneAt,omitempty"`
-	Error            *string           `json:"error,omitempty"`
+	ID                string             `json:"id"`
+	ActionDeleteNode  *ActionDeleteNode  `json:"actionDeleteNode,omitempty"`
+	ActionDrainNode   *ActionDrainNode   `json:"actionDrainNode,omitempty"`
+	ActionPatchNode   *ActionPatchNode   `json:"actionPatchNode,omitempty"`
+	ActionCreateEvent *ActionCreateEvent `json:"actionCreateEvent,omitempty"`
+	CreatedAt         time.Time          `json:"createdAt"`
+	DoneAt            *time.Time         `json:"doneAt,omitempty"`
+	Error             *string            `json:"error,omitempty"`
 }
 
 func (c *ClusterAction) Data() interface{} {
@@ -33,6 +35,9 @@ func (c *ClusterAction) Data() interface{} {
 	}
 	if c.ActionPatchNode != nil {
 		return c.ActionPatchNode
+	}
+	if c.ActionCreateEvent != nil {
+		return c.ActionCreateEvent
 	}
 	return nil
 }
@@ -64,4 +69,14 @@ type NodeTaint struct {
 	Effect string `json:"effect"`
 	Key    string `json:"key"`
 	Value  string `json:"value"`
+}
+
+type ActionCreateEvent struct {
+	Reporter  string             `json:"reportingComponent"`
+	ObjectRef v1.ObjectReference `json:"objectReference"`
+	EventTime time.Time          `json:"eventTime"`
+	EventType string             `json:"eventType"`
+	Reason    string             `json:"reason"`
+	Action    string             `json:"action"`
+	Message   string             `json:"message"`
 }
