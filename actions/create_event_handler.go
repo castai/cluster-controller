@@ -18,7 +18,7 @@ import (
 )
 
 func newCreateEventHandler(log logrus.FieldLogger, clientset kubernetes.Interface) ActionHandler {
-	return &deleteNodeHandler{
+	return &createEventHandler{
 		log:       log,
 		clientset: clientset,
 	}
