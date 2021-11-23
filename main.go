@@ -31,18 +31,27 @@ var (
 func main() {
 	cfg := config.Get()
 
+	binVersion := &config.AgentActionsVersion{
+		GitCommit: GitCommit,
+		GitRef:    GitRef,
+		Version:   Version,
+	}
+
 	logger := logrus.New()
-	logLevel := logrus.Level(cfg.Log.Level)
 	logger.SetLevel(logrus.Level(cfg.Log.Level))
+	logger.WithFields(logrus.Fields{
+		"version": binVersion.Version,
+	})
+	logger.Infof("running castai-cluster-controller version %v", binVersion)
 
 	client := castai.NewClient(
 		logger,
-		castai.NewDefaultClient(cfg.API.URL, cfg.API.Key, logLevel),
+		castai.NewDefaultClient(cfg.API.URL, cfg.API.Key, logger.Level, binVersion),
 		cfg.ClusterID,
 	)
 
 	log := logrus.WithFields(logrus.Fields{})
-	if err := run(signals.SetupSignalHandler(), client, logger, cfg); err != nil {
+	if err := run(signals.SetupSignalHandler(), logger, client, logger, cfg); err != nil {
 		logErr := &logContextErr{}
 		if errors.As(err, &logErr) {
 			log = logger.WithFields(logErr.fields)
@@ -51,7 +60,7 @@ func main() {
 	}
 }
 
-func run(ctx context.Context, client castai.Client, logger *logrus.Logger, cfg config.Config) (reterr error) {
+func run(ctx context.Context, log logrus.FieldLogger, client castai.Client, logger *logrus.Logger, cfg config.Config) (reterr error) {
 	fields := logrus.Fields{}
 
 	defer func() {
@@ -65,19 +74,9 @@ func run(ctx context.Context, client castai.Client, logger *logrus.Logger, cfg c
 		}
 	}()
 
-	binVersion := &config.AgentActionsVersion{
-		GitCommit: GitCommit,
-		GitRef:    GitRef,
-		Version:   Version,
-	}
-
 	e := ctrlog.NewExporter(logger, client)
 	logger.AddHook(e)
 	logrus.RegisterExitHandler(e.Wait)
-
-	fields["version"] = binVersion.Version
-	log := logger.WithFields(fields)
-	log.Infof("running castai-cluster-controller version: %v", binVersion)
 
 	restconfig, err := retrieveKubeConfig(log)
 	if err != nil {
@@ -88,9 +87,6 @@ func run(ctx context.Context, client castai.Client, logger *logrus.Logger, cfg c
 	if err != nil {
 		return err
 	}
-
-	fields["cluster_id"] = cfg.ClusterID
-	log = log.WithFields(fields)
 
 	if cfg.PprofPort != 0 {
 		go func() {

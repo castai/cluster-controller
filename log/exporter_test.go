@@ -27,16 +27,12 @@ func TestLogExporter(t *testing.T) {
 		"cluster_id": "test-cluster",
 	})
 
-	log.Log(logrus.InfoLevel, "deleting kubernetes node")
 	log.Log(logrus.ErrorLevel, "failed to add node")
 	log.Log(logrus.DebugLevel, "sending logs")
 	e.Wait()
 
-	it.Len(client.Logs, 2)
-	it.Equal(client.Logs[0].Message, "deleting kubernetes node")
-	it.Equal(client.Logs[0].Level, "info")
+	it.Len(client.Logs, 1)
+	it.Equal(client.Logs[0].Message, "failed to add node")
+	it.Equal(client.Logs[0].Level, "error")
 	it.Equal(client.Logs[0].Fields, logrus.Fields{"cluster_id": "test-cluster"})
-	it.Equal(client.Logs[1].Message, "failed to add node")
-	it.Equal(client.Logs[1].Level, "error")
-	it.Equal(client.Logs[1].Fields, logrus.Fields{"cluster_id": "test-cluster"})
 }

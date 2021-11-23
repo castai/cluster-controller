@@ -5,16 +5,14 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/castai/cluster-controller/config"
 	"github.com/go-resty/resty/v2"
 	"github.com/sirupsen/logrus"
 )
 
 const (
-	headerAPIKey = "X-API-Key"
-)
-
-var (
-	hdrAPIKey = http.CanonicalHeaderKey(headerAPIKey)
+	headerAPIKey    = "X-API-Key"
+	headerUserAgent = "User-Agent"
 )
 
 type Client interface {
@@ -32,10 +30,11 @@ func NewClient(log *logrus.Logger, rest *resty.Client, clusterID string) Client 
 }
 
 // NewDefaultClient configures a default instance of the resty.Client used to do HTTP requests.
-func NewDefaultClient(url, key string, level logrus.Level) *resty.Client {
+func NewDefaultClient(url, key string, level logrus.Level, binVersion *config.AgentActionsVersion) *resty.Client {
 	client := resty.New()
 	client.SetHostURL(url)
-	client.Header.Set(hdrAPIKey, key)
+	client.Header.Set(http.CanonicalHeaderKey(headerAPIKey), key)
+	client.Header.Set(http.CanonicalHeaderKey(headerUserAgent), "castai-cluster-controller/"+binVersion.Version)
 	if level == logrus.TraceLevel {
 		client.SetDebug(true)
 	}
