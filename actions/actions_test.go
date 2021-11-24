@@ -25,12 +25,12 @@ func TestActions(t *testing.T) {
 	log := logrus.New()
 	log.SetLevel(logrus.DebugLevel)
 	cfg := Config{
-		PollInterval:    1 * time.Millisecond,
-		PollTimeout:     100 * time.Millisecond,
-		AckTimeout:      1 * time.Second,
-		AckRetriesCount: 3,
-		AckRetryWait:    1 * time.Millisecond,
-		ClusterID:       uuid.New().String(),
+		PollWaitInterval: 1 * time.Millisecond,
+		PollTimeout:      100 * time.Millisecond,
+		AckTimeout:       1 * time.Second,
+		AckRetriesCount:  3,
+		AckRetryWait:     1 * time.Millisecond,
+		ClusterID:        uuid.New().String(),
 	}
 
 	newTestService := func(handler ActionHandler, client castai.Client) Service {
