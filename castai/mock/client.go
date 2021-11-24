@@ -17,14 +17,15 @@ type mockAck struct {
 }
 
 type mockClient struct {
-	Actions []*castai.ClusterAction
-	Logs    []*castai.LogEvent
-	Acks    []*mockAck
-	mu      sync.Mutex
+	Actions       []*castai.ClusterAction
+	GetActionsErr error
+	Logs          []*castai.LogEvent
+	Acks          []*mockAck
+	mu            sync.Mutex
 }
 
 func (m *mockClient) GetActions(_ context.Context) ([]*castai.ClusterAction, error) {
-	return m.Actions, nil
+	return m.Actions, m.GetActionsErr
 }
 
 func (m *mockClient) SendLogs(_ context.Context, req *castai.LogEvent) error {

@@ -15,11 +15,11 @@ import (
 )
 
 type Config struct {
-	PollInterval    time.Duration
-	PollTimeout     time.Duration
-	AckTimeout      time.Duration
-	AckRetriesCount int
-	AckRetryWait    time.Duration
+	PollInterval    time.Duration // How long to wait unit next long polling request.
+	PollTimeout     time.Duration // hard timeout. Normally server should return empty result before this timeout.
+	AckTimeout      time.Duration // How long to wait for ack request to complete.
+	AckRetriesCount int           // Ack retry count.
+	AckRetryWait    time.Duration // How long to wait before next ack retry request.
 	ClusterID       string
 }
 
@@ -81,18 +81,19 @@ func (s *service) Run(ctx context.Context) {
 
 func (s *service) doWork(ctx context.Context) error {
 	s.log.Debug("polling actions")
+	start := time.Now()
 	actions, err := s.pollActions(ctx)
 	if err != nil {
-		// Skip deadline errors. These are expected for long polling requests.
-		if errors.Is(err, context.DeadlineExceeded) {
-			s.log.Debugf("no actions returned in given duration=%s, will continue", s.cfg.PollTimeout)
-			return nil
-		}
-
 		return fmt.Errorf("polling actions: %w", err)
 	}
 
-	s.log.Debugf("received actions, len=%d", len(actions))
+	pollDuration := time.Now().Sub(start)
+	if len(actions) == 0 {
+		s.log.Debugf("no actions returned in %s", pollDuration)
+		return nil
+	}
+
+	s.log.Debugf("received %d actions in %s", len(actions), pollDuration)
 	if err := s.handleActions(ctx, actions); err != nil {
 		return fmt.Errorf("handling actions: %w", err)
 	}

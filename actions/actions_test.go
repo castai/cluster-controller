@@ -81,6 +81,19 @@ func TestActions(t *testing.T) {
 		svc.Run(ctx)
 	})
 
+	t.Run("continue polling on api error", func(t *testing.T) {
+		client := mock.NewMockAPIClient([]*castai.ClusterAction{})
+		client.GetActionsErr = errors.New("ups")
+		handler := &mockAgentActionHandler{err: errors.New("ups")}
+		svc := newTestService(handler, client)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+		defer func() {
+			cancel()
+			r.Len(client.Acks, 0)
+		}()
+		svc.Run(ctx)
+	})
+
 	t.Run("ack with error when action handler failed", func(t *testing.T) {
 		apiActions := []*castai.ClusterAction{
 			{
