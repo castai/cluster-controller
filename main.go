@@ -31,7 +31,7 @@ var (
 func main() {
 	cfg := config.Get()
 
-	binVersion := &config.AgentActionsVersion{
+	binVersion := &config.ClusterControllerVersion{
 		GitCommit: GitCommit,
 		GitRef:    GitRef,
 		Version:   Version,
@@ -61,7 +61,7 @@ func run(
 	client castai.Client,
 	logger *logrus.Logger,
 	cfg config.Config,
-	binVersion *config.AgentActionsVersion,
+	binVersion *config.ClusterControllerVersion,
 ) (reterr error) {
 	fields := logrus.Fields{}
 

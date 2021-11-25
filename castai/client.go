@@ -32,7 +32,7 @@ func NewClient(log *logrus.Logger, rest *resty.Client, clusterID string) Client 
 }
 
 // NewDefaultClient configures a default instance of the resty.Client used to do HTTP requests.
-func NewDefaultClient(url, key string, level logrus.Level, binVersion *config.AgentActionsVersion) *resty.Client {
+func NewDefaultClient(url, key string, level logrus.Level, binVersion *config.ClusterControllerVersion) *resty.Client {
 	client := resty.New()
 	client.SetHostURL(url)
 	client.SetTimeout(5 * time.Minute) // Hard timeout for any request.
