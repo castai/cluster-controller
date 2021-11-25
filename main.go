@@ -107,12 +107,12 @@ func run(ctx context.Context, log logrus.FieldLogger, client castai.Client, logg
 	log = log.WithFields(fields)
 
 	actionsConfig := actions.Config{
-		PollInterval:    5 * time.Second,
-		PollTimeout:     1 * time.Minute,
-		AckTimeout:      30 * time.Second,
-		AckRetriesCount: 3,
-		AckRetryWait:    1 * time.Second,
-		ClusterID:       cfg.ClusterID,
+		PollWaitInterval: 5 * time.Second,
+		PollTimeout:      5 * time.Minute,
+		AckTimeout:       30 * time.Second,
+		AckRetriesCount:  3,
+		AckRetryWait:     1 * time.Second,
+		ClusterID:        cfg.ClusterID,
 	}
 	svc := actions.NewService(log, actionsConfig, clientset, client)
 	svc.Run(ctx)

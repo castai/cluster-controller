@@ -25,12 +25,12 @@ func TestActions(t *testing.T) {
 	log := logrus.New()
 	log.SetLevel(logrus.DebugLevel)
 	cfg := Config{
-		PollInterval:    1 * time.Millisecond,
-		PollTimeout:     100 * time.Millisecond,
-		AckTimeout:      1 * time.Second,
-		AckRetriesCount: 3,
-		AckRetryWait:    1 * time.Millisecond,
-		ClusterID:       uuid.New().String(),
+		PollWaitInterval: 1 * time.Millisecond,
+		PollTimeout:      100 * time.Millisecond,
+		AckTimeout:       1 * time.Second,
+		AckRetriesCount:  3,
+		AckRetryWait:     1 * time.Millisecond,
+		ClusterID:        uuid.New().String(),
 	}
 
 	newTestService := func(handler ActionHandler, client castai.Client) Service {
@@ -77,6 +77,19 @@ func TestActions(t *testing.T) {
 			r.Equal("a1", client.Acks[0].ActionID)
 			r.Equal("a2", client.Acks[1].ActionID)
 			r.Equal("a3", client.Acks[2].ActionID)
+		}()
+		svc.Run(ctx)
+	})
+
+	t.Run("continue polling on api error", func(t *testing.T) {
+		client := mock.NewMockAPIClient([]*castai.ClusterAction{})
+		client.GetActionsErr = errors.New("ups")
+		handler := &mockAgentActionHandler{err: errors.New("ups")}
+		svc := newTestService(handler, client)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+		defer func() {
+			cancel()
+			r.Len(client.Acks, 0)
 		}()
 		svc.Run(ctx)
 	})
