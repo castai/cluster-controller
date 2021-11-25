@@ -23,8 +23,9 @@ cd "$(git rev-parse --show-toplevel)"
 GOOS=linux go build -o bin/castai-cluster-controller .
 
 DOCKER_IMAGE_REPO=europe-west3-docker.pkg.dev/ci-master-mo3d/tilt/$USER/castai-cluster-controller
-docker build -t $DOCKER_IMAGE_REPO:latest .
-docker push $DOCKER_IMAGE_REPO:latest
+IMAGE_TAG=latest
+docker build -t $DOCKER_IMAGE_REPO:$IMAGE_TAG .
+docker push $DOCKER_IMAGE_REPO:$IMAGE_TAG
 
 helm template cluster-controller castai-helm/castai-cluster-controller \
   -f ./hack/remote/values.yaml \

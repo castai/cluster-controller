@@ -24,7 +24,7 @@ type Config struct {
 }
 
 type Service interface {
-	Run(ctx context.Context)
+	Run(ctx context.Context) error
 }
 
 type ActionHandler interface {
@@ -58,29 +58,29 @@ type service struct {
 	actionHandlers map[reflect.Type]ActionHandler
 }
 
-func (s *service) Run(ctx context.Context) {
+func (s *service) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-time.After(s.cfg.PollWaitInterval):
 			err := s.doWork(ctx)
 			if err != nil {
 				if errors.Is(err, context.Canceled) {
-					s.log.Debug("actions service stopped")
-					return
+					s.log.Info("service stopped")
+					return nil
 				}
 
 				s.log.Errorf("cycle failed: %v", err)
 				continue
 			}
 		case <-ctx.Done():
-			s.log.Debug("actions service stopped")
-			return
+			s.log.Info("service stopped")
+			return nil
 		}
 	}
 }
 
 func (s *service) doWork(ctx context.Context) error {
-	s.log.Debug("polling actions")
+	s.log.Info("polling actions")
 	start := time.Now()
 	actions, err := s.pollActions(ctx)
 	if err != nil {
@@ -89,11 +89,11 @@ func (s *service) doWork(ctx context.Context) error {
 
 	pollDuration := time.Now().Sub(start)
 	if len(actions) == 0 {
-		s.log.Debugf("no actions returned in %s", pollDuration)
+		s.log.Infof("no actions returned in %s", pollDuration)
 		return nil
 	}
 
-	s.log.Debugf("received %d actions in %s", len(actions), pollDuration)
+	s.log.Infof("received %d actions in %s", len(actions), pollDuration)
 	if err := s.handleActions(ctx, actions); err != nil {
 		return fmt.Errorf("handling actions: %w", err)
 	}

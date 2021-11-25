@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/kubernetes"
@@ -33,7 +32,7 @@ func Test(t *testing.T) {
 	defer s.Close()
 	client := kubernetes.NewForConfigOrDie(&rest.Config{Host: s.URL})
 
-	got, err := Get(logrus.New(), client)
+	got, err := Get(client)
 	if err != nil {
 		return
 	}

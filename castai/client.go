@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
-	"github.com/castai/cluster-controller/config"
 	"github.com/go-resty/resty/v2"
 	"github.com/sirupsen/logrus"
+
+	"github.com/castai/cluster-controller/config"
 )
 
 const (
@@ -30,9 +32,10 @@ func NewClient(log *logrus.Logger, rest *resty.Client, clusterID string) Client 
 }
 
 // NewDefaultClient configures a default instance of the resty.Client used to do HTTP requests.
-func NewDefaultClient(url, key string, level logrus.Level, binVersion *config.AgentActionsVersion) *resty.Client {
+func NewDefaultClient(url, key string, level logrus.Level, binVersion *config.ClusterControllerVersion) *resty.Client {
 	client := resty.New()
 	client.SetHostURL(url)
+	client.SetTimeout(5 * time.Minute) // Hard timeout for any request.
 	client.Header.Set(http.CanonicalHeaderKey(headerAPIKey), key)
 	client.Header.Set(http.CanonicalHeaderKey(headerUserAgent), "castai-cluster-controller/"+binVersion.Version)
 	if level == logrus.TraceLevel {
