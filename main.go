@@ -39,10 +39,6 @@ func main() {
 
 	logger := logrus.New()
 	logger.SetLevel(logrus.Level(cfg.Log.Level))
-	logger.WithFields(logrus.Fields{
-		"version": binVersion.Version,
-	})
-	logger.Infof("running castai-cluster-controller version %v", binVersion)
 
 	client := castai.NewClient(
 		logger,
@@ -51,7 +47,7 @@ func main() {
 	)
 
 	log := logrus.WithFields(logrus.Fields{})
-	if err := run(signals.SetupSignalHandler(), logger, client, logger, cfg); err != nil {
+	if err := run(signals.SetupSignalHandler(), client, logger, cfg, binVersion); err != nil {
 		logErr := &logContextErr{}
 		if errors.As(err, &logErr) {
 			log = logger.WithFields(logErr.fields)
@@ -60,14 +56,19 @@ func main() {
 	}
 }
 
-func run(ctx context.Context, log logrus.FieldLogger, client castai.Client, logger *logrus.Logger, cfg config.Config) (reterr error) {
+func run(
+	ctx context.Context,
+	client castai.Client,
+	logger *logrus.Logger,
+	cfg config.Config,
+	binVersion *config.AgentActionsVersion,
+) (reterr error) {
 	fields := logrus.Fields{}
 
 	defer func() {
 		if reterr == nil {
 			return
 		}
-
 		reterr = &logContextErr{
 			err:    reterr,
 			fields: fields,
@@ -78,7 +79,7 @@ func run(ctx context.Context, log logrus.FieldLogger, client castai.Client, logg
 	logger.AddHook(e)
 	logrus.RegisterExitHandler(e.Wait)
 
-	restconfig, err := retrieveKubeConfig(log)
+	restconfig, err := retrieveKubeConfig(logger)
 	if err != nil {
 		return err
 	}
@@ -87,6 +88,17 @@ func run(ctx context.Context, log logrus.FieldLogger, client castai.Client, logg
 	if err != nil {
 		return err
 	}
+
+	k8sVersion, err := version.Get(clientset)
+	if err != nil {
+		panic(fmt.Errorf("failed getting kubernetes version: %v", err))
+	}
+
+	log := logger.WithFields(logrus.Fields{
+		"version":     binVersion.Version,
+		"k8s_version": k8sVersion.Full(),
+	})
+	log.Infof("running castai-cluster-controller version %v", binVersion)
 
 	if cfg.PprofPort != 0 {
 		go func() {
@@ -98,14 +110,6 @@ func run(ctx context.Context, log logrus.FieldLogger, client castai.Client, logg
 		}()
 	}
 
-	v, err := version.Get(log, clientset)
-	if err != nil {
-		panic(fmt.Errorf("failed getting kubernetes version: %v", err))
-	}
-
-	fields["k8s_version"] = v.Full()
-	log = log.WithFields(fields)
-
 	actionsConfig := actions.Config{
 		PollWaitInterval: 5 * time.Second,
 		PollTimeout:      5 * time.Minute,
@@ -115,8 +119,11 @@ func run(ctx context.Context, log logrus.FieldLogger, client castai.Client, logg
 		ClusterID:        cfg.ClusterID,
 	}
 	svc := actions.NewService(log, actionsConfig, clientset, client)
-	svc.Run(ctx)
 
+	// Run action service. Blocks.
+	if err := svc.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+		return err
+	}
 	return nil
 }
 

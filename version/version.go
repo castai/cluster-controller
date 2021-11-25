@@ -6,7 +6,6 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/kubernetes"
 )
@@ -16,7 +15,7 @@ type Interface interface {
 	MinorInt() int
 }
 
-func Get(log logrus.FieldLogger, clientset kubernetes.Interface) (Interface, error) {
+func Get(clientset kubernetes.Interface) (Interface, error) {
 	cs, ok := clientset.(*kubernetes.Clientset)
 	if !ok {
 		return nil, fmt.Errorf("expected clientset to be of type *kubernetes.Clientset but was %T", clientset)
@@ -26,8 +25,6 @@ func Get(log logrus.FieldLogger, clientset kubernetes.Interface) (Interface, err
 	if err != nil {
 		return nil, fmt.Errorf("getting server version: %w", err)
 	}
-
-	log.Infof("kubernetes version %s.%s", sv.Major, sv.Minor)
 
 	m, err := strconv.Atoi(regexp.MustCompile(`^(\d+)`).FindString(sv.Minor))
 	if err != nil {
