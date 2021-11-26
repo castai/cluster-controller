@@ -46,6 +46,7 @@ func NewService(
 			reflect.TypeOf(&castai.ActionDrainNode{}):   newDrainNodeHandler(log, clientset),
 			reflect.TypeOf(&castai.ActionPatchNode{}):   newPatchNodeHandler(log, clientset),
 			reflect.TypeOf(&castai.ActionCreateEvent{}): newCreateEventHandler(log, clientset),
+			reflect.TypeOf(&castai.ActionApproveCSR{}):  newApproveCSRHandler(log, clientset),
 		},
 	}
 }

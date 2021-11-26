@@ -59,6 +59,10 @@ type ActionDrainNode struct {
 	Force               bool   `json:"force"`
 }
 
+type ActionApproveCSR struct {
+	NodeName string `json:"nodeName"`
+}
+
 type ActionPatchNode struct {
 	NodeName string            `json:"nodeName"`
 	Labels   map[string]string `json:"labels"`
