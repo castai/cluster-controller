@@ -88,7 +88,7 @@ func (s *service) doWork(ctx context.Context) error {
 		return fmt.Errorf("polling actions: %w", err)
 	}
 
-	pollDuration := time.Now().Sub(start)
+	pollDuration := time.Since(start)
 	if len(actions) == 0 {
 		s.log.Infof("no actions returned in %s", pollDuration)
 		return nil
