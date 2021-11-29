@@ -15,8 +15,10 @@ import (
 
 func newApproveCSRHandler(log logrus.FieldLogger, clientset kubernetes.Interface) ActionHandler {
 	return &approveCSRHandler{
-		log:       log,
-		clientset: clientset,
+		log:                    log,
+		clientset:              clientset,
+		csrFetchInterval:       5 * time.Second,
+		initialCSRFetchTimeout: 5 * time.Minute,
 	}
 }
 
