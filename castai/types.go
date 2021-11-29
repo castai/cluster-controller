@@ -21,6 +21,7 @@ type ClusterAction struct {
 	ActionDrainNode   *ActionDrainNode   `json:"actionDrainNode,omitempty"`
 	ActionPatchNode   *ActionPatchNode   `json:"actionPatchNode,omitempty"`
 	ActionCreateEvent *ActionCreateEvent `json:"actionCreateEvent,omitempty"`
+	ActionApproveCSR  *ActionApproveCSR  `json:"actionApproveCsr,omitempty"`
 	CreatedAt         time.Time          `json:"createdAt"`
 	DoneAt            *time.Time         `json:"doneAt,omitempty"`
 	Error             *string            `json:"error,omitempty"`
@@ -39,6 +40,10 @@ func (c *ClusterAction) Data() interface{} {
 	if c.ActionCreateEvent != nil {
 		return c.ActionCreateEvent
 	}
+	if c.ActionApproveCSR != nil {
+		return c.ActionApproveCSR
+	}
+
 	return nil
 }
 
