@@ -22,6 +22,7 @@ import (
 
 type InstallOptions struct {
 	Chart           *ChartCoordinates
+	Namespace       string
 	ValuesOverrides map[string]string
 }
 
@@ -36,16 +37,16 @@ type GetReleaseOptions struct {
 	ReleaseName string
 }
 
-func NewClient(log logrus.FieldLogger, loader ChartLoader, restconfig *rest.Config) Client {
+func NewClient(log logrus.FieldLogger, loader ChartLoader, restConfig *rest.Config) Client {
 	return &client{
 		log: log,
 		configurationGetter: &configurationGetter{
 			log:        log,
-			helmDriver: "secrets",
 			debug:      false,
+			helmDriver: "secrets",
+			k8sConfig:  restConfig,
 		},
 		chartLoader: loader,
-		k8sConfig:   restconfig,
 	}
 }
 
@@ -59,7 +60,6 @@ type client struct {
 	log                 logrus.FieldLogger
 	configurationGetter ConfigurationGetter
 	chartLoader         ChartLoader
-	k8sConfig           *rest.Config
 }
 
 func (c *client) Install(ctx context.Context, opts InstallOptions) (*release.Release, error) {
@@ -74,8 +74,8 @@ func (c *client) Install(ctx context.Context, opts InstallOptions) (*release.Rel
 		}
 	}
 
-	namespace := ch.Name()
-	cfg, err := c.configurationGetter.Get(namespace, c.k8sConfig)
+	namespace := opts.Namespace
+	cfg, err := c.configurationGetter.Get(namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -113,8 +113,7 @@ func (c *client) Upgrade(ctx context.Context, opts UpgradeOptions) (*release.Rel
 	}
 
 	namespace := opts.Release.Namespace
-
-	cfg, err := c.configurationGetter.Get(namespace, c.k8sConfig)
+	cfg, err := c.configurationGetter.Get(namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +139,7 @@ func (c *client) Upgrade(ctx context.Context, opts UpgradeOptions) (*release.Rel
 }
 
 func (c *client) GetRelease(opts GetReleaseOptions) (*release.Release, error) {
-	cfg, err := c.configurationGetter.Get(opts.Namespace, c.k8sConfig)
+	cfg, err := c.configurationGetter.Get(opts.Namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -155,19 +154,20 @@ func (c *client) GetRelease(opts GetReleaseOptions) (*release.Release, error) {
 
 // ConfigurationGetter wraps helm actions configuration setup for mocking in unit tests.
 type ConfigurationGetter interface {
-	Get(namespace string, restConfig *rest.Config) (*action.Configuration, error)
+	Get(namespace string) (*action.Configuration, error)
 }
 
 type configurationGetter struct {
 	log        logrus.FieldLogger
-	helmDriver string
 	debug      bool
+	helmDriver string
+	k8sConfig  *rest.Config
 }
 
-func (c *configurationGetter) Get(namespace string, restConfig *rest.Config) (*action.Configuration, error) {
+func (c *configurationGetter) Get(namespace string) (*action.Configuration, error) {
 	cfg := &action.Configuration{}
 	rcg := &restClientGetter{
-		config:    restConfig,
+		config:    c.k8sConfig,
 		namespace: namespace,
 	}
 	err := cfg.Init(rcg, namespace, c.helmDriver, c.debugFuncf)

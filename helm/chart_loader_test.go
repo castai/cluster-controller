@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestChartLoader(t *testing.T) {
+func TestIntegration_ChartLoader(t *testing.T) {
 	r := require.New(t)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
