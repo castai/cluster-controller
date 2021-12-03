@@ -18,6 +18,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/castai/cluster-controller/castai"
 )
@@ -169,11 +170,11 @@ type configurationGetter struct {
 
 func (c *configurationGetter) Get(namespace string) (*action.Configuration, error) {
 	cfg := &action.Configuration{}
-	rcg := &restClientGetter{
-		config:    c.k8sConfig,
-		namespace: namespace,
-	}
-	err := cfg.Init(rcg, namespace, c.helmDriver, c.debugFuncf)
+	//rcg := &restClientGetter{
+	//	config:    c.k8sConfig,
+	//	namespace: namespace,
+	//}
+	err := cfg.Init(nil, namespace, c.helmDriver, c.debugFuncf)
 	if err != nil {
 		return nil, fmt.Errorf("helm action config init: %w", err)
 	}
@@ -231,6 +232,29 @@ func (r *restClientGetter) ToRESTMapper() (meta.RESTMapper, error) {
 }
 
 func (r *restClientGetter) ToRawKubeConfigLoader() clientcmd.ClientConfig {
-	// This method is unused in helm client implementation.
-	return nil
+	return &fakeClientConfig{
+		config:    r.config,
+		namespace: r.namespace,
+	}
+}
+
+type fakeClientConfig struct {
+	config    *rest.Config
+	namespace string
+}
+
+func (f *fakeClientConfig) RawConfig() (api.Config, error) {
+	return api.Config{}, nil
+}
+
+func (f *fakeClientConfig) ClientConfig() (*rest.Config, error) {
+	return f.config, nil
+}
+
+func (f *fakeClientConfig) Namespace() (string, bool, error) {
+	return f.namespace, f.namespace != "", nil
+}
+
+func (f *fakeClientConfig) ConfigAccess() clientcmd.ConfigAccess {
+	return &clientcmd.PathOptions{}
 }
