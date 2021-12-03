@@ -170,11 +170,11 @@ type configurationGetter struct {
 
 func (c *configurationGetter) Get(namespace string) (*action.Configuration, error) {
 	cfg := &action.Configuration{}
-	//rcg := &restClientGetter{
-	//	config:    c.k8sConfig,
-	//	namespace: namespace,
-	//}
-	err := cfg.Init(nil, namespace, c.helmDriver, c.debugFuncf)
+	rcg := &restClientGetter{
+		config:    c.k8sConfig,
+		namespace: namespace,
+	}
+	err := cfg.Init(rcg, namespace, c.helmDriver, c.debugFuncf)
 	if err != nil {
 		return nil, fmt.Errorf("helm action config init: %w", err)
 	}
