@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/castai/cluster-controller/castai"
 	"github.com/cenkalti/backoff/v4"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
@@ -16,14 +17,8 @@ import (
 	"helm.sh/helm/v3/pkg/repo"
 )
 
-type ChartCoordinates struct {
-	RepoURL string
-	Name    string
-	Version string
-}
-
 type ChartLoader interface {
-	Load(ctx context.Context, c *ChartCoordinates) (*chart.Chart, error)
+	Load(ctx context.Context, c *castai.ChartSource) (*chart.Chart, error)
 }
 
 func NewChartLoader() ChartLoader {
@@ -34,7 +29,7 @@ func NewChartLoader() ChartLoader {
 type remoteChartLoader struct {
 }
 
-func (cl *remoteChartLoader) Load(ctx context.Context, c *ChartCoordinates) (*chart.Chart, error) {
+func (cl *remoteChartLoader) Load(ctx context.Context, c *castai.ChartSource) (*chart.Chart, error) {
 	var res *chart.Chart
 	err := backoff.Retry(func() error {
 		index, err := cl.downloadHelmIndex(c.RepoURL)

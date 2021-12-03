@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/castai/cluster-controller/helm"
 	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -84,6 +85,8 @@ func run(
 		return err
 	}
 
+	helmClient := helm.NewClient(logger, helm.NewChartLoader(), restconfig)
+
 	clientset, err := kubernetes.NewForConfig(restconfig)
 	if err != nil {
 		return err
@@ -118,7 +121,7 @@ func run(
 		AckRetryWait:     1 * time.Second,
 		ClusterID:        cfg.ClusterID,
 	}
-	svc := actions.NewService(log, actionsConfig, clientset, client)
+	svc := actions.NewService(log, actionsConfig, clientset, client, helmClient)
 
 	// Run action service. Blocks.
 	if err := svc.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {

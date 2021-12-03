@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"testing"
 
+	"github.com/castai/cluster-controller/castai"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v3/pkg/action"
@@ -27,7 +28,8 @@ func TestClientInstall(t *testing.T) {
 	}
 
 	rel, err := client.Install(context.Background(), InstallOptions{
-		Namespace: "test",
+		ReleaseName: "nginx-ingress",
+		Namespace:   "test",
 		ValuesOverrides: map[string]string{
 			"controller.replicaCount": "2",
 			"controller.service.type": "NodePort",
@@ -101,7 +103,7 @@ type testChartLoader struct {
 	chart *chart.Chart
 }
 
-func (t *testChartLoader) Load(_ context.Context, _ *ChartCoordinates) (*chart.Chart, error) {
+func (t *testChartLoader) Load(_ context.Context, _ *castai.ChartSource) (*chart.Chart, error) {
 	return t.chart, nil
 }
 

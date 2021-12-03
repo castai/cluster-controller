@@ -18,16 +18,19 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/tools/clientcmd"
+
+	"github.com/castai/cluster-controller/castai"
 )
 
 type InstallOptions struct {
-	Chart           *ChartCoordinates
+	ChartSource     *castai.ChartSource
 	Namespace       string
+	ReleaseName     string
 	ValuesOverrides map[string]string
 }
 
 type UpgradeOptions struct {
-	Chart           *ChartCoordinates
+	ChartSource     *castai.ChartSource
 	Release         *release.Release
 	ValuesOverrides map[string]string
 }
@@ -63,7 +66,7 @@ type client struct {
 }
 
 func (c *client) Install(ctx context.Context, opts InstallOptions) (*release.Release, error) {
-	ch, err := c.chartLoader.Load(ctx, opts.Chart)
+	ch, err := c.chartLoader.Load(ctx, opts.ChartSource)
 	if err != nil {
 		return nil, err
 	}
@@ -81,9 +84,9 @@ func (c *client) Install(ctx context.Context, opts InstallOptions) (*release.Rel
 	}
 
 	install := action.NewInstall(cfg)
-	install.ReleaseName = ch.Name()
-	install.CreateNamespace = true
 	install.Namespace = namespace
+	install.CreateNamespace = true
+	install.ReleaseName = opts.ReleaseName
 	install.Timeout = 10 * time.Minute
 	install.Wait = true // Wait unit all applied resources are running.
 
@@ -95,13 +98,13 @@ func (c *client) Install(ctx context.Context, opts InstallOptions) (*release.Rel
 
 	res, err := install.Run(ch, values)
 	if err != nil {
-		return nil, fmt.Errorf("running chart install, name=%s: %w", ch.Name(), err)
+		return nil, fmt.Errorf("running chart install, name=%q: %w", ch.Name(), err)
 	}
 	return res, err
 }
 
 func (c *client) Upgrade(ctx context.Context, opts UpgradeOptions) (*release.Release, error) {
-	ch, err := c.chartLoader.Load(ctx, opts.Chart)
+	ch, err := c.chartLoader.Load(ctx, opts.ChartSource)
 	if err != nil {
 		return nil, err
 	}
