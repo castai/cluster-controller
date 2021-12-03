@@ -23,6 +23,7 @@ type ClusterAction struct {
 	ActionPatchNode   *ActionPatchNode   `json:"actionPatchNode,omitempty"`
 	ActionCreateEvent *ActionCreateEvent `json:"actionCreateEvent,omitempty"`
 	ActionApproveCSR  *ActionApproveCSR  `json:"actionApproveCsr,omitempty"`
+	ActionChartUpsert *ActionChartUpsert `json:"actionChartUpsert,omitempty"`
 	CreatedAt         time.Time          `json:"createdAt"`
 	DoneAt            *time.Time         `json:"doneAt,omitempty"`
 	Error             *string            `json:"error,omitempty"`
@@ -43,6 +44,9 @@ func (c *ClusterAction) Data() interface{} {
 	}
 	if c.ActionApproveCSR != nil {
 		return c.ActionApproveCSR
+	}
+	if c.ActionChartUpsert != nil {
+		return c.ActionChartUpsert
 	}
 
 	return nil
