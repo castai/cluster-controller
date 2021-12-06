@@ -238,6 +238,8 @@ func (r *restClientGetter) ToRawKubeConfigLoader() clientcmd.ClientConfig {
 	}
 }
 
+// fakeClientConfig is used to inject Helm required interface dependency. Helm uses only Namespace() method from ClientConfig.
+// There's no straight forward way to build clientcmd.ClientConfig from k8s restConfig hence using fake one.
 type fakeClientConfig struct {
 	config    *rest.Config
 	namespace string
