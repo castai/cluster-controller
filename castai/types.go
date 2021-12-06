@@ -1,6 +1,7 @@
 package castai
 
 import (
+	"errors"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -22,6 +23,7 @@ type ClusterAction struct {
 	ActionPatchNode   *ActionPatchNode   `json:"actionPatchNode,omitempty"`
 	ActionCreateEvent *ActionCreateEvent `json:"actionCreateEvent,omitempty"`
 	ActionApproveCSR  *ActionApproveCSR  `json:"actionApproveCsr,omitempty"`
+	ActionChartUpsert *ActionChartUpsert `json:"actionChartUpsert,omitempty"`
 	CreatedAt         time.Time          `json:"createdAt"`
 	DoneAt            *time.Time         `json:"doneAt,omitempty"`
 	Error             *string            `json:"error,omitempty"`
@@ -42,6 +44,9 @@ func (c *ClusterAction) Data() interface{} {
 	}
 	if c.ActionApproveCSR != nil {
 		return c.ActionApproveCSR
+	}
+	if c.ActionChartUpsert != nil {
+		return c.ActionChartUpsert
 	}
 
 	return nil
@@ -88,4 +93,30 @@ type ActionCreateEvent struct {
 	Reason    string             `json:"reason"`
 	Action    string             `json:"action"`
 	Message   string             `json:"message"`
+}
+
+type ActionChartUpsert struct {
+	Namespace       string            `json:"namespace"`
+	ReleaseName     string            `json:"releaseName"`
+	ValuesOverrides map[string]string `json:"valuesOverrides,omitempty"`
+	ChartSource     ChartSource       `json:"chartSource"`
+}
+
+type ChartSource struct {
+	RepoURL string `json:"repoUrl"`
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
+
+func (c *ChartSource) Validate() error {
+	if c.Name == "" {
+		return errors.New("chart name is not set")
+	}
+	if c.RepoURL == "" {
+		return errors.New("chart repoURL is not set")
+	}
+	if c.Version == "" {
+		return errors.New("chart version is not set")
+	}
+	return nil
 }

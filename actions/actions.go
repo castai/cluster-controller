@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/castai/cluster-controller/helm"
 	"github.com/cenkalti/backoff/v4"
 	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
@@ -36,6 +37,7 @@ func NewService(
 	cfg Config,
 	clientset *kubernetes.Clientset,
 	castaiClient castai.Client,
+	helmClient helm.Client,
 ) Service {
 	return &service{
 		log:          log,
@@ -47,6 +49,7 @@ func NewService(
 			reflect.TypeOf(&castai.ActionPatchNode{}):   newPatchNodeHandler(log, clientset),
 			reflect.TypeOf(&castai.ActionCreateEvent{}): newCreateEventHandler(log, clientset),
 			reflect.TypeOf(&castai.ActionApproveCSR{}):  newApproveCSRHandler(log, clientset),
+			reflect.TypeOf(&castai.ActionChartUpsert{}): newChartUpsertHandler(log, helmClient),
 		},
 	}
 }

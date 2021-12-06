@@ -34,7 +34,7 @@ func TestActions(t *testing.T) {
 	}
 
 	newTestService := func(handler ActionHandler, client castai.Client) Service {
-		svc := NewService(log, cfg, nil, client)
+		svc := NewService(log, cfg, nil, client, nil)
 		handlers := svc.(*service).actionHandlers
 		// Patch handlers with a mock one.
 		for k := range handlers {
