@@ -48,6 +48,9 @@ func TestChartUpsertHandler(t *testing.T) {
 			Name:      "new-release",
 			Version:   1,
 			Namespace: "test",
+			Info: &release.Info{
+				Status: release.StatusDeployed,
+			},
 		}
 
 		helmMock.EXPECT().GetRelease(helm.GetReleaseOptions{
@@ -59,6 +62,7 @@ func TestChartUpsertHandler(t *testing.T) {
 			ChartSource:     &action.ChartSource,
 			Release:         rel,
 			ValuesOverrides: action.ValuesOverrides,
+			MaxHistory:      3,
 		}).Return(nil, nil)
 
 		r.NoError(handler.Handle(ctx, action))
