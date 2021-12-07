@@ -2,4 +2,4 @@ image:
   pullPolicy: Always
   tag: latest
 resources: null
-createNamespace: true
+createNamespace: false

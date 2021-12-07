@@ -64,6 +64,37 @@ func TestChartUpsertHandler(t *testing.T) {
 		r.NoError(handler.Handle(ctx, action))
 	})
 
+	t.Run("rollback previous release before upgrade", func(t *testing.T) {
+		action := chartUpsertAction()
+
+		rel := &release.Release{
+			Name:      "new-release",
+			Version:   1,
+			Namespace: "test",
+			Info: &release.Info{
+				Status: release.StatusPendingUpgrade,
+			},
+		}
+
+		helmMock.EXPECT().GetRelease(helm.GetReleaseOptions{
+			Namespace:   action.Namespace,
+			ReleaseName: action.ReleaseName,
+		}).Return(rel, nil)
+
+		helmMock.EXPECT().Rollback(helm.RollbackOptions{
+			Namespace:   action.Namespace,
+			ReleaseName: action.ReleaseName,
+		}).Return(nil)
+
+		helmMock.EXPECT().Upgrade(ctx, helm.UpgradeOptions{
+			ChartSource:     &action.ChartSource,
+			Release:         rel,
+			ValuesOverrides: action.ValuesOverrides,
+			MaxHistory:      3,
+		}).Return(nil, nil)
+
+		r.NoError(handler.Handle(ctx, action))
+	})
 }
 
 func chartUpsertAction() *castai.ActionChartUpsert {
