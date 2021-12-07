@@ -80,22 +80,14 @@ func TestChartUpsertHandler(t *testing.T) {
 			},
 		}
 
-		helmMock.EXPECT().GetRelease(helm.GetReleaseOptions{
-			Namespace:   action.Namespace,
-			ReleaseName: action.ReleaseName,
-		}).Return(rel, nil)
+		helmMock.EXPECT().GetRelease(gomock.Any()).Return(rel, nil)
 
 		helmMock.EXPECT().Rollback(helm.RollbackOptions{
 			Namespace:   action.Namespace,
 			ReleaseName: action.ReleaseName,
 		}).Return(nil)
 
-		helmMock.EXPECT().Upgrade(ctx, helm.UpgradeOptions{
-			ChartSource:     &action.ChartSource,
-			Release:         rel,
-			ValuesOverrides: action.ValuesOverrides,
-			MaxHistory:      3,
-		}).Return(nil, nil)
+		helmMock.EXPECT().Upgrade(ctx, gomock.Any()).Return(nil, nil)
 
 		r.NoError(handler.Handle(ctx, action))
 	})
