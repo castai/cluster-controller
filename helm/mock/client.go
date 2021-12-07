@@ -81,6 +81,21 @@ func (mr *MockClientMockRecorder) Rollback(opts interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Rollback", reflect.TypeOf((*MockClient)(nil).Rollback), opts)
 }
 
+// Uninstall mocks base method.
+func (m *MockClient) Uninstall(opts helm.UninstallOptions) (*release.UninstallReleaseResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Uninstall", opts)
+	ret0, _ := ret[0].(*release.UninstallReleaseResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Uninstall indicates an expected call of Uninstall.
+func (mr *MockClientMockRecorder) Uninstall(opts interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Uninstall", reflect.TypeOf((*MockClient)(nil).Uninstall), opts)
+}
+
 // Upgrade mocks base method.
 func (m *MockClient) Upgrade(ctx context.Context, opts helm.UpgradeOptions) (*release.Release, error) {
 	m.ctrl.T.Helper()

@@ -5,7 +5,6 @@ import (
 	"io/ioutil"
 	"testing"
 
-	"github.com/castai/cluster-controller/castai"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v3/pkg/action"
@@ -16,6 +15,8 @@ import (
 	"helm.sh/helm/v3/pkg/storage"
 	"helm.sh/helm/v3/pkg/storage/driver"
 	"helm.sh/helm/v3/pkg/time"
+
+	"github.com/castai/cluster-controller/castai"
 )
 
 func TestClientInstall(t *testing.T) {
@@ -72,6 +73,26 @@ func TestClientUpdate(t *testing.T) {
 	r.Equal("nginx-ingress", rel.Name)
 	r.Equal(int64(100), rel.Config["controller"].(map[string]interface{})["replicaCount"])
 	r.Equal("noop", rel.Config["random"])
+}
+
+func TestClientUninstall(t *testing.T) {
+	r := require.New(t)
+
+	currentRelease := buildNginxIngressRelease(release.StatusDeployed)
+	client := &client{
+		log:         logrus.New(),
+		chartLoader: &testChartLoader{chart: buildNginxIngressChart()},
+		configurationGetter: &testConfigurationGetter{
+			t:              t,
+			currentRelease: currentRelease,
+		},
+	}
+
+	_, err := client.Uninstall(UninstallOptions{
+		ReleaseName: currentRelease.Name,
+		Namespace:   currentRelease.Namespace,
+	})
+	r.NoError(err)
 }
 
 type testConfigurationGetter struct {
