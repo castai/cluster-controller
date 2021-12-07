@@ -1,5 +1,6 @@
 image:
   pullPolicy: Always
-  tag: latest
 resources: null
 createNamespace: false
+imagePullSecrets:
+  - name: artifact-registry

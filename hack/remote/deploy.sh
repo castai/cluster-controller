@@ -6,9 +6,9 @@ set -e
 cd "$(git rev-parse --show-toplevel)"
 
 # Build bo binary and push docker image.
-GOOS=linux go build -o bin/castai-cluster-controller .
+IMAGE_TAG=v0.0.1
+GOOS=linux go build -ldflags "-X main.Version=${IMAGE_TAG}" -o bin/castai-cluster-controller .
 DOCKER_IMAGE_REPO=europe-west3-docker.pkg.dev/ci-master-mo3d/tilt/$USER/castai-cluster-controller
-IMAGE_TAG=latest
 docker build -t $DOCKER_IMAGE_REPO:$IMAGE_TAG .
 docker push $DOCKER_IMAGE_REPO:$IMAGE_TAG
 
@@ -17,6 +17,8 @@ LOCAL_CHART_DIR=../gh-helm-charts/charts/castai-cluster-controller
 helm upgrade cluster-controller $LOCAL_CHART_DIR \
   -f ./hack/remote/values.yaml \
   --set image.repository="$DOCKER_IMAGE_REPO" \
+  --set image.tag="$IMAGE_TAG" \
+  --set serviceAccount.create="true" \
   --reuse-values \
   --history-max=3 \
   -n castai-agent
