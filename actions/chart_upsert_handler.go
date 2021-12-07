@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/sirupsen/logrus"
+	"helm.sh/helm/v3/pkg/release"
 	helmdriver "helm.sh/helm/v3/pkg/storage/driver"
 
 	"github.com/castai/cluster-controller/castai"
@@ -34,10 +35,11 @@ func (c *chartUpsertHandler) Handle(ctx context.Context, data interface{}) error
 		return err
 	}
 
-	release, err := c.helm.GetRelease(helm.GetReleaseOptions{
+	rel, err := c.helm.GetRelease(helm.GetReleaseOptions{
 		Namespace:   req.Namespace,
 		ReleaseName: req.ReleaseName,
 	})
+
 	if err != nil {
 		if !errors.Is(err, helmdriver.ErrReleaseNotFound) {
 			return fmt.Errorf("getting helm release %q in namespace %q: %w", req.ReleaseName, req.Namespace, err)
@@ -51,10 +53,22 @@ func (c *chartUpsertHandler) Handle(ctx context.Context, data interface{}) error
 		return err
 	}
 
+	// In case previous update stuck we should rollback it.
+	if rel.Info.Status == release.StatusPendingUpgrade {
+		err = c.helm.Rollback(helm.RollbackOptions{
+			Namespace:   rel.Namespace,
+			ReleaseName: rel.Name,
+		})
+		if err != nil {
+			return err
+		}
+	}
+
 	_, err = c.helm.Upgrade(ctx, helm.UpgradeOptions{
 		ChartSource:     &req.ChartSource,
-		Release:         release,
+		Release:         rel,
 		ValuesOverrides: req.ValuesOverrides,
+		MaxHistory:      3, // Keep last 3 releases history.
 	})
 	return err
 }

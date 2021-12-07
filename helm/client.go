@@ -1,4 +1,4 @@
-//go:generate mockgen -destination ./mock/client.go . Client
+//go:generate mockgen -source ./client.go -destination ./mock/client.go . Client
 
 package helm
 
@@ -34,9 +34,15 @@ type UpgradeOptions struct {
 	ChartSource     *castai.ChartSource
 	Release         *release.Release
 	ValuesOverrides map[string]string
+	MaxHistory      int
 }
 
 type GetReleaseOptions struct {
+	Namespace   string
+	ReleaseName string
+}
+
+type RollbackOptions struct {
 	Namespace   string
 	ReleaseName string
 }
@@ -57,6 +63,7 @@ func NewClient(log logrus.FieldLogger, loader ChartLoader, restConfig *rest.Conf
 type Client interface {
 	Install(ctx context.Context, opts InstallOptions) (*release.Release, error)
 	Upgrade(ctx context.Context, opts UpgradeOptions) (*release.Release, error)
+	Rollback(opts RollbackOptions) error
 	GetRelease(opts GetReleaseOptions) (*release.Release, error)
 }
 
@@ -124,6 +131,7 @@ func (c *client) Upgrade(ctx context.Context, opts UpgradeOptions) (*release.Rel
 
 	upgrade := action.NewUpgrade(cfg)
 	upgrade.Namespace = namespace
+	upgrade.MaxHistory = opts.MaxHistory
 	name := opts.Release.Name
 
 	// Prepare user value overrides.
@@ -140,6 +148,20 @@ func (c *client) Upgrade(ctx context.Context, opts UpgradeOptions) (*release.Rel
 		return nil, fmt.Errorf("running chart upgrade, name=%s: %w", name, err)
 	}
 	return res, nil
+}
+
+func (c *client) Rollback(opts RollbackOptions) error {
+	cfg, err := c.configurationGetter.Get(opts.Namespace)
+	if err != nil {
+		return err
+	}
+
+	rollback := action.NewRollback(cfg)
+	err = rollback.Run(opts.ReleaseName)
+	if err != nil {
+		return fmt.Errorf("chart rollback failed, name=%s, namespace=%s: %w", opts.ReleaseName, opts.Namespace, err)
+	}
+	return nil
 }
 
 func (c *client) GetRelease(opts GetReleaseOptions) (*release.Release, error) {
