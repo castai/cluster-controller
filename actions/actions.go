@@ -44,13 +44,13 @@ func NewService(
 		cfg:          cfg,
 		castaiClient: castaiClient,
 		actionHandlers: map[reflect.Type]ActionHandler{
-			reflect.TypeOf(&castai.ActionDeleteNode{}):     newDeleteNodeHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionDrainNode{}):      newDrainNodeHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionPatchNode{}):      newPatchNodeHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionCreateEvent{}):    newCreateEventHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionApproveCSR{}):     newApproveCSRHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionChartUpsert{}):    newChartUpsertHandler(log, helmClient),
-			reflect.TypeOf(&castai.ActionChartUninstall{}): newChartUninstallHandler(log, helmClient),
+			reflect.TypeOf(&castai.ActionDeleteNode{}):        newDeleteNodeHandler(log, clientset),
+			reflect.TypeOf(&castai.ActionDrainNode{}):         newDrainNodeHandler(log, clientset),
+			reflect.TypeOf(&castai.ActionPatchNode{}):         newPatchNodeHandler(log, clientset),
+			reflect.TypeOf(&castai.ActionCreateEvent{}):       newCreateEventHandler(log, clientset),
+			reflect.TypeOf(&castai.ActionApproveCSR{}):        newApproveCSRHandler(log, clientset),
+			reflect.TypeOf(&castai.ActionChartUpsert{}):       newChartUpsertHandler(log, helmClient),
+			reflect.TypeOf(&castai.ActionDisconnectCluster{}): newDisconnectClusterHandler(log, clientset),
 		},
 	}
 }

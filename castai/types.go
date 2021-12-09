@@ -17,17 +17,17 @@ type AckClusterActionRequest struct {
 }
 
 type ClusterAction struct {
-	ID                   string                `json:"id"`
-	ActionDeleteNode     *ActionDeleteNode     `json:"actionDeleteNode,omitempty"`
-	ActionDrainNode      *ActionDrainNode      `json:"actionDrainNode,omitempty"`
-	ActionPatchNode      *ActionPatchNode      `json:"actionPatchNode,omitempty"`
-	ActionCreateEvent    *ActionCreateEvent    `json:"actionCreateEvent,omitempty"`
-	ActionApproveCSR     *ActionApproveCSR     `json:"actionApproveCsr,omitempty"`
-	ActionChartUpsert    *ActionChartUpsert    `json:"actionChartUpsert,omitempty"`
-	ActionChartUninstall *ActionChartUninstall `json:"actionChartUninstall,omitempty"`
-	CreatedAt            time.Time             `json:"createdAt"`
-	DoneAt               *time.Time            `json:"doneAt,omitempty"`
-	Error                *string               `json:"error,omitempty"`
+	ID                      string                   `json:"id"`
+	ActionDeleteNode        *ActionDeleteNode        `json:"actionDeleteNode,omitempty"`
+	ActionDrainNode         *ActionDrainNode         `json:"actionDrainNode,omitempty"`
+	ActionPatchNode         *ActionPatchNode         `json:"actionPatchNode,omitempty"`
+	ActionCreateEvent       *ActionCreateEvent       `json:"actionCreateEvent,omitempty"`
+	ActionApproveCSR        *ActionApproveCSR        `json:"actionApproveCsr,omitempty"`
+	ActionChartUpsert       *ActionChartUpsert       `json:"actionChartUpsert,omitempty"`
+	ActionDisconnectCluster *ActionDisconnectCluster `json:"actionDisconnectCluster,omitempty"`
+	CreatedAt               time.Time                `json:"createdAt"`
+	DoneAt                  *time.Time               `json:"doneAt,omitempty"`
+	Error                   *string                  `json:"error,omitempty"`
 }
 
 func (c *ClusterAction) Data() interface{} {
@@ -49,8 +49,8 @@ func (c *ClusterAction) Data() interface{} {
 	if c.ActionChartUpsert != nil {
 		return c.ActionChartUpsert
 	}
-	if c.ActionChartUninstall != nil {
-		return c.ActionChartUninstall
+	if c.ActionDisconnectCluster != nil {
+		return c.ActionDisconnectCluster
 	}
 	return nil
 }
@@ -98,9 +98,7 @@ type ActionCreateEvent struct {
 	Message   string             `json:"message"`
 }
 
-type ActionChartUninstall struct {
-	Namespace   string `json:"namespace"`
-	ReleaseName string `json:"releaseName"`
+type ActionDisconnectCluster struct {
 }
 
 type ActionChartUpsert struct {
