@@ -30,6 +30,11 @@ type InstallOptions struct {
 	ValuesOverrides map[string]string
 }
 
+type UninstallOptions struct {
+	Namespace   string
+	ReleaseName string
+}
+
 type UpgradeOptions struct {
 	ChartSource     *castai.ChartSource
 	Release         *release.Release
@@ -62,6 +67,7 @@ func NewClient(log logrus.FieldLogger, loader ChartLoader, restConfig *rest.Conf
 
 type Client interface {
 	Install(ctx context.Context, opts InstallOptions) (*release.Release, error)
+	Uninstall(opts UninstallOptions) (*release.UninstallReleaseResponse, error)
 	Upgrade(ctx context.Context, opts UpgradeOptions) (*release.Release, error)
 	Rollback(opts RollbackOptions) error
 	GetRelease(opts GetReleaseOptions) (*release.Release, error)
@@ -109,6 +115,20 @@ func (c *client) Install(ctx context.Context, opts InstallOptions) (*release.Rel
 		return nil, fmt.Errorf("running chart install, name=%q: %w", ch.Name(), err)
 	}
 	return res, err
+}
+
+func (c *client) Uninstall(opts UninstallOptions) (*release.UninstallReleaseResponse, error) {
+	cfg, err := c.configurationGetter.Get(opts.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	uninstall := action.NewUninstall(cfg)
+	res, err := uninstall.Run(opts.ReleaseName)
+	if err != nil {
+		return nil, fmt.Errorf("chart uninstall failed, name=%s, namespace=%s: %w", opts.ReleaseName, opts.Namespace, err)
+	}
+	return res, nil
 }
 
 func (c *client) Upgrade(ctx context.Context, opts UpgradeOptions) (*release.Release, error) {

@@ -7,12 +7,12 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/castai/cluster-controller/helm"
 	"github.com/cenkalti/backoff/v4"
 	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/helm"
 )
 
 type Config struct {
@@ -44,12 +44,13 @@ func NewService(
 		cfg:          cfg,
 		castaiClient: castaiClient,
 		actionHandlers: map[reflect.Type]ActionHandler{
-			reflect.TypeOf(&castai.ActionDeleteNode{}):  newDeleteNodeHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionDrainNode{}):   newDrainNodeHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionPatchNode{}):   newPatchNodeHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionCreateEvent{}): newCreateEventHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionApproveCSR{}):  newApproveCSRHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionChartUpsert{}): newChartUpsertHandler(log, helmClient),
+			reflect.TypeOf(&castai.ActionDeleteNode{}):        newDeleteNodeHandler(log, clientset),
+			reflect.TypeOf(&castai.ActionDrainNode{}):         newDrainNodeHandler(log, clientset),
+			reflect.TypeOf(&castai.ActionPatchNode{}):         newPatchNodeHandler(log, clientset),
+			reflect.TypeOf(&castai.ActionCreateEvent{}):       newCreateEventHandler(log, clientset),
+			reflect.TypeOf(&castai.ActionApproveCSR{}):        newApproveCSRHandler(log, clientset),
+			reflect.TypeOf(&castai.ActionChartUpsert{}):       newChartUpsertHandler(log, helmClient),
+			reflect.TypeOf(&castai.ActionDisconnectCluster{}): newDisconnectClusterHandler(log, clientset),
 		},
 	}
 }

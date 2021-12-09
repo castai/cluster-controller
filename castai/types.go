@@ -17,16 +17,17 @@ type AckClusterActionRequest struct {
 }
 
 type ClusterAction struct {
-	ID                string             `json:"id"`
-	ActionDeleteNode  *ActionDeleteNode  `json:"actionDeleteNode,omitempty"`
-	ActionDrainNode   *ActionDrainNode   `json:"actionDrainNode,omitempty"`
-	ActionPatchNode   *ActionPatchNode   `json:"actionPatchNode,omitempty"`
-	ActionCreateEvent *ActionCreateEvent `json:"actionCreateEvent,omitempty"`
-	ActionApproveCSR  *ActionApproveCSR  `json:"actionApproveCsr,omitempty"`
-	ActionChartUpsert *ActionChartUpsert `json:"actionChartUpsert,omitempty"`
-	CreatedAt         time.Time          `json:"createdAt"`
-	DoneAt            *time.Time         `json:"doneAt,omitempty"`
-	Error             *string            `json:"error,omitempty"`
+	ID                      string                   `json:"id"`
+	ActionDeleteNode        *ActionDeleteNode        `json:"actionDeleteNode,omitempty"`
+	ActionDrainNode         *ActionDrainNode         `json:"actionDrainNode,omitempty"`
+	ActionPatchNode         *ActionPatchNode         `json:"actionPatchNode,omitempty"`
+	ActionCreateEvent       *ActionCreateEvent       `json:"actionCreateEvent,omitempty"`
+	ActionApproveCSR        *ActionApproveCSR        `json:"actionApproveCsr,omitempty"`
+	ActionChartUpsert       *ActionChartUpsert       `json:"actionChartUpsert,omitempty"`
+	ActionDisconnectCluster *ActionDisconnectCluster `json:"actionDisconnectCluster,omitempty"`
+	CreatedAt               time.Time                `json:"createdAt"`
+	DoneAt                  *time.Time               `json:"doneAt,omitempty"`
+	Error                   *string                  `json:"error,omitempty"`
 }
 
 func (c *ClusterAction) Data() interface{} {
@@ -48,7 +49,9 @@ func (c *ClusterAction) Data() interface{} {
 	if c.ActionChartUpsert != nil {
 		return c.ActionChartUpsert
 	}
-
+	if c.ActionDisconnectCluster != nil {
+		return c.ActionDisconnectCluster
+	}
 	return nil
 }
 
@@ -93,6 +96,9 @@ type ActionCreateEvent struct {
 	Reason    string             `json:"reason"`
 	Action    string             `json:"action"`
 	Message   string             `json:"message"`
+}
+
+type ActionDisconnectCluster struct {
 }
 
 type ActionChartUpsert struct {
