@@ -25,6 +25,7 @@ type ClusterAction struct {
 	ActionApproveCSR        *ActionApproveCSR        `json:"actionApproveCsr,omitempty"`
 	ActionChartUpsert       *ActionChartUpsert       `json:"actionChartUpsert,omitempty"`
 	ActionDisconnectCluster *ActionDisconnectCluster `json:"actionDisconnectCluster,omitempty"`
+	ActionSendAKSInitData   *ActionSendAKSInitData   `json:"actionSendAksInitData,omitempty"`
 	CreatedAt               time.Time                `json:"createdAt"`
 	DoneAt                  *time.Time               `json:"doneAt,omitempty"`
 	Error                   *string                  `json:"error,omitempty"`
@@ -51,6 +52,9 @@ func (c *ClusterAction) Data() interface{} {
 	}
 	if c.ActionDisconnectCluster != nil {
 		return c.ActionDisconnectCluster
+	}
+	if c.ActionSendAKSInitData != nil {
+		return c.ActionSendAKSInitData
 	}
 	return nil
 }
@@ -101,6 +105,9 @@ type ActionCreateEvent struct {
 type ActionDisconnectCluster struct {
 }
 
+type ActionSendAKSInitData struct {
+}
+
 type ActionChartUpsert struct {
 	Namespace       string            `json:"namespace"`
 	ReleaseName     string            `json:"releaseName"`
@@ -125,4 +132,9 @@ func (c *ChartSource) Validate() error {
 		return errors.New("chart version is not set")
 	}
 	return nil
+}
+
+type AKSInitDataRequest struct {
+	CloudConfigBase64       string `json:"cloudConfigBase64"`
+	ProtectedSettingsBase64 string `json:"protectedSettingsBase64"`
 }

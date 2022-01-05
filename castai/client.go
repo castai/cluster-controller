@@ -21,6 +21,7 @@ type Client interface {
 	GetActions(ctx context.Context) ([]*ClusterAction, error)
 	AckAction(ctx context.Context, actionID string, req *AckClusterActionRequest) error
 	SendLogs(ctx context.Context, req *LogEvent) error
+	SendAKSInitData(ctx context.Context, req *AKSInitDataRequest) error
 }
 
 func NewClient(log *logrus.Logger, rest *resty.Client, clusterID string) Client {
@@ -49,6 +50,22 @@ type client struct {
 	log       *logrus.Logger
 	rest      *resty.Client
 	clusterID string
+}
+
+func (c *client) SendAKSInitData(ctx context.Context, req *AKSInitDataRequest) error {
+	resp, err := c.rest.R().
+		SetBody(req).
+		SetContext(ctx).
+		Post(fmt.Sprintf("/v1/kubernetes/clusters/%s/aks-init-data", c.clusterID))
+
+	if err != nil {
+		return fmt.Errorf("sending aks init data: %w", err)
+	}
+	if resp.IsError() {
+		return fmt.Errorf("sending aks init data: request error status_code=%d body=%s", resp.StatusCode(), resp.Body())
+	}
+
+	return nil
 }
 
 func (c *client) SendLogs(ctx context.Context, req *LogEvent) error {

@@ -7,6 +7,8 @@ import (
 	"github.com/castai/cluster-controller/castai"
 )
 
+var _ castai.Client = (*mockClient)(nil)
+
 func NewMockAPIClient(actions []*castai.ClusterAction) *mockClient {
 	return &mockClient{Actions: actions}
 }
@@ -17,11 +19,20 @@ type mockAck struct {
 }
 
 type mockClient struct {
-	Actions       []*castai.ClusterAction
-	GetActionsErr error
-	Logs          []*castai.LogEvent
-	Acks          []*mockAck
-	mu            sync.Mutex
+	Actions        []*castai.ClusterAction
+	GetActionsErr  error
+	Logs           []*castai.LogEvent
+	Acks           []*mockAck
+	AKSInitDataReq *castai.AKSInitDataRequest
+
+	mu sync.Mutex
+}
+
+func (m *mockClient) SendAKSInitData(ctx context.Context, req *castai.AKSInitDataRequest) error {
+	m.mu.Lock()
+	m.AKSInitDataReq = req
+	m.mu.Unlock()
+	return nil
 }
 
 func (m *mockClient) GetActions(_ context.Context) ([]*castai.ClusterAction, error) {
