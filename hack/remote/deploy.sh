@@ -14,11 +14,15 @@ docker push $DOCKER_IMAGE_REPO:$IMAGE_TAG
 
 # Install local chart and binary.
 LOCAL_CHART_DIR=../gh-helm-charts/charts/castai-cluster-controller
-helm upgrade cluster-controller $LOCAL_CHART_DIR \
+helm upgrade -i cluster-controller $LOCAL_CHART_DIR \
   -f ./hack/remote/values.yaml \
   --set image.repository="$DOCKER_IMAGE_REPO" \
   --set image.tag="$IMAGE_TAG" \
   --set serviceAccount.create="true" \
+  --set castai.apiKey="your-api-key" \
+  --set castai.apiURL="your-api-url" \
+  --set castai.clusterID="your-cluster-id" \
+  --set aks.enabled=false \
   --reuse-values \
   --history-max=3 \
   -n castai-agent

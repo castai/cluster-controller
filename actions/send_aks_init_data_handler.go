@@ -83,7 +83,7 @@ func (s *sendAKSInitDataHandler) readCloudConfigBase64(cloudConfigPath string) (
 func (s *sendAKSInitDataHandler) findSettingsPath(baseDir string) (string, error) {
 	var res string
 	err := filepath.WalkDir(baseDir, func(path string, d fs.DirEntry, err error) error {
-		if strings.Contains(path, "Microsoft.Azure.Extensions.CustomScript-") && strings.HasSuffix(path, "settings.json") {
+		if strings.Contains(path, "Microsoft.Azure.Extensions.CustomScript-") && strings.HasSuffix(path, "settings") {
 			res = path
 			return io.EOF
 		}
@@ -91,6 +91,9 @@ func (s *sendAKSInitDataHandler) findSettingsPath(baseDir string) (string, error
 	})
 	if err != nil && err != io.EOF {
 		return "", err
+	}
+	if res == "" {
+		return "", fmt.Errorf("settings path not found, base dir=%s", baseDir)
 	}
 	return res, nil
 }
