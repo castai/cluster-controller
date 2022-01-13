@@ -20,7 +20,7 @@ func TestAKSInitDataHandler(t *testing.T) {
 	h := sendAKSInitDataHandler{
 		log:             log,
 		client:          client,
-		cloudConfigPath: "../testdata/aks/ofv-env.xml",
+		cloudConfigPath: "../testdata/aks/ovf-env.xml",
 		baseDir:         "../testdata/aks",
 	}
 

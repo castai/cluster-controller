@@ -56,7 +56,7 @@ func (c *client) SendAKSInitData(ctx context.Context, req *AKSInitDataRequest) e
 	resp, err := c.rest.R().
 		SetBody(req).
 		SetContext(ctx).
-		Post(fmt.Sprintf("/v1/kubernetes/clusters/%s/aks-init-data", c.clusterID))
+		Post(fmt.Sprintf("/v1/kubernetes/external-clusters/%s/aks-init-data", c.clusterID))
 
 	if err != nil {
 		return fmt.Errorf("sending aks init data: %w", err)

@@ -4,3 +4,6 @@ resources: null
 createNamespace: false
 imagePullSecrets:
   - name: artifact-registry
+additionalEnv:
+  PPROF_PORT: "6060"
+  LOG_LEVEL: "5"
