@@ -3,6 +3,7 @@ package actions
 import (
 	"context"
 	"errors"
+	"sort"
 	"testing"
 	"time"
 
@@ -74,9 +75,14 @@ func TestActions(t *testing.T) {
 		defer func() {
 			cancel()
 			r.Len(client.Acks, 3)
-			r.Equal("a1", client.Acks[0].ActionID)
-			r.Equal("a2", client.Acks[1].ActionID)
-			r.Equal("a3", client.Acks[2].ActionID)
+			ids := make([]string, len(client.Acks))
+			for i, ack := range client.Acks {
+				ids[i] = ack.ActionID
+			}
+			sort.Strings(ids)
+			r.Equal("a1", ids[0])
+			r.Equal("a2", ids[1])
+			r.Equal("a3", ids[2])
 		}()
 		svc.Run(ctx)
 	})

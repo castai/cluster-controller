@@ -100,9 +100,7 @@ func (s *service) doWork(ctx context.Context) error {
 	}
 
 	s.log.Infof("received %d actions in %s", len(actions), pollDuration)
-	if err := s.handleActions(ctx, actions); err != nil {
-		return fmt.Errorf("handling actions: %w", err)
-	}
+	s.handleActions(ctx, actions)
 	return nil
 }
 
@@ -116,23 +114,23 @@ func (s *service) pollActions(ctx context.Context) ([]*castai.ClusterAction, err
 	return actions, nil
 }
 
-func (s *service) handleActions(ctx context.Context, actions []*castai.ClusterAction) error {
+func (s *service) handleActions(ctx context.Context, actions []*castai.ClusterAction) {
 	for _, action := range actions {
-		var err error
-		handleErr := s.handleAction(ctx, action)
-		ackErr := s.ackAction(ctx, action, handleErr)
-		if handleErr != nil {
-			err = handleErr
-		}
-		if ackErr != nil {
-			err = fmt.Errorf("%v:%w", err, ackErr)
-		}
-		if err != nil {
-			return fmt.Errorf("action handling failed: %w", err)
-		}
+		go func(action *castai.ClusterAction) {
+			var err error
+			handleErr := s.handleAction(ctx, action)
+			ackErr := s.ackAction(ctx, action, handleErr)
+			if handleErr != nil {
+				err = handleErr
+			}
+			if ackErr != nil {
+				err = fmt.Errorf("%v:%w", err, ackErr)
+			}
+			if err != nil {
+				s.log.Errorf("handle failed: %v", err)
+			}
+		}(action)
 	}
-
-	return nil
 }
 
 func (s *service) handleAction(ctx context.Context, action *castai.ClusterAction) (err error) {
