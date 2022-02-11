@@ -36,7 +36,10 @@ func (m *mockClient) SendAKSInitData(ctx context.Context, req *castai.AKSInitDat
 }
 
 func (m *mockClient) GetActions(_ context.Context) ([]*castai.ClusterAction, error) {
-	return m.Actions, m.GetActionsErr
+	m.mu.Lock()
+	actions := m.Actions
+	m.mu.Unlock()
+	return actions, m.GetActionsErr
 }
 
 func (m *mockClient) SendLogs(_ context.Context, req *castai.LogEvent) error {
@@ -47,6 +50,9 @@ func (m *mockClient) SendLogs(_ context.Context, req *castai.LogEvent) error {
 }
 
 func (m *mockClient) AckAction(_ context.Context, actionID string, req *castai.AckClusterActionRequest) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	m.removeAckedActions(actionID)
 
 	m.Acks = append(m.Acks, &mockAck{ActionID: actionID, Err: req.Error})
