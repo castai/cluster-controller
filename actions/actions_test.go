@@ -34,9 +34,9 @@ func TestActions(t *testing.T) {
 		ClusterID:        uuid.New().String(),
 	}
 
-	newTestService := func(handler ActionHandler, client castai.Client) Service {
-		svc := NewService(log, cfg, nil, client, nil)
-		handlers := svc.(*service).actionHandlers
+	newTestService := func(handler ActionHandler, client castai.Client) *service {
+		svc := NewService(log, cfg, nil, client, nil).(*service)
+		handlers := svc.actionHandlers
 		// Patch handlers with a mock one.
 		for k := range handlers {
 			handlers[k] = handler
@@ -69,11 +69,13 @@ func TestActions(t *testing.T) {
 			},
 		}
 		client := mock.NewMockAPIClient(apiActions)
-		handler := &mockAgentActionHandler{}
+		handler := &mockAgentActionHandler{handleDelay: 2 * time.Millisecond}
 		svc := newTestService(handler, client)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
 		defer func() {
 			cancel()
+			svc.startedActionsWg.Wait()
+
 			r.Len(client.Acks, 3)
 			ids := make([]string, len(client.Acks))
 			for i, ack := range client.Acks {
@@ -84,7 +86,7 @@ func TestActions(t *testing.T) {
 			r.Equal("a2", ids[1])
 			r.Equal("a3", ids[2])
 		}()
-		svc.Run(ctx)
+		r.NoError(svc.Run(ctx))
 	})
 
 	t.Run("continue polling on api error", func(t *testing.T) {
@@ -95,9 +97,11 @@ func TestActions(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
 		defer func() {
 			cancel()
+			svc.startedActionsWg.Wait()
+
 			r.Len(client.Acks, 0)
 		}()
-		svc.Run(ctx)
+		r.NoError(svc.Run(ctx))
 	})
 
 	t.Run("ack with error when action handler failed", func(t *testing.T) {
@@ -116,19 +120,23 @@ func TestActions(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
 		defer func() {
 			cancel()
+			svc.startedActionsWg.Wait()
+
 			r.Empty(client.Actions)
 			r.Len(client.Acks, 1)
 			r.Equal("a1", client.Acks[0].ActionID)
 			r.Equal("ups", *client.Acks[0].Err)
 		}()
-		svc.Run(ctx)
+		r.NoError(svc.Run(ctx))
 	})
 }
 
 type mockAgentActionHandler struct {
-	err error
+	err         error
+	handleDelay time.Duration
 }
 
 func (m *mockAgentActionHandler) Handle(ctx context.Context, data interface{}) error {
+	time.Sleep(m.handleDelay)
 	return m.err
 }

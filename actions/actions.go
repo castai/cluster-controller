@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -40,9 +41,10 @@ func NewService(
 	helmClient helm.Client,
 ) Service {
 	return &service{
-		log:          log,
-		cfg:          cfg,
-		castaiClient: castaiClient,
+		log:            log,
+		cfg:            cfg,
+		castaiClient:   castaiClient,
+		startedActions: map[string]struct{}{},
 		actionHandlers: map[reflect.Type]ActionHandler{
 			reflect.TypeOf(&castai.ActionDeleteNode{}):        newDeleteNodeHandler(log, clientset),
 			reflect.TypeOf(&castai.ActionDrainNode{}):         newDrainNodeHandler(log, clientset),
@@ -62,6 +64,10 @@ type service struct {
 	castaiClient castai.Client
 
 	actionHandlers map[reflect.Type]ActionHandler
+
+	startedActionsWg sync.WaitGroup
+	startedActions   map[string]struct{}
+	startedActionsMu sync.Mutex
 }
 
 func (s *service) Run(ctx context.Context) error {
@@ -116,7 +122,14 @@ func (s *service) pollActions(ctx context.Context) ([]*castai.ClusterAction, err
 
 func (s *service) handleActions(ctx context.Context, actions []*castai.ClusterAction) {
 	for _, action := range actions {
+		if !s.startProcessing(action.ID) {
+			s.log.Debugf("action is already processing, id=%s", action.ID)
+			continue
+		}
+
 		go func(action *castai.ClusterAction) {
+			defer s.finishProcessing(action.ID)
+
 			var err error
 			handleErr := s.handleAction(ctx, action)
 			ackErr := s.ackAction(ctx, action, handleErr)
@@ -131,6 +144,27 @@ func (s *service) handleActions(ctx context.Context, actions []*castai.ClusterAc
 			}
 		}(action)
 	}
+}
+
+func (s *service) finishProcessing(actionID string) {
+	s.startedActionsMu.Lock()
+	defer s.startedActionsMu.Unlock()
+
+	s.startedActionsWg.Done()
+	delete(s.startedActions, actionID)
+}
+
+func (s *service) startProcessing(actionID string) bool {
+	s.startedActionsMu.Lock()
+	defer s.startedActionsMu.Unlock()
+
+	if _, ok := s.startedActions[actionID]; ok {
+		return false
+	}
+
+	s.startedActionsWg.Add(1)
+	s.startedActions[actionID] = struct{}{}
+	return true
 }
 
 func (s *service) handleAction(ctx context.Context, action *castai.ClusterAction) (err error) {
