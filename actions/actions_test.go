@@ -21,8 +21,6 @@ func TestMain(m *testing.M) {
 }
 
 func TestActions(t *testing.T) {
-	r := require.New(t)
-
 	log := logrus.New()
 	log.SetLevel(logrus.DebugLevel)
 	cfg := Config{
@@ -45,6 +43,8 @@ func TestActions(t *testing.T) {
 	}
 
 	t.Run("poll, handle and ack", func(t *testing.T) {
+		r := require.New(t)
+
 		apiActions := []*castai.ClusterAction{
 			{
 				ID:        "a1",
@@ -90,6 +90,8 @@ func TestActions(t *testing.T) {
 	})
 
 	t.Run("continue polling on api error", func(t *testing.T) {
+		r := require.New(t)
+
 		client := mock.NewMockAPIClient([]*castai.ClusterAction{})
 		client.GetActionsErr = errors.New("ups")
 		handler := &mockAgentActionHandler{err: errors.New("ups")}
@@ -105,6 +107,8 @@ func TestActions(t *testing.T) {
 	})
 
 	t.Run("ack with error when action handler failed", func(t *testing.T) {
+		r := require.New(t)
+
 		apiActions := []*castai.ClusterAction{
 			{
 				ID:        "a1",
@@ -125,7 +129,7 @@ func TestActions(t *testing.T) {
 			r.Empty(client.Actions)
 			r.Len(client.Acks, 1)
 			r.Equal("a1", client.Acks[0].ActionID)
-			r.Equal("ups", *client.Acks[0].Err)
+			r.Equal("handling action *castai.ActionPatchNode: ups", *client.Acks[0].Err)
 		}()
 		r.NoError(svc.Run(ctx))
 	})

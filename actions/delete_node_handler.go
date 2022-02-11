@@ -45,17 +45,13 @@ func (h *deleteNodeHandler) Handle(ctx context.Context, data interface{}) error 
 	log := h.log.WithField("node_name", req.NodeName)
 	log.Info("deleting kubernetes node")
 
-	node, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
-	if err != nil {
+	b := backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(h.cfg.deleteRetryWait), h.cfg.deleteRetries), ctx)
+	return backoff.Retry(func() error {
+		err := h.clientset.CoreV1().Nodes().Delete(ctx, req.NodeName, metav1.DeleteOptions{})
 		if apierrors.IsNotFound(err) {
 			log.Info("node not found, skipping delete")
 			return nil
 		}
 		return err
-	}
-
-	b := backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(h.cfg.deleteRetryWait), h.cfg.deleteRetries), ctx)
-	return backoff.Retry(func() error {
-		return h.clientset.CoreV1().Nodes().Delete(ctx, node.Name, metav1.DeleteOptions{})
 	}, b)
 }

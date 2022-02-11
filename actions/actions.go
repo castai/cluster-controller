@@ -177,7 +177,7 @@ func (s *service) handleAction(ctx context.Context, action *castai.ClusterAction
 	}
 
 	if err := handler.Handle(ctx, data); err != nil {
-		return err
+		return fmt.Errorf("handling action %v: %w", actionType, err)
 	}
 	return nil
 }
