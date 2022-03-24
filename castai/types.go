@@ -24,6 +24,7 @@ type ClusterAction struct {
 	ActionCreateEvent       *ActionCreateEvent       `json:"actionCreateEvent,omitempty"`
 	ActionApproveCSR        *ActionApproveCSR        `json:"actionApproveCsr,omitempty"`
 	ActionChartUpsert       *ActionChartUpsert       `json:"actionChartUpsert,omitempty"`
+	ActionChartUninstall    *ActionChartUninstall    `json:"actionChartUninstall,omitempty"`
 	ActionDisconnectCluster *ActionDisconnectCluster `json:"actionDisconnectCluster,omitempty"`
 	ActionSendAKSInitData   *ActionSendAKSInitData   `json:"actionSendAksInitData,omitempty"`
 	CreatedAt               time.Time                `json:"createdAt"`
@@ -49,6 +50,9 @@ func (c *ClusterAction) Data() interface{} {
 	}
 	if c.ActionChartUpsert != nil {
 		return c.ActionChartUpsert
+	}
+	if c.ActionChartUninstall != nil {
+		return c.ActionChartUninstall
 	}
 	if c.ActionDisconnectCluster != nil {
 		return c.ActionDisconnectCluster
@@ -113,6 +117,11 @@ type ActionChartUpsert struct {
 	ReleaseName     string            `json:"releaseName"`
 	ValuesOverrides map[string]string `json:"valuesOverrides,omitempty"`
 	ChartSource     ChartSource       `json:"chartSource"`
+}
+
+type ActionChartUninstall struct {
+	Namespace   string `json:"namespace"`
+	ReleaseName string `json:"releaseName"`
 }
 
 type ChartSource struct {
