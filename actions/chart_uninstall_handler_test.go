@@ -14,31 +14,6 @@ import (
 	mock_helm "github.com/castai/cluster-controller/helm/mock"
 )
 
-func TestUninstallActionValidator(t *testing.T) {
-	r := require.New(t)
-	ctrl := gomock.NewController(t)
-	helmMock := mock_helm.NewMockClient(ctrl)
-	handler := newChartUninstallHandler(logrus.New(), helmMock).(*chartUninstallHandler)
-
-	t.Run("correct uninstall action", func(t *testing.T) {
-		r.NoError(handler.validateRequest(newUninstallAction()))
-	})
-
-	t.Run("namespace is missing in uninstall action", func(t *testing.T) {
-		action := newUninstallAction()
-		action.Namespace = ""
-
-		r.Error(handler.validateRequest(action))
-	})
-
-	t.Run("helm release is missing in uninstall action", func(t *testing.T) {
-		action := newUninstallAction()
-		action.ReleaseName = ""
-
-		r.Error(handler.validateRequest(action))
-	})
-}
-
 func TestChartUninstallHandler(t *testing.T) {
 	r := require.New(t)
 	ctrl := gomock.NewController(t)
@@ -68,6 +43,20 @@ func TestChartUninstallHandler(t *testing.T) {
 		}).Return(nil, someError)
 
 		r.Error(handler.Handle(ctx, action), someError)
+	})
+
+	t.Run("namespace is missing in uninstall action", func(t *testing.T) {
+		action := newUninstallAction()
+		action.Namespace = ""
+
+		r.Error(handler.Handle(ctx, action))
+	})
+
+	t.Run("helm release is missing in uninstall action", func(t *testing.T) {
+		action := newUninstallAction()
+		action.ReleaseName = ""
+
+		r.Error(handler.Handle(ctx, action))
 	})
 }
 
