@@ -8,11 +8,12 @@ import (
 )
 
 type Config struct {
-	Log        Log
-	API        API
-	Kubeconfig string
-	ClusterID  string
-	PprofPort  int
+	Log            Log
+	API            API
+	Kubeconfig     string
+	ClusterID      string
+	PprofPort      int
+	LeaderElection LeaderElection
 }
 
 type Log struct {
@@ -20,8 +21,14 @@ type Log struct {
 }
 
 type API struct {
-	Key          string
-	URL          string
+	Key string
+	URL string
+}
+
+type LeaderElection struct {
+	Enabled   bool
+	Namespace string
+	LockName  string
 }
 
 var cfg *Config
@@ -33,14 +40,14 @@ func Get() Config {
 	}
 
 	_ = viper.BindEnv("log.level", "LOG_LEVEL")
-
 	_ = viper.BindEnv("api.key", "API_KEY")
 	_ = viper.BindEnv("api.url", "API_URL")
 	_ = viper.BindEnv("clusterid", "CLUSTER_ID")
-
 	_ = viper.BindEnv("kubeconfig")
-
 	_ = viper.BindEnv("pprofport", "PPROF_PORT")
+	_ = viper.BindEnv("leaderelection.enabled", "LEADER_ELECTION_ENABLED")
+	_ = viper.BindEnv("leaderelection.namespace", "LEADER_ELECTION_NAMESPACE")
+	_ = viper.BindEnv("leaderelection.lockname", "LEADER_ELECTION_LOCK_NAME")
 
 	cfg = &Config{}
 	if err := viper.Unmarshal(&cfg); err != nil {
@@ -59,6 +66,14 @@ func Get() Config {
 	}
 	if cfg.ClusterID == "" {
 		required("CLUSTER_ID")
+	}
+	if cfg.LeaderElection.Enabled {
+		if cfg.LeaderElection.Namespace == "" {
+			required("LEADER_ELECTION_NAMESPACE")
+		}
+		if cfg.LeaderElection.LockName == "" {
+			required("LEADER_ELECTION_LOCK_NAME")
+		}
 	}
 
 	return *cfg
