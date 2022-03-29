@@ -179,7 +179,7 @@ func runWithLeaderElection(ctx context.Context, log logrus.FieldLogger, lock *re
 		// get elected before your background loop finished, violating
 		// the stated goal of the lease.
 		ReleaseOnCancel: true,
-		LeaseDuration:   60 * time.Second, // TODO: Check this duration.
+		LeaseDuration:   60 * time.Second,
 		RenewDeadline:   15 * time.Second,
 		RetryPeriod:     5 * time.Second,
 		Callbacks: leaderelection.LeaderCallbacks{
