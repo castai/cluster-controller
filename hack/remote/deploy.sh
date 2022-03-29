@@ -19,6 +19,10 @@ helm upgrade -i cluster-controller $LOCAL_CHART_DIR \
   --set image.repository="$DOCKER_IMAGE_REPO" \
   --set image.tag="$IMAGE_TAG" \
   --set aks.enabled=false \
+  --set serviceAccount.create="true" \
+  --set castai.apiKey="your-api-key" \
+  --set castai.apiURL="your-api-url" \
+  --set castai.clusterID="your-cluster-id" \
   --history-max=3 \
   -n castai-agent
 
