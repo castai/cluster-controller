@@ -13,12 +13,13 @@ import (
 )
 
 const (
-	headerAPIKey    = "X-API-Key"
-	headerUserAgent = "User-Agent"
+	headerAPIKey            = "X-API-Key"
+	headerUserAgent         = "User-Agent"
+	headerKubernetesVersion = "X-K8s-Version"
 )
 
 type Client interface {
-	GetActions(ctx context.Context) ([]*ClusterAction, error)
+	GetActions(ctx context.Context, k8sVersion string) ([]*ClusterAction, error)
 	AckAction(ctx context.Context, actionID string, req *AckClusterActionRequest) error
 	SendLogs(ctx context.Context, req *LogEvent) error
 	SendAKSInitData(ctx context.Context, req *AKSInitDataRequest) error
@@ -84,11 +85,12 @@ func (c *client) SendLogs(ctx context.Context, req *LogEvent) error {
 	return nil
 }
 
-func (c *client) GetActions(ctx context.Context) ([]*ClusterAction, error) {
+func (c *client) GetActions(ctx context.Context, k8sVersion string) ([]*ClusterAction, error) {
 	res := &GetClusterActionsResponse{}
 	resp, err := c.rest.R().
 		SetContext(ctx).
 		SetResult(res).
+		SetHeader(headerKubernetesVersion, k8sVersion).
 		Get(fmt.Sprintf("/v1/kubernetes/clusters/%s/actions", c.clusterID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to request cluster-actions: %w", err)

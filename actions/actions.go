@@ -36,6 +36,7 @@ type ActionHandler interface {
 func NewService(
 	log logrus.FieldLogger,
 	cfg Config,
+	k8sVersion string,
 	clientset *kubernetes.Clientset,
 	castaiClient castai.Client,
 	helmClient helm.Client,
@@ -43,6 +44,7 @@ func NewService(
 	return &service{
 		log:            log,
 		cfg:            cfg,
+		k8sVersion:     k8sVersion,
 		castaiClient:   castaiClient,
 		startedActions: map[string]struct{}{},
 		actionHandlers: map[reflect.Type]ActionHandler{
@@ -63,6 +65,8 @@ type service struct {
 	log          logrus.FieldLogger
 	cfg          Config
 	castaiClient castai.Client
+
+	k8sVersion string
 
 	actionHandlers map[reflect.Type]ActionHandler
 
@@ -114,7 +118,7 @@ func (s *service) doWork(ctx context.Context) error {
 func (s *service) pollActions(ctx context.Context) ([]*castai.ClusterAction, error) {
 	ctx, cancel := context.WithTimeout(ctx, s.cfg.PollTimeout)
 	defer cancel()
-	actions, err := s.castaiClient.GetActions(ctx)
+	actions, err := s.castaiClient.GetActions(ctx, s.k8sVersion)
 	if err != nil {
 		return nil, err
 	}

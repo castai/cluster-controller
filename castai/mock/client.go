@@ -35,7 +35,7 @@ func (m *mockClient) SendAKSInitData(ctx context.Context, req *castai.AKSInitDat
 	return nil
 }
 
-func (m *mockClient) GetActions(_ context.Context) ([]*castai.ClusterAction, error) {
+func (m *mockClient) GetActions(_ context.Context, _ string) ([]*castai.ClusterAction, error) {
 	m.mu.Lock()
 	actions := m.Actions
 	m.mu.Unlock()
