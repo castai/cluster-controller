@@ -26,6 +26,7 @@ import (
 type InstallOptions struct {
 	ChartSource     *castai.ChartSource
 	Namespace       string
+	CreateNamespace bool
 	ReleaseName     string
 	ValuesOverrides map[string]string
 }
@@ -99,7 +100,7 @@ func (c *client) Install(ctx context.Context, opts InstallOptions) (*release.Rel
 
 	install := action.NewInstall(cfg)
 	install.Namespace = namespace
-	install.CreateNamespace = true
+	install.CreateNamespace = opts.CreateNamespace
 	install.ReleaseName = opts.ReleaseName
 	install.Timeout = 10 * time.Minute
 	install.Wait = true // Wait unit all applied resources are running.

@@ -47,6 +47,7 @@ func (c *chartUpsertHandler) Handle(ctx context.Context, data interface{}) error
 		_, err := c.helm.Install(ctx, helm.InstallOptions{
 			ChartSource:     &req.ChartSource,
 			Namespace:       req.Namespace,
+			CreateNamespace: req.CreateNamespace,
 			ReleaseName:     req.ReleaseName,
 			ValuesOverrides: req.ValuesOverrides,
 		})
