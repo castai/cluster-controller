@@ -130,7 +130,14 @@ func run(
 		AckRetryWait:     1 * time.Second,
 		ClusterID:        cfg.ClusterID,
 	}
-	svc := actions.NewService(log, actionsConfig, clientset, client, helmClient)
+	svc := actions.NewService(
+		log,
+		actionsConfig,
+		k8sVersion.Full(),
+		clientset,
+		client,
+		helmClient,
+	)
 
 	if cfg.LeaderElection.Enabled {
 		lock, err := newLeaseLock(clientset, cfg.LeaderElection.LockName, cfg.LeaderElection.Namespace)
