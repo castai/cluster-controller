@@ -138,9 +138,7 @@ func run(
 			return err
 		}
 		// Run actions service with leader election. Blocks.
-		runWithLeaderElection(ctx, log, lock, func(ctx context.Context) {
-			svc.Run(ctx)
-		})
+		runWithLeaderElection(ctx, log, lock, svc.Run)
 		return nil
 	}
 
