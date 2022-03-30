@@ -6,14 +6,21 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	_ "net/http/pprof"
+	"os"
 	"time"
 
-	"github.com/castai/cluster-controller/helm"
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/leaderelection"
+	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
+
+	"github.com/castai/cluster-controller/helm"
 
 	"github.com/castai/cluster-controller/actions"
 	"github.com/castai/cluster-controller/castai"
@@ -48,12 +55,14 @@ func main() {
 	)
 
 	log := logrus.WithFields(logrus.Fields{})
-	if err := run(signals.SetupSignalHandler(), client, logger, cfg, binVersion); err != nil {
+
+	ctx := signals.SetupSignalHandler()
+	if err := run(ctx, client, logger, cfg, binVersion); err != nil {
 		logErr := &logContextErr{}
 		if errors.As(err, &logErr) {
 			log = logger.WithFields(logErr.fields)
 		}
-		log.Fatalf("agent-actions failed: %v", err)
+		log.Fatalf("cluster-controller failed: %v", err)
 	}
 }
 
@@ -94,7 +103,7 @@ func run(
 
 	k8sVersion, err := version.Get(clientset)
 	if err != nil {
-		panic(fmt.Errorf("failed getting kubernetes version: %v", err))
+		return fmt.Errorf("getting kubernetes version: %w", err)
 	}
 
 	log := logger.WithFields(logrus.Fields{
@@ -123,11 +132,73 @@ func run(
 	}
 	svc := actions.NewService(log, actionsConfig, clientset, client, helmClient)
 
-	// Run action service. Blocks.
-	if err := svc.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		return err
+	if cfg.LeaderElection.Enabled {
+		lock, err := newLeaseLock(clientset, cfg.LeaderElection.LockName, cfg.LeaderElection.Namespace)
+		if err != nil {
+			return err
+		}
+		// Run actions service with leader election. Blocks.
+		runWithLeaderElection(ctx, log, lock, svc.Run)
+		return nil
 	}
+
+	// Run action service. Blocks.
+	svc.Run(ctx)
 	return nil
+}
+
+func newLeaseLock(client kubernetes.Interface, lockName, lockNamespace string) (*resourcelock.LeaseLock, error) {
+	id, err := os.Hostname()
+	if err != nil {
+		return nil, fmt.Errorf("failed to determine hostname used in leader ID: %w", err)
+	}
+	id = id + "_" + uuid.New().String()
+
+	return &resourcelock.LeaseLock{
+		LeaseMeta: metav1.ObjectMeta{
+			Name:      lockName,
+			Namespace: lockNamespace,
+		},
+		Client: client.CoordinationV1(),
+		LockConfig: resourcelock.ResourceLockConfig{
+			Identity: id,
+		},
+	}, nil
+}
+
+func runWithLeaderElection(ctx context.Context, log logrus.FieldLogger, lock *resourcelock.LeaseLock, runFunc func(ctx context.Context)) {
+	// Start the leader election code loop
+	leaderelection.RunOrDie(ctx, leaderelection.LeaderElectionConfig{
+		Lock: lock,
+		// IMPORTANT: you MUST ensure that any code you have that
+		// is protected by the lease must terminate **before**
+		// you call cancel. Otherwise, you could have a background
+		// loop still running and another process could
+		// get elected before your background loop finished, violating
+		// the stated goal of the lease.
+		ReleaseOnCancel: true,
+		LeaseDuration:   60 * time.Second,
+		RenewDeadline:   15 * time.Second,
+		RetryPeriod:     5 * time.Second,
+		Callbacks: leaderelection.LeaderCallbacks{
+			OnStartedLeading: func(ctx context.Context) {
+				log.Infof("started leader: %s", lock.Identity())
+				runFunc(ctx)
+			},
+			OnStoppedLeading: func() {
+				log.Infof("leader lost: %s", lock.Identity())
+				os.Exit(0)
+			},
+			OnNewLeader: func(identity string) {
+				// We're notified when new leader elected.
+				if identity == lock.Identity() {
+					// I just got the lock.
+					return
+				}
+				log.Infof("new leader elected: %s", identity)
+			},
+		},
+	})
 }
 
 func kubeConfigFromEnv() (*rest.Config, error) {

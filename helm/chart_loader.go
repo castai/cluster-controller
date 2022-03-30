@@ -6,15 +6,17 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
-	"github.com/castai/cluster-controller/castai"
 	"github.com/cenkalti/backoff/v4"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/cli"
 	"helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/repo"
+
+	"github.com/castai/cluster-controller/castai"
 )
 
 type ChartLoader interface {
@@ -32,23 +34,21 @@ type remoteChartLoader struct {
 func (cl *remoteChartLoader) Load(ctx context.Context, c *castai.ChartSource) (*chart.Chart, error) {
 	var res *chart.Chart
 	err := backoff.Retry(func() error {
-		index, err := cl.downloadHelmIndex(c.RepoURL)
-		if err != nil {
-			return err
-		}
-
-		urls, err := cl.chartURLs(index, c.Name, c.Version)
-		if err != nil {
-			return err
-		}
-
-		var archiveResp *http.Response
-		for _, u := range urls {
-			archiveResp, err = cl.fetchArchive(ctx, u)
-			if err == nil {
-				break
+		var archiveURL string
+		if strings.HasSuffix(c.RepoURL, ".tgz") {
+			archiveURL = c.RepoURL
+		} else {
+			index, err := cl.downloadHelmIndex(c.RepoURL)
+			if err != nil {
+				return err
+			}
+			archiveURL, err = cl.chartURL(index, c.Name, c.Version)
+			if err != nil {
+				return err
 			}
 		}
+
+		archiveResp, err := cl.fetchArchive(ctx, archiveURL)
 		if err != nil {
 			return err
 		}
@@ -109,12 +109,12 @@ func (cl *remoteChartLoader) downloadHelmIndex(repoURL string) (*repo.IndexFile,
 	return index, nil
 }
 
-func (cl *remoteChartLoader) chartURLs(index *repo.IndexFile, name, version string) ([]string, error) {
+func (cl *remoteChartLoader) chartURL(index *repo.IndexFile, name, version string) (string, error) {
 	for _, c := range index.Entries[name] {
 		if c.Version == version && len(c.URLs) > 0 {
-			return c.URLs, nil
+			return c.URLs[0], nil
 		}
 	}
 
-	return nil, fmt.Errorf("finding chart %q version %q in helm repo index", name, version)
+	return "", fmt.Errorf("finding chart %q version %q in helm repo index", name, version)
 }

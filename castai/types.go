@@ -117,6 +117,7 @@ type ActionChartUpsert struct {
 	ReleaseName     string            `json:"releaseName"`
 	ValuesOverrides map[string]string `json:"valuesOverrides,omitempty"`
 	ChartSource     ChartSource       `json:"chartSource"`
+	CreateNamespace bool              `json:"createNamespace"`
 }
 
 type ActionChartUninstall struct {

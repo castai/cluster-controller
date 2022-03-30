@@ -86,7 +86,7 @@ func TestActions(t *testing.T) {
 			r.Equal("a2", ids[1])
 			r.Equal("a3", ids[2])
 		}()
-		r.NoError(svc.Run(ctx))
+		svc.Run(ctx)
 	})
 
 	t.Run("continue polling on api error", func(t *testing.T) {
@@ -103,7 +103,7 @@ func TestActions(t *testing.T) {
 
 			r.Len(client.Acks, 0)
 		}()
-		r.NoError(svc.Run(ctx))
+		svc.Run(ctx)
 	})
 
 	t.Run("ack with error when action handler failed", func(t *testing.T) {
@@ -131,7 +131,7 @@ func TestActions(t *testing.T) {
 			r.Equal("a1", client.Acks[0].ActionID)
 			r.Equal("handling action *castai.ActionPatchNode: ups", *client.Acks[0].Err)
 		}()
-		r.NoError(svc.Run(ctx))
+		svc.Run(ctx)
 	})
 }
 

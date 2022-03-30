@@ -26,7 +26,7 @@ type Config struct {
 }
 
 type Service interface {
-	Run(ctx context.Context) error
+	Run(ctx context.Context)
 }
 
 type ActionHandler interface {
@@ -71,7 +71,7 @@ type service struct {
 	startedActionsMu sync.Mutex
 }
 
-func (s *service) Run(ctx context.Context) error {
+func (s *service) Run(ctx context.Context) {
 	for {
 		select {
 		case <-time.After(s.cfg.PollWaitInterval):
@@ -79,7 +79,7 @@ func (s *service) Run(ctx context.Context) error {
 			if err != nil {
 				if errors.Is(err, context.Canceled) {
 					s.log.Info("service stopped")
-					return nil
+					return
 				}
 
 				s.log.Errorf("cycle failed: %v", err)
@@ -87,7 +87,7 @@ func (s *service) Run(ctx context.Context) error {
 			}
 		case <-ctx.Done():
 			s.log.Info("service stopped")
-			return nil
+			return
 		}
 	}
 }
