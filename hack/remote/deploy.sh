@@ -24,8 +24,11 @@ fi
 IMAGE_TAG=v0.0.1
 GOOS=linux GOARCH=amd64 go build -ldflags "-X main.Version=${IMAGE_TAG}" -o bin/castai-cluster-controller .
 DOCKER_IMAGE_REPO=europe-west3-docker.pkg.dev/ci-master-mo3d/tilt/$USER/castai-cluster-controller
-docker build -t "$DOCKER_IMAGE_REPO:$IMAGE_TAG" .
-docker push "$DOCKER_IMAGE_REPO:$IMAGE_TAG"
+
+if [ -z "$SKIP_BUILD" ]; then
+  docker build -t "$DOCKER_IMAGE_REPO:$IMAGE_TAG" .
+  docker push "$DOCKER_IMAGE_REPO:$IMAGE_TAG"
+fi
 
 # Install local chart and binary.
 LOCAL_CHART_DIR=../gh-helm-charts/charts/castai-cluster-controller
