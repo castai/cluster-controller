@@ -37,10 +37,6 @@ var (
 	Version   = "local"
 )
 
-const (
-	pprofPort = 6060
-)
-
 func main() {
 	cfg := config.Get()
 
@@ -146,7 +142,7 @@ func run(
 
 	// Start http server for pprof and health checks handlers.
 	go func() {
-		addr := fmt.Sprintf(":%d", pprofPort)
+		addr := fmt.Sprintf(":%d", cfg.PprofPort)
 		log.Infof("starting pprof server on %s", addr)
 
 		if err := http.ListenAndServe(addr, httpMux); err != nil {

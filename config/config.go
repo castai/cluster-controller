@@ -12,6 +12,7 @@ type Config struct {
 	API            API
 	Kubeconfig     string
 	ClusterID      string
+	PprofPort      int
 	LeaderElection LeaderElection
 }
 
@@ -43,6 +44,7 @@ func Get() Config {
 	_ = viper.BindEnv("api.url", "API_URL")
 	_ = viper.BindEnv("clusterid", "CLUSTER_ID")
 	_ = viper.BindEnv("kubeconfig")
+	_ = viper.BindEnv("pprofport", "PPROF_PORT")
 	_ = viper.BindEnv("leaderelection.enabled", "LEADER_ELECTION_ENABLED")
 	_ = viper.BindEnv("leaderelection.namespace", "LEADER_ELECTION_NAMESPACE")
 	_ = viper.BindEnv("leaderelection.lockname", "LEADER_ELECTION_LOCK_NAME")
@@ -54,6 +56,9 @@ func Get() Config {
 
 	if cfg.Log.Level == 0 {
 		cfg.Log.Level = int(logrus.InfoLevel)
+	}
+	if cfg.PprofPort == 0 {
+		cfg.PprofPort = 6060
 	}
 	if cfg.API.Key == "" {
 		required("API_KEY")
