@@ -57,7 +57,9 @@ func Get() Config {
 	if cfg.Log.Level == 0 {
 		cfg.Log.Level = int(logrus.InfoLevel)
 	}
-
+	if cfg.PprofPort == 0 {
+		cfg.PprofPort = 6060
+	}
 	if cfg.API.Key == "" {
 		required("API_KEY")
 	}
