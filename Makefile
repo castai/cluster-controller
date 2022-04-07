@@ -1,8 +1,8 @@
 build:
 	GOOS=linux go build -ldflags "-s -w" -o bin/castai-cluster-controller .
-	docker build -t castai/cluster-controller:$(VERSION) .
+	docker build -t us-docker.pkg.dev/castai-hub/library/cluster-controller:$(VERSION) .
 
 push:
-	docker push castai/cluster-controller:$(VERSION)
+	docker push us-docker.pkg.dev/castai-hub/library/cluster-controller:$(VERSION)
 
 release: build push
