@@ -10,9 +10,11 @@ import (
 	"os"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/net"
 	"k8s.io/apiserver/pkg/server/healthz"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -261,8 +263,45 @@ func retrieveKubeConfig(log logrus.FieldLogger) (*rest.Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	inClusterConfig.Wrap(func(rt http.RoundTripper) http.RoundTripper {
+		return &kubeRetryTransport{
+			log:           log,
+			next:          rt,
+			maxRetries:    10,
+			retryInterval: 3 * time.Second,
+		}
+	})
 	log.Debug("using in cluster kubeconfig")
 	return inClusterConfig, nil
+}
+
+type kubeRetryTransport struct {
+	log           logrus.FieldLogger
+	next          http.RoundTripper
+	maxRetries    uint64
+	retryInterval time.Duration
+}
+
+func (rt *kubeRetryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	var resp *http.Response
+	err := backoff.RetryNotify(func() error {
+		var err error
+		resp, err = rt.next.RoundTrip(req)
+		if err != nil {
+			// Previously client-go contained logic to retry connection refused errors. See https://github.com/kubernetes/kubernetes/pull/88267/files
+			if net.IsConnectionRefused(err) {
+				return err
+			}
+			return backoff.Permanent(err)
+		}
+		return nil
+	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(rt.retryInterval), rt.maxRetries),
+		func(err error, duration time.Duration) {
+			if err != nil {
+				rt.log.Warnf("kube api server connection refused, will retry: %v", err)
+			}
+		})
+	return resp, err
 }
 
 type logContextErr struct {
