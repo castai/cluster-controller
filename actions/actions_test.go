@@ -24,7 +24,7 @@ func TestActions(t *testing.T) {
 	log := logrus.New()
 	log.SetLevel(logrus.DebugLevel)
 	cfg := Config{
-		PollWaitInterval: 1 * time.Millisecond,
+		PollWaitInterval: 10 * time.Millisecond,
 		PollTimeout:      100 * time.Millisecond,
 		AckTimeout:       1 * time.Second,
 		AckRetriesCount:  3,
@@ -49,7 +49,7 @@ func TestActions(t *testing.T) {
 		return svc
 	}
 
-	t.Run("poll, handle and ack", func(t *testing.T) {
+	t.Run("poll handle and ack", func(t *testing.T) {
 		r := require.New(t)
 
 		apiActions := []*castai.ClusterAction{
@@ -78,7 +78,7 @@ func TestActions(t *testing.T) {
 		client := mock.NewMockAPIClient(apiActions)
 		handler := &mockAgentActionHandler{handleDelay: 2 * time.Millisecond}
 		svc := newTestService(handler, client)
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 		defer func() {
 			cancel()
 			svc.startedActionsWg.Wait()
@@ -103,7 +103,7 @@ func TestActions(t *testing.T) {
 		client.GetActionsErr = errors.New("ups")
 		handler := &mockAgentActionHandler{err: errors.New("ups")}
 		svc := newTestService(handler, client)
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 		defer func() {
 			cancel()
 			svc.startedActionsWg.Wait()
@@ -128,7 +128,7 @@ func TestActions(t *testing.T) {
 		client := mock.NewMockAPIClient(apiActions)
 		handler := &mockAgentActionHandler{err: errors.New("ups")}
 		svc := newTestService(handler, client)
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 		defer func() {
 			cancel()
 			svc.startedActionsWg.Wait()
