@@ -68,7 +68,7 @@ func (s *InitDataHandler) readCloudConfigBase64(cloudConfigPath string) ([]byte,
 	if err != nil {
 		return nil, err
 	}
-	customDataRegex, err := regexp.Compile(`<ns1:CustomData>(.*?)<ns1:CustomData>`)
+	customDataRegex, err := regexp.Compile(`<ns1:CustomData>(.*?)<\/ns1:CustomData>`)
 	if err != nil {
 		return nil, err
 	}
