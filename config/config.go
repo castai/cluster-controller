@@ -14,6 +14,7 @@ type Config struct {
 	ClusterID      string
 	PprofPort      int
 	LeaderElection LeaderElection
+	AksInitData    bool
 }
 
 type Log struct {
@@ -48,6 +49,7 @@ func Get() Config {
 	_ = viper.BindEnv("leaderelection.enabled", "LEADER_ELECTION_ENABLED")
 	_ = viper.BindEnv("leaderelection.namespace", "LEADER_ELECTION_NAMESPACE")
 	_ = viper.BindEnv("leaderelection.lockname", "LEADER_ELECTION_LOCK_NAME")
+	_ = viper.BindEnv("aksinitdata", "AKS_INIT_DATA")
 
 	cfg = &Config{}
 	if err := viper.Unmarshal(&cfg); err != nil {

@@ -23,6 +23,7 @@ import (
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
+	"github.com/castai/cluster-controller/aks"
 	"github.com/castai/cluster-controller/helm"
 
 	"github.com/castai/cluster-controller/actions"
@@ -58,6 +59,22 @@ func main() {
 	)
 
 	log := logrus.WithFields(logrus.Fields{})
+	e := ctrlog.NewExporter(logger, client)
+	logger.AddHook(e)
+	logrus.RegisterExitHandler(e.Wait)
+
+	// Send aks init data and exit if run from temporary provisioned node.
+	if cfg.AksInitData {
+		h := aks.NewInitDataHandler(log, client)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		if err := h.Handle(ctx); err != nil {
+			log.Fatalf("sending aks init data: %v", err)
+		}
+		log.Info("aks init data sent, waiting for init data node shutdown")
+		time.Sleep(time.Hour)
+		return
+	}
 
 	ctx := signals.SetupSignalHandler()
 	if err := run(ctx, client, logger, cfg, binVersion); err != nil {
@@ -87,10 +104,6 @@ func run(
 			fields: fields,
 		}
 	}()
-
-	e := ctrlog.NewExporter(logger, client)
-	logger.AddHook(e)
-	logrus.RegisterExitHandler(e.Wait)
 
 	restconfig, err := retrieveKubeConfig(logger)
 	if err != nil {
