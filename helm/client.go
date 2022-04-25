@@ -29,9 +29,9 @@ import (
 )
 
 // group/version/kind/namespace/name
-var ignoredCharts = map[string]bool{
-	"rbac.authorization.k8s.io/v1/ClusterRole//castai-evictor":        true,
-	"rbac.authorization.k8s.io/v1/ClusterRoleBinding//castai-evictor": true,
+var ignoredCharts = map[string]struct{}{
+	"rbac.authorization.k8s.io/v1/ClusterRole//castai-evictor":        {},
+	"rbac.authorization.k8s.io/v1/ClusterRoleBinding//castai-evictor": {},
 }
 
 const (
@@ -121,7 +121,7 @@ func (l *LabelIgnoreHook) Run(renderedManifests *bytes.Buffer) (*bytes.Buffer, e
 		gvk := r.Object.GetObjectKind().GroupVersionKind()
 		key := fmt.Sprintf("%s/%s/%s/%s", gvk.GroupVersion().String(), gvk.Kind, r.Namespace, r.Name)
 
-		if ignoredCharts[key] {
+		if _, ok := ignoredCharts[key]; ok {
 			name := u.GetName()
 			kind := u.GetKind()
 			namespace := u.GetNamespace()
