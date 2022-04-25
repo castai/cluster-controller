@@ -127,11 +127,11 @@ func (l *LabelIgnoreHook) Run(renderedManifests *bytes.Buffer) (*bytes.Buffer, e
 			namespace := u.GetNamespace()
 
 			oldLabels := getChartLabels(oldManifests, name, kind, namespace)
-			newLabel := u.GetLabels()
-
+			labelCopy := u.GetLabels()
 			// Reset version to previous release
-			newLabel[K8sVersionLabel] = oldLabels[K8sVersionLabel]
-			newLabel[HelmVersionLabel] = oldLabels[HelmVersionLabel]
+			labelCopy[K8sVersionLabel] = oldLabels[K8sVersionLabel]
+			labelCopy[HelmVersionLabel] = oldLabels[HelmVersionLabel]
+			u.SetLabels(labelCopy)
 		}
 
 		// Copy-pasted from kustomize
