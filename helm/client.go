@@ -3,15 +3,19 @@
 package helm
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
 	"helm.sh/helm/v3/pkg/action"
+	"helm.sh/helm/v3/pkg/kube"
 	"helm.sh/helm/v3/pkg/release"
 	"helm.sh/helm/v3/pkg/strvals"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/discovery"
 	memorycached "k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/kubernetes"
@@ -19,8 +23,20 @@ import (
 	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
+	"sigs.k8s.io/yaml"
 
 	"github.com/castai/cluster-controller/castai"
+)
+
+// group/version/kind/namespace/name
+var ignoredCharts = map[string]bool{
+	"rbac.authorization.k8s.io/v1/ClusterRole//castai-evictor": true,
+	"rbac.authorization.k8s.io/v1/ClusterRoleBinding//castai-evictor": true,
+}
+
+const (
+	K8sVersionLabel = "app.kubernetes.io/version"
+	HelmVersionLabel = "helm.sh/chart"
 )
 
 type InstallOptions struct {
@@ -78,6 +94,74 @@ type client struct {
 	log                 logrus.FieldLogger
 	configurationGetter ConfigurationGetter
 	chartLoader         ChartLoader
+}
+
+// LabelIgnoreHook prevents certain charts getting updated, if only their version labels have changed
+type LabelIgnoreHook struct {
+	cfg        *action.Configuration
+	oldRelease *release.Release
+}
+
+func (l *LabelIgnoreHook) Run(renderedManifests *bytes.Buffer) (*bytes.Buffer, error) {
+	b := bytes.NewBuffer(nil)
+
+	newManifests, err := l.cfg.KubeClient.Build(renderedManifests, false)
+	if err != nil {
+		return nil, err
+	}
+
+	oldManifests, err := l.cfg.KubeClient.Build(strings.NewReader(l.oldRelease.Manifest), false)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, r := range newManifests {
+		u := r.Object.(*unstructured.Unstructured)
+
+		gvk := r.Object.GetObjectKind().GroupVersionKind()
+		key := fmt.Sprintf("%s/%s/%s/%s", gvk.GroupVersion().String(), gvk.Kind, r.Namespace, r.Name)
+
+		if ignoredCharts[key] {
+			name := u.GetName()
+			kind := u.GetKind()
+			namespace := u.GetNamespace()
+
+			oldLabels := getChartLabels(oldManifests, name, kind, namespace)
+			newLabel := u.GetLabels()
+
+			// Reset version to previous release
+			newLabel[K8sVersionLabel] = oldLabels[K8sVersionLabel]
+			newLabel[HelmVersionLabel] = oldLabels[HelmVersionLabel]
+		}
+
+		// Copy-pasted from kustomize
+		js, err := u.MarshalJSON()
+		if err != nil {
+			return nil, err
+		}
+
+		y, err := yaml.JSONToYAML(js)
+		if err != nil {
+			return nil, err
+		}
+
+		fmt.Fprintf(b, "---\n%s\n", y)
+	}
+
+	return b, nil
+}
+
+func getChartLabels(list kube.ResourceList, chartName, kind, namespace string) map[string]string {
+	for _, r := range list {
+		u := r.Object.(*unstructured.Unstructured)
+
+		// add namespace
+		if u.GetName() == chartName && u.GetKind() == kind && u.GetNamespace() == namespace {
+			return u.GetLabels()
+		}
+	}
+
+	return nil
 }
 
 func (c *client) Install(ctx context.Context, opts InstallOptions) (*release.Release, error) {
@@ -153,6 +237,10 @@ func (c *client) Upgrade(ctx context.Context, opts UpgradeOptions) (*release.Rel
 	upgrade := action.NewUpgrade(cfg)
 	upgrade.Namespace = namespace
 	upgrade.MaxHistory = opts.MaxHistory
+	upgrade.PostRenderer = &LabelIgnoreHook{
+		cfg: cfg,
+		oldRelease: opts.Release,
+	}
 	name := opts.Release.Name
 
 	// Prepare user value overrides.
