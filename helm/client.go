@@ -30,12 +30,12 @@ import (
 
 // group/version/kind/namespace/name
 var ignoredCharts = map[string]bool{
-	"rbac.authorization.k8s.io/v1/ClusterRole//castai-evictor": true,
+	"rbac.authorization.k8s.io/v1/ClusterRole//castai-evictor":        true,
 	"rbac.authorization.k8s.io/v1/ClusterRoleBinding//castai-evictor": true,
 }
 
 const (
-	K8sVersionLabel = "app.kubernetes.io/version"
+	K8sVersionLabel  = "app.kubernetes.io/version"
 	HelmVersionLabel = "helm.sh/chart"
 )
 
@@ -98,19 +98,19 @@ type client struct {
 
 // LabelIgnoreHook prevents certain charts getting updated, if only their version labels have changed
 type LabelIgnoreHook struct {
-	cfg        *action.Configuration
+	kubeClient kube.Interface
 	oldRelease *release.Release
 }
 
 func (l *LabelIgnoreHook) Run(renderedManifests *bytes.Buffer) (*bytes.Buffer, error) {
 	b := bytes.NewBuffer(nil)
 
-	newManifests, err := l.cfg.KubeClient.Build(renderedManifests, false)
+	newManifests, err := l.kubeClient.Build(renderedManifests, false)
 	if err != nil {
 		return nil, err
 	}
 
-	oldManifests, err := l.cfg.KubeClient.Build(strings.NewReader(l.oldRelease.Manifest), false)
+	oldManifests, err := l.kubeClient.Build(strings.NewReader(l.oldRelease.Manifest), false)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +134,7 @@ func (l *LabelIgnoreHook) Run(renderedManifests *bytes.Buffer) (*bytes.Buffer, e
 			u.SetLabels(labelCopy)
 		}
 
-		// Copy-pasted from kustomize
+		// Copy-pasted from kustomize which is the only example of post-render I could find
 		js, err := u.MarshalJSON()
 		if err != nil {
 			return nil, err
@@ -238,7 +238,7 @@ func (c *client) Upgrade(ctx context.Context, opts UpgradeOptions) (*release.Rel
 	upgrade.Namespace = namespace
 	upgrade.MaxHistory = opts.MaxHistory
 	upgrade.PostRenderer = &LabelIgnoreHook{
-		cfg: cfg,
+		kubeClient: cfg.KubeClient,
 		oldRelease: opts.Release,
 	}
 	name := opts.Release.Name
