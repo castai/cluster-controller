@@ -122,11 +122,10 @@ func (l *LabelIgnoreHook) Run(renderedManifests *bytes.Buffer) (*bytes.Buffer, e
 		key := fmt.Sprintf("%s/%s/%s/%s", gvk.GroupVersion().String(), gvk.Kind, r.Namespace, r.Name)
 
 		if _, ok := ignoredCharts[key]; ok {
-			name := u.GetName()
-			kind := u.GetKind()
-			namespace := u.GetNamespace()
-
-			oldLabels := getChartLabels(oldManifests, name, kind, namespace)
+			oldLabels := getChartLabels(oldManifests, u.GetName(), u.GetKind(), u.GetNamespace())
+			if oldLabels == nil {
+				return nil, fmt.Errorf("updating a previously non-existant chart %s", gvk)
+			}
 			labelCopy := u.GetLabels()
 			// Reset version to previous release
 			labelCopy[K8sVersionLabel] = oldLabels[K8sVersionLabel]
@@ -134,7 +133,6 @@ func (l *LabelIgnoreHook) Run(renderedManifests *bytes.Buffer) (*bytes.Buffer, e
 			u.SetLabels(labelCopy)
 		}
 
-		// Copy-pasted from kustomize which is the only example of post-render I could find
 		js, err := u.MarshalJSON()
 		if err != nil {
 			return nil, err
@@ -154,8 +152,6 @@ func (l *LabelIgnoreHook) Run(renderedManifests *bytes.Buffer) (*bytes.Buffer, e
 func getChartLabels(list kube.ResourceList, chartName, kind, namespace string) map[string]string {
 	for _, r := range list {
 		u := r.Object.(*unstructured.Unstructured)
-
-		// add namespace
 		if u.GetName() == chartName && u.GetKind() == kind && u.GetNamespace() == namespace {
 			return u.GetLabels()
 		}
