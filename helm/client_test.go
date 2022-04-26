@@ -177,13 +177,13 @@ metadata:
 		u := res.Object.(*unstructured.Unstructured)
 
 		if u.GetKind() == "Service" {
-			r.Equal("0.6.0", u.GetLabels()[K8sVersionLabel])
-			r.Equal("castai-evictor-0.11.0", u.GetLabels()[HelmVersionLabel])
+			r.Equal("0.6.0", u.GetLabels()[k8sVersionLabel])
+			r.Equal("castai-evictor-0.11.0", u.GetLabels()[helmVersionLabel])
 		}
 
 		if u.GetKind() == "ClusterRoleBinding" {
-			r.Equal("0.5.1", u.GetLabels()[K8sVersionLabel])
-			r.Equal("castai-evictor-0.10.0", u.GetLabels()[HelmVersionLabel])
+			r.Equal("0.5.1", u.GetLabels()[k8sVersionLabel])
+			r.Equal("castai-evictor-0.10.0", u.GetLabels()[helmVersionLabel])
 		}
 	}
 }
