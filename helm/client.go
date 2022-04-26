@@ -29,14 +29,14 @@ import (
 )
 
 // group/version/kind/namespace/name
-var ignoredCharts = map[string]struct{}{
+var labelIgnoreResources = map[string]struct{}{
 	"rbac.authorization.k8s.io/v1/ClusterRole//castai-evictor":        {},
 	"rbac.authorization.k8s.io/v1/ClusterRoleBinding//castai-evictor": {},
 }
 
 const (
-	K8sVersionLabel  = "app.kubernetes.io/version"
-	HelmVersionLabel = "helm.sh/chart"
+	k8sVersionLabel  = "app.kubernetes.io/version"
+	helmVersionLabel = "helm.sh/chart"
 )
 
 type InstallOptions struct {
@@ -96,7 +96,8 @@ type client struct {
 	chartLoader         ChartLoader
 }
 
-// LabelIgnoreHook prevents certain charts getting updated, if only their version labels have changed
+// LabelIgnoreHook prevents certain resource getting updated, if only their version labels have changed.
+// This is needed in order to update components like evictor with it's own cluster scoped resources like clusterrole.
 type LabelIgnoreHook struct {
 	kubeClient kube.Interface
 	oldRelease *release.Release
@@ -121,15 +122,15 @@ func (l *LabelIgnoreHook) Run(renderedManifests *bytes.Buffer) (*bytes.Buffer, e
 		gvk := r.Object.GetObjectKind().GroupVersionKind()
 		key := fmt.Sprintf("%s/%s/%s/%s", gvk.GroupVersion().String(), gvk.Kind, r.Namespace, r.Name)
 
-		if _, ok := ignoredCharts[key]; ok {
+		if _, ok := labelIgnoreResources[key]; ok {
 			oldLabels := getChartLabels(oldManifests, u.GetName(), u.GetKind(), u.GetNamespace())
 			if oldLabels == nil {
 				return nil, fmt.Errorf("updating a previously non-existant chart %s", gvk)
 			}
 			labelCopy := u.GetLabels()
 			// Reset version to previous release
-			labelCopy[K8sVersionLabel] = oldLabels[K8sVersionLabel]
-			labelCopy[HelmVersionLabel] = oldLabels[HelmVersionLabel]
+			labelCopy[k8sVersionLabel] = oldLabels[k8sVersionLabel]
+			labelCopy[helmVersionLabel] = oldLabels[helmVersionLabel]
 			u.SetLabels(labelCopy)
 		}
 
