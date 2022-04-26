@@ -3,6 +3,7 @@ package hook
 import (
 	"bytes"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v3/pkg/release"
@@ -99,4 +100,6 @@ metadata:
 			r.Equal("castai-evictor-0.10.0", u.GetLabels()[helmVersionLabel])
 		}
 	}
+
+	time.Sleep(1 * time.Second)
 }
