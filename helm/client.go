@@ -21,6 +21,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/helm/hook"
 )
 
 type InstallOptions struct {
@@ -153,6 +154,7 @@ func (c *client) Upgrade(ctx context.Context, opts UpgradeOptions) (*release.Rel
 	upgrade := action.NewUpgrade(cfg)
 	upgrade.Namespace = namespace
 	upgrade.MaxHistory = opts.MaxHistory
+	upgrade.PostRenderer = hook.NewLabelIgnoreHook(cfg.KubeClient, opts.Release)
 	name := opts.Release.Name
 
 	// Prepare user value overrides.
