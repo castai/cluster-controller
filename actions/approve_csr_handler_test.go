@@ -2,6 +2,8 @@ package actions
 
 import (
 	"context"
+	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -61,6 +63,7 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 			}
 			return
 		})
+		var approveCalls int32
 		client.PrependReactor("update", "certificatesigningrequests", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
 			approved := csr.DeepCopy()
 			approved.Status.Conditions = []certv1.CertificateSigningRequestCondition{
@@ -72,6 +75,12 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 					Status:         v1.ConditionTrue,
 				},
 			}
+			// Simulate failure for some initial calls to test retry.
+			calls := atomic.LoadInt32(&approveCalls)
+			if calls < 2 {
+				atomic.AddInt32(&approveCalls, 1)
+				return true, approved, fmt.Errorf("ups")
+			}
 			return true, approved, nil
 		})
 
@@ -80,6 +89,8 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 			clientset:              client,
 			csrFetchInterval:       1 * time.Millisecond,
 			initialCSRFetchTimeout: 10 * time.Millisecond,
+			retryAfter:             100 * time.Millisecond,
+			maxRetries:             5,
 		}
 
 		ctx := context.Background()

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
 
@@ -19,6 +20,8 @@ func newApproveCSRHandler(log logrus.FieldLogger, clientset kubernetes.Interface
 		clientset:              clientset,
 		csrFetchInterval:       5 * time.Second,
 		initialCSRFetchTimeout: 5 * time.Minute,
+		maxRetries:             10,
+		retryAfter:             1 * time.Second,
 	}
 }
 
@@ -27,6 +30,8 @@ type approveCSRHandler struct {
 	clientset              kubernetes.Interface
 	csrFetchInterval       time.Duration
 	initialCSRFetchTimeout time.Duration
+	maxRetries             uint64
+	retryAfter             time.Duration
 }
 
 func (h *approveCSRHandler) Handle(ctx context.Context, data interface{}) error {
@@ -37,6 +42,20 @@ func (h *approveCSRHandler) Handle(ctx context.Context, data interface{}) error 
 
 	log := h.log.WithField("node_name", req.NodeName)
 
+	b := backoff.WithContext(
+		backoff.WithMaxRetries(backoff.NewConstantBackOff(h.retryAfter), h.maxRetries),
+		ctx,
+	)
+	return backoff.RetryNotify(func() error {
+		return h.handle(ctx, log, req)
+	}, b, func(err error, duration time.Duration) {
+		if err != nil {
+			log.Warnf("csr approval failed, will retry: %v", err)
+		}
+	})
+}
+
+func (h *approveCSRHandler) handle(ctx context.Context, log logrus.FieldLogger, req *castai.ActionApproveCSR) error {
 	// First get original csr which is created by kubelet.
 	log.Debug("getting initial csr")
 	cert, err := h.getInitialNodeCSR(ctx, req.NodeName)
