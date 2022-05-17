@@ -27,6 +27,7 @@ type ClusterAction struct {
 	ActionChartUninstall    *ActionChartUninstall    `json:"actionChartUninstall,omitempty"`
 	ActionDisconnectCluster *ActionDisconnectCluster `json:"actionDisconnectCluster,omitempty"`
 	ActionSendAKSInitData   *ActionSendAKSInitData   `json:"actionSendAksInitData,omitempty"`
+	ActionCheckNodeDeleted  *ActionCheckNodeDeleted  `json:"actionCheckNodeDeleted,omitempty"`
 	CreatedAt               time.Time                `json:"createdAt"`
 	DoneAt                  *time.Time               `json:"doneAt,omitempty"`
 	Error                   *string                  `json:"error,omitempty"`
@@ -59,6 +60,9 @@ func (c *ClusterAction) Data() interface{} {
 	}
 	if c.ActionSendAKSInitData != nil {
 		return c.ActionSendAKSInitData
+	}
+	if c.ActionCheckNodeDeleted != nil {
+		return c.ActionCheckNodeDeleted
 	}
 	return nil
 }
@@ -110,6 +114,10 @@ type ActionDisconnectCluster struct {
 }
 
 type ActionSendAKSInitData struct {
+}
+
+type ActionCheckNodeDeleted struct {
+	NodeName string `json:"nodeName"`
 }
 
 type ActionChartUpsert struct {
