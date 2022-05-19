@@ -89,9 +89,10 @@ type ActionApproveCSR struct {
 }
 
 type ActionPatchNode struct {
-	NodeName string            `json:"nodeName"`
-	Labels   map[string]string `json:"labels"`
-	Taints   []NodeTaint       `json:"taints"`
+	NodeName    string            `json:"nodeName"`
+	Labels      map[string]string `json:"labels"`
+	Taints      []NodeTaint       `json:"taints"`
+	Annotations map[string]string `json:"annotations"`
 }
 
 type NodeTaint struct {
