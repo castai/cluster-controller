@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -176,6 +177,13 @@ func (s *service) startProcessing(actionID string) bool {
 func (s *service) handleAction(ctx context.Context, action *castai.ClusterAction) (err error) {
 	data := action.Data()
 	actionType := reflect.TypeOf(data)
+
+	defer func() {
+		if rerr := recover(); rerr != nil {
+			err = fmt.Errorf("panic: handling action %s: %s: %s", actionType, rerr, string(debug.Stack()))
+		}
+	}()
+
 	s.log.Infof("handling action, id=%s, type=%s", action.ID, actionType)
 	handler, ok := s.actionHandlers[actionType]
 	if !ok {

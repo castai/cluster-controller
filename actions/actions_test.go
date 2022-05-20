@@ -140,14 +140,46 @@ func TestActions(t *testing.T) {
 		}()
 		svc.Run(ctx)
 	})
+
+	t.Run("ack with error when action handler panic occurred", func(t *testing.T) {
+		r := require.New(t)
+
+		apiActions := []*castai.ClusterAction{
+			{
+				ID:        "a1",
+				CreatedAt: time.Now(),
+				ActionPatchNode: &castai.ActionPatchNode{
+					NodeName: "n1",
+				},
+			},
+		}
+		client := mock.NewMockAPIClient(apiActions)
+		handler := &mockAgentActionHandler{panicErr: errors.New("ups")}
+		svc := newTestService(handler, client)
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		defer func() {
+			cancel()
+			svc.startedActionsWg.Wait()
+
+			r.Empty(client.Actions)
+			r.Len(client.Acks, 1)
+			r.Equal("a1", client.Acks[0].ActionID)
+			r.Contains(*client.Acks[0].Err, "panic: handling action *castai.ActionPatchNode: ups: goroutine")
+		}()
+		svc.Run(ctx)
+	})
 }
 
 type mockAgentActionHandler struct {
 	err         error
+	panicErr    error
 	handleDelay time.Duration
 }
 
 func (m *mockAgentActionHandler) Handle(ctx context.Context, data interface{}) error {
 	time.Sleep(m.handleDelay)
+	if m.panicErr != nil {
+		panic(m.panicErr)
+	}
 	return m.err
 }

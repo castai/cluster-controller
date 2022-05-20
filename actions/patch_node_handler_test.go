@@ -24,6 +24,26 @@ func TestPatchNodeHandler(t *testing.T) {
 		node := &v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: nodeName,
+				Labels: map[string]string{
+					"l1": "v1",
+				},
+				Annotations: map[string]string{
+					"a1": "v1",
+				},
+			},
+			Spec: v1.NodeSpec{
+				Taints: []v1.Taint{
+					{
+						Key:    "t1",
+						Value:  "v1",
+						Effect: v1.TaintEffectNoSchedule,
+					},
+					{
+						Key:    "t2",
+						Value:  "v2",
+						Effect: v1.TaintEffectNoSchedule,
+					},
+				},
 			},
 		}
 		clientset := fake.NewSimpleClientset(node)
@@ -36,13 +56,23 @@ func TestPatchNodeHandler(t *testing.T) {
 		req := &castai.ActionPatchNode{
 			NodeName: "node1",
 			Labels: map[string]string{
-				"label": "ok",
+				"-l1": "",
+				"l2":  "v2",
+			},
+			Annotations: map[string]string{
+				"-a1": "",
+				"a2":  "",
 			},
 			Taints: []castai.NodeTaint{
 				{
-					Key:    "taint",
-					Value:  "ok2",
-					Effect: "NoSchedule",
+					Key:    "t3",
+					Value:  "t3",
+					Effect: string(v1.TaintEffectNoSchedule),
+				},
+				{
+					Key:    "-t2",
+					Value:  "",
+					Effect: string(v1.TaintEffectNoSchedule),
 				},
 			},
 		}
@@ -52,8 +82,22 @@ func TestPatchNodeHandler(t *testing.T) {
 
 		n, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
 		r.NoError(err)
-		r.Equal("ok", n.Labels["label"])
-		r.Equal([]v1.Taint{{Key: "taint", Value: "ok2", Effect: "NoSchedule", TimeAdded: (*metav1.Time)(nil)}}, n.Spec.Taints)
+
+		expectedLabels := map[string]string{
+			"l2": "v2",
+		}
+		r.Equal(expectedLabels, n.Labels)
+
+		expectedAnnotations := map[string]string{
+			"a2": "",
+		}
+		r.Equal(expectedAnnotations, n.Annotations)
+
+		expectedTaints := []v1.Taint{
+			{Key: "t1", Value: "v1", Effect: "NoSchedule", TimeAdded: (*metav1.Time)(nil)},
+			{Key: "t3", Value: "t3", Effect: "NoSchedule", TimeAdded: (*metav1.Time)(nil)},
+		}
+		r.Equal(expectedTaints, n.Spec.Taints)
 	})
 
 	t.Run("skip patch when node not found", func(t *testing.T) {
