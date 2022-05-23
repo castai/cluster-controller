@@ -113,6 +113,32 @@ func TestActions(t *testing.T) {
 		svc.Run(ctx)
 	})
 
+	t.Run("do not ack action on context canceled error", func(t *testing.T) {
+		r := require.New(t)
+
+		apiActions := []*castai.ClusterAction{
+			{
+				ID:        "a1",
+				CreatedAt: time.Now(),
+				ActionPatchNode: &castai.ActionPatchNode{
+					NodeName: "n1",
+				},
+			},
+		}
+		client := mock.NewMockAPIClient(apiActions)
+		handler := &mockAgentActionHandler{err: context.Canceled}
+		svc := newTestService(handler, client)
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		defer func() {
+			cancel()
+			svc.startedActionsWg.Wait()
+
+			r.NotEmpty(client.Actions)
+			r.Len(client.Acks, 0)
+		}()
+		svc.Run(ctx)
+	})
+
 	t.Run("ack with error when action handler failed", func(t *testing.T) {
 		r := require.New(t)
 
