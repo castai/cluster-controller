@@ -51,6 +51,12 @@ func TestDrainNodeHandler(t *testing.T) {
 		_, err = clientset.CoreV1().Pods("default").Get(context.Background(), podName, metav1.GetOptions{})
 		r.Error(err)
 		r.True(apierrors.IsNotFound(err))
+
+		// Daemon set and static pods should not be drained.
+		_, err = clientset.CoreV1().Pods("default").Get(context.Background(), "ds-pod", metav1.GetOptions{})
+		r.NoError(err)
+		_, err = clientset.CoreV1().Pods("default").Get(context.Background(), "static-pod", metav1.GetOptions{})
+		r.NoError(err)
 	})
 
 	t.Run("skip drain when node not found", func(t *testing.T) {
@@ -147,7 +153,7 @@ func setupFakeClientWithNodePodEviction(nodeName, podName string) *fake.Clientse
 	controller := true
 	daemonSetPod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "dsPod",
+			Name:      "ds-pod",
 			Namespace: "default",
 			OwnerReferences: []metav1.OwnerReference{
 				{
@@ -160,8 +166,23 @@ func setupFakeClientWithNodePodEviction(nodeName, podName string) *fake.Clientse
 			NodeName: nodeName,
 		},
 	}
+	staticPod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "static-pod",
+			Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					Kind:       "Node",
+					Controller: &controller,
+				},
+			},
+		},
+		Spec: v1.PodSpec{
+			NodeName: nodeName,
+		},
+	}
 
-	clientset := fake.NewSimpleClientset(node, pod, daemonSetPod)
+	clientset := fake.NewSimpleClientset(node, pod, daemonSetPod, staticPod)
 
 	addEvictionSupport(clientset)
 
