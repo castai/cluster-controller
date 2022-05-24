@@ -139,6 +139,10 @@ func (s *service) handleActions(ctx context.Context, actions []*castai.ClusterAc
 
 			var err error
 			handleErr := s.handleAction(ctx, action)
+			if errors.Is(handleErr, context.Canceled) {
+				// Action should be handled again on context canceled errors.
+				return
+			}
 			ackErr := s.ackAction(ctx, action, handleErr)
 			if handleErr != nil {
 				err = handleErr

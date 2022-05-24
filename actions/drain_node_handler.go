@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 	v1 "k8s.io/api/core/v1"
@@ -72,15 +73,19 @@ func (h *drainNodeHandler) Handle(ctx context.Context, data interface{}) error {
 		return fmt.Errorf("tainting node %q: %w", req.NodeName, err)
 	}
 
-	pods, err := h.listNodePods(ctx, node)
+	allNodePods, err := h.listNodePods(ctx, node)
 	if err != nil {
 		return fmt.Errorf("listing pods for node %q: %w", req.NodeName, err)
 	}
 
+	podsToEvict := lo.Filter(allNodePods.Items, func(pod v1.Pod, _ int) bool {
+		return !isDaemonSetPod(&pod) && !isStaticPod(&pod)
+	})
+
 	// First try to evict pods gracefully.
 	evictCtx, evictCancel := context.WithTimeout(ctx, time.Duration(req.DrainTimeoutSeconds)*time.Second)
 	defer evictCancel()
-	err = h.evictPods(evictCtx, log, pods)
+	err = h.evictPods(evictCtx, log, podsToEvict)
 	if err != nil && !errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
@@ -92,7 +97,7 @@ func (h *drainNodeHandler) Handle(ctx context.Context, data interface{}) error {
 		// If force is set and evict timeout exceeded delete pods.
 		deleteCtx, deleteCancel := context.WithTimeout(ctx, h.cfg.podsDeleteTimeout)
 		defer deleteCancel()
-		if err := h.deletePods(deleteCtx, log, pods.Items); err != nil {
+		if err := h.deletePods(deleteCtx, log, podsToEvict); err != nil {
 			return err
 		}
 	}
@@ -108,10 +113,6 @@ func (h *drainNodeHandler) deletePods(ctx context.Context, log logrus.FieldLogge
 	g, ctx := errgroup.WithContext(ctx)
 	for _, pod := range pods {
 		pod := pod
-
-		if daemonSetPod(pod) {
-			continue
-		}
 
 		g.Go(func() error {
 			err := h.deletePod(ctx, pod)
@@ -186,16 +187,12 @@ func (h *drainNodeHandler) listNodePods(ctx context.Context, node *v1.Node) (*v1
 	return pods, err
 }
 
-func (h *drainNodeHandler) evictPods(ctx context.Context, log logrus.FieldLogger, pods *v1.PodList) error {
-	log.Infof("evicting %d pods", len(pods.Items))
+func (h *drainNodeHandler) evictPods(ctx context.Context, log logrus.FieldLogger, pods []v1.Pod) error {
+	log.Infof("evicting %d pods", len(pods))
 
 	g, ctx := errgroup.WithContext(ctx)
-	for _, pod := range pods.Items {
+	for _, pod := range pods {
 		pod := pod
-
-		if daemonSetPod(pod) {
-			continue
-		}
 
 		g.Go(func() error {
 			err := h.evictPod(ctx, pod)
@@ -277,7 +274,16 @@ func (h *drainNodeHandler) evictPod(ctx context.Context, pod v1.Pod) error {
 	return nil
 }
 
-func daemonSetPod(pod v1.Pod) bool {
-	controller := metav1.GetControllerOf(&pod)
-	return controller != nil && controller.Kind == "DaemonSet"
+func isDaemonSetPod(p *v1.Pod) bool {
+	return isControlledBy(p, "DaemonSet")
+}
+
+func isStaticPod(p *v1.Pod) bool {
+	return isControlledBy(p, "Node")
+}
+
+func isControlledBy(p *v1.Pod, kind string) bool {
+	ctrl := metav1.GetControllerOf(p)
+
+	return ctrl != nil && ctrl.Kind == kind
 }
