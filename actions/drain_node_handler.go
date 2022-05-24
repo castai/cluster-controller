@@ -275,14 +275,14 @@ func (h *drainNodeHandler) evictPod(ctx context.Context, pod v1.Pod) error {
 }
 
 func isDaemonSetPod(p *v1.Pod) bool {
-	return isControllerOf(p, "DaemonSet")
+	return isControlledBy(p, "DaemonSet")
 }
 
 func isStaticPod(p *v1.Pod) bool {
-	return isControllerOf(p, "Node")
+	return isControlledBy(p, "Node")
 }
 
-func isControllerOf(p *v1.Pod, kind string) bool {
+func isControlledBy(p *v1.Pod, kind string) bool {
 	ctrl := metav1.GetControllerOf(p)
 
 	return ctrl != nil && ctrl.Kind == kind
