@@ -43,7 +43,7 @@ func (h *approveCSRHandler) Handle(ctx context.Context, data interface{}) error 
 	log := h.log.WithField("node_name", req.NodeName)
 
 	b := backoff.WithContext(
-		backoff.WithMaxRetries(backoff.NewConstantBackOff(h.retryAfter), h.maxRetries),
+		newApproveCSRExponentialBackoff(),
 		ctx,
 	)
 	return backoff.RetryNotify(func() error {
@@ -60,6 +60,9 @@ func (h *approveCSRHandler) handle(ctx context.Context, log logrus.FieldLogger, 
 	log.Debug("getting initial csr")
 	cert, err := h.getInitialNodeCSR(ctx, req.NodeName)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return backoff.Permanent(fmt.Errorf("getting initial csr: %w", err))
+		}
 		return fmt.Errorf("getting initial csr: %w", err)
 	}
 
@@ -115,4 +118,12 @@ func (h *approveCSRHandler) getInitialNodeCSR(ctx context.Context, nodeName stri
 			}
 		}
 	}
+}
+
+func newApproveCSRExponentialBackoff() *backoff.ExponentialBackOff {
+	b := backoff.NewExponentialBackOff()
+	b.Multiplier = 2
+	b.MaxElapsedTime = 4 * time.Minute
+	b.Reset()
+	return b
 }

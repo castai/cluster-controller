@@ -23,11 +23,12 @@ import (
 )
 
 func TestApproveCSRHandler(t *testing.T) {
-	r := require.New(t)
 	log := logrus.New()
 	log.SetLevel(logrus.DebugLevel)
 
 	t.Run("approve v1 csr successfully", func(t *testing.T) {
+		r := require.New(t)
+
 		csr := &certv1.CertificateSigningRequest{
 			TypeMeta: metav1.TypeMeta{},
 			ObjectMeta: metav1.ObjectMeta{
@@ -99,6 +100,8 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 	})
 
 	t.Run("approve v1beta1 csr successfully", func(t *testing.T) {
+		r := require.New(t)
+
 		csr := &certv1beta1.CertificateSigningRequest{
 			TypeMeta: metav1.TypeMeta{},
 			ObjectMeta: metav1.ObjectMeta{
@@ -158,6 +161,8 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 	})
 
 	t.Run("return timeout error when no initial csr found for node", func(t *testing.T) {
+		r := require.New(t)
+
 		client := fake.NewSimpleClientset()
 		h := &approveCSRHandler{
 			log:                    log,
@@ -170,4 +175,15 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 		err := h.Handle(ctx, &castai.ActionApproveCSR{NodeName: "node"})
 		r.EqualError(err, "getting initial csr: context deadline exceeded")
 	})
+}
+
+func TestApproveCSRExponentialBackoff(t *testing.T) {
+	r := require.New(t)
+	b := newApproveCSRExponentialBackoff()
+	var sum time.Duration
+	for i := 0; i < 10; i++ {
+		tmp := b.NextBackOff()
+		sum += tmp
+	}
+	r.Truef(100 < sum.Seconds(), "actual elapsed seconds %s", sum.Seconds())
 }
