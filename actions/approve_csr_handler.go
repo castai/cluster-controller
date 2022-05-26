@@ -121,15 +121,9 @@ func (h *approveCSRHandler) getInitialNodeCSR(ctx context.Context, nodeName stri
 }
 
 func newApproveCSRExponentialBackoff() *backoff.ExponentialBackOff {
-	b := backoff.ExponentialBackOff{
-		InitialInterval:     backoff.DefaultInitialInterval,
-		RandomizationFactor: backoff.DefaultRandomizationFactor,
-		Multiplier:          2,
-		MaxInterval:         backoff.DefaultMaxInterval,
-		MaxElapsedTime:      4 * time.Minute,
-		Stop:                backoff.Stop,
-		Clock:               backoff.SystemClock,
-	}
+	b := backoff.NewExponentialBackOff()
+	b.Multiplier = 2
+	b.MaxElapsedTime = 4 * time.Minute
 	b.Reset()
-	return &b
+	return b
 }
