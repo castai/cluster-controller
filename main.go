@@ -21,14 +21,14 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
+	"k8s.io/client-go/util/flowcontrol"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
-	"github.com/castai/cluster-controller/aks"
-	"github.com/castai/cluster-controller/helm"
-
 	"github.com/castai/cluster-controller/actions"
+	"github.com/castai/cluster-controller/aks"
 	"github.com/castai/cluster-controller/castai"
 	"github.com/castai/cluster-controller/config"
+	"github.com/castai/cluster-controller/helm"
 	ctrlog "github.com/castai/cluster-controller/log"
 	"github.com/castai/cluster-controller/version"
 )
@@ -109,6 +109,7 @@ func run(
 	if err != nil {
 		return err
 	}
+	restconfig.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(float32(cfg.KubeClient.QPS), cfg.KubeClient.Burst)
 
 	helmClient := helm.NewClient(logger, helm.NewChartLoader(), restconfig)
 
@@ -285,6 +286,7 @@ func retrieveKubeConfig(log logrus.FieldLogger) (*rest.Config, error) {
 		}
 	})
 	log.Debug("using in cluster kubeconfig")
+
 	return inClusterConfig, nil
 }
 

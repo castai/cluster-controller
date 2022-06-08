@@ -25,4 +25,6 @@ func TestConfig(t *testing.T) {
 	require.Equal(t, true, cfg.LeaderElection.Enabled)
 	require.Equal(t, "castai-agent", cfg.LeaderElection.Namespace)
 	require.Equal(t, "castai-cluster-controller", cfg.LeaderElection.LockName)
+	require.Equal(t, 25, cfg.KubeClient.QPS)
+	require.Equal(t, 150, cfg.KubeClient.Burst)
 }
