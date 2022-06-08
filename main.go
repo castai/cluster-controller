@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/bombsimon/logrusr/v3"
 	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
@@ -21,14 +22,15 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
+	"k8s.io/client-go/util/flowcontrol"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
-	"github.com/castai/cluster-controller/aks"
-	"github.com/castai/cluster-controller/helm"
-
 	"github.com/castai/cluster-controller/actions"
+	"github.com/castai/cluster-controller/aks"
 	"github.com/castai/cluster-controller/castai"
 	"github.com/castai/cluster-controller/config"
+	"github.com/castai/cluster-controller/helm"
 	ctrlog "github.com/castai/cluster-controller/log"
 	"github.com/castai/cluster-controller/version"
 )
@@ -51,6 +53,8 @@ func main() {
 
 	logger := logrus.New()
 	logger.SetLevel(logrus.Level(cfg.Log.Level))
+	// Use controller managed logger to intercept k8s clientset logs.
+	klog.SetLogger(logrusr.New(logger))
 
 	client := castai.NewClient(
 		logger,
@@ -109,6 +113,7 @@ func run(
 	if err != nil {
 		return err
 	}
+	restconfig.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(float32(cfg.KubeClient.QPS), cfg.KubeClient.Burst)
 
 	helmClient := helm.NewClient(logger, helm.NewChartLoader(), restconfig)
 
@@ -285,6 +290,7 @@ func retrieveKubeConfig(log logrus.FieldLogger) (*rest.Config, error) {
 		}
 	})
 	log.Debug("using in cluster kubeconfig")
+
 	return inClusterConfig, nil
 }
 

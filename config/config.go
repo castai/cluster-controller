@@ -11,6 +11,7 @@ type Config struct {
 	Log            Log
 	API            API
 	Kubeconfig     string
+	KubeClient     KubeClient
 	ClusterID      string
 	PprofPort      int
 	LeaderElection LeaderElection
@@ -32,6 +33,15 @@ type LeaderElection struct {
 	LockName  string
 }
 
+type KubeClient struct {
+	// K8S client rate limiter allows bursts of up to 'burst' to exceed the QPS, while still maintaining a
+	// smoothed qps rate of 'qps'.
+	// The bucket is initially filled with 'burst' tokens, and refills at a rate of 'qps'.
+	// The maximum number of tokens in the bucket is capped at 'burst'.
+	QPS   int
+	Burst int
+}
+
 var cfg *Config
 
 // Get configuration bound to environment variables.
@@ -45,6 +55,8 @@ func Get() Config {
 	_ = viper.BindEnv("api.url", "API_URL")
 	_ = viper.BindEnv("clusterid", "CLUSTER_ID")
 	_ = viper.BindEnv("kubeconfig")
+	_ = viper.BindEnv("kubeclient.qps", "KUBECLIENT_QPS")
+	_ = viper.BindEnv("kubeclient.burst", "KUBECLIENT_BURST")
 	_ = viper.BindEnv("pprofport", "PPROF_PORT")
 	_ = viper.BindEnv("leaderelection.enabled", "LEADER_ELECTION_ENABLED")
 	_ = viper.BindEnv("leaderelection.namespace", "LEADER_ELECTION_NAMESPACE")
@@ -78,6 +90,12 @@ func Get() Config {
 		if cfg.LeaderElection.LockName == "" {
 			required("LEADER_ELECTION_LOCK_NAME")
 		}
+	}
+	if cfg.KubeClient.QPS == 0 {
+		cfg.KubeClient.QPS = 25
+	}
+	if cfg.KubeClient.Burst == 0 {
+		cfg.KubeClient.Burst = 150
 	}
 
 	return *cfg

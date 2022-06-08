@@ -21,10 +21,11 @@ import (
 )
 
 type drainNodeConfig struct {
-	podsDeleteTimeout   time.Duration
-	podDeleteRetries    uint64
-	podDeleteRetryDelay time.Duration
-	podEvictRetryDelay  time.Duration
+	podsDeleteTimeout             time.Duration
+	podDeleteRetries              uint64
+	podDeleteRetryDelay           time.Duration
+	podEvictRetryDelay            time.Duration
+	podsTerminationWaitRetryDelay time.Duration
 }
 
 func newDrainNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface) ActionHandler {
@@ -32,10 +33,11 @@ func newDrainNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface)
 		log:       log,
 		clientset: clientset,
 		cfg: drainNodeConfig{
-			podsDeleteTimeout:   5 * time.Minute,
-			podDeleteRetries:    5,
-			podDeleteRetryDelay: 5 * time.Second,
-			podEvictRetryDelay:  5 * time.Second,
+			podsDeleteTimeout:             5 * time.Minute,
+			podDeleteRetries:              5,
+			podDeleteRetryDelay:           5 * time.Second,
+			podEvictRetryDelay:            5 * time.Second,
+			podsTerminationWaitRetryDelay: 10 * time.Second,
 		},
 	}
 }
@@ -188,7 +190,7 @@ func (h *drainNodeHandler) waitNodePodsTerminated(ctx context.Context, node *v1.
 			return fmt.Errorf("waiting for %d pods to be terminated on node %v", len(pods), node.Name)
 		}
 		return nil
-	}, backoff.WithContext(backoff.NewConstantBackOff(10*time.Second), ctx))
+	}, backoff.WithContext(backoff.NewConstantBackOff(h.cfg.podsTerminationWaitRetryDelay), ctx))
 }
 
 // evictPod from the k8s node. Error handling is based on eviction api documentation:
