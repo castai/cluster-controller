@@ -10,7 +10,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/bombsimon/logrusr/v3"
 	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
@@ -23,7 +22,6 @@ import (
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"k8s.io/client-go/util/flowcontrol"
-	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
 	"github.com/castai/cluster-controller/actions"
@@ -53,8 +51,6 @@ func main() {
 
 	logger := logrus.New()
 	logger.SetLevel(logrus.Level(cfg.Log.Level))
-	// Use controller managed logger to intercept k8s clientset logs.
-	klog.SetLogger(logrusr.New(logger))
 
 	client := castai.NewClient(
 		logger,
