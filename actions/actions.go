@@ -56,6 +56,7 @@ func NewService(
 			reflect.TypeOf(&castai.ActionApproveCSR{}):        newApproveCSRHandler(log, clientset),
 			reflect.TypeOf(&castai.ActionChartUpsert{}):       newChartUpsertHandler(log, helmClient),
 			reflect.TypeOf(&castai.ActionChartUninstall{}):    newChartUninstallHandler(log, helmClient),
+			reflect.TypeOf(&castai.ActionChartRollback{}):     newChartRollbackHandler(log, helmClient),
 			reflect.TypeOf(&castai.ActionDisconnectCluster{}): newDisconnectClusterHandler(log, clientset),
 			reflect.TypeOf(&castai.ActionSendAKSInitData{}):   newSendAKSInitDataHandler(log, castaiClient),
 			reflect.TypeOf(&castai.ActionCheckNodeDeleted{}):  newCheckNodeDeletedHandler(log, clientset),
