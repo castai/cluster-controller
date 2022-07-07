@@ -25,6 +25,7 @@ type ClusterAction struct {
 	ActionApproveCSR        *ActionApproveCSR        `json:"actionApproveCsr,omitempty"`
 	ActionChartUpsert       *ActionChartUpsert       `json:"actionChartUpsert,omitempty"`
 	ActionChartUninstall    *ActionChartUninstall    `json:"actionChartUninstall,omitempty"`
+	ActionChartRollback     *ActionChartRollback     `json:"actionChartRollback,omitempty"`
 	ActionDisconnectCluster *ActionDisconnectCluster `json:"actionDisconnectCluster,omitempty"`
 	ActionSendAKSInitData   *ActionSendAKSInitData   `json:"actionSendAksInitData,omitempty"`
 	ActionCheckNodeDeleted  *ActionCheckNodeDeleted  `json:"actionCheckNodeDeleted,omitempty"`
@@ -54,6 +55,9 @@ func (c *ClusterAction) Data() interface{} {
 	}
 	if c.ActionChartUninstall != nil {
 		return c.ActionChartUninstall
+	}
+	if c.ActionChartRollback != nil {
+		return c.ActionChartRollback
 	}
 	if c.ActionDisconnectCluster != nil {
 		return c.ActionDisconnectCluster
@@ -130,6 +134,11 @@ type ActionChartUpsert struct {
 }
 
 type ActionChartUninstall struct {
+	Namespace   string `json:"namespace"`
+	ReleaseName string `json:"releaseName"`
+}
+
+type ActionChartRollback struct {
 	Namespace   string `json:"namespace"`
 	ReleaseName string `json:"releaseName"`
 }
