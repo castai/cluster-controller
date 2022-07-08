@@ -20,7 +20,7 @@ func TestChartRollbackHandler(t *testing.T) {
 	helmMock := mock_helm.NewMockClient(ctrl)
 	ctx := context.Background()
 
-	handler := newChartRollbackHandler(logrus.New(), helmMock)
+	handler := newChartRollbackHandler(logrus.New(), helmMock, "v0.20.0")
 
 	t.Run("successfully rollback chart", func(t *testing.T) {
 		action := newRollbackAction()
@@ -29,6 +29,13 @@ func TestChartRollbackHandler(t *testing.T) {
 			Namespace:   action.Namespace,
 			ReleaseName: action.ReleaseName,
 		}).Return(nil)
+
+		r.NoError(handler.Handle(ctx, action))
+	})
+
+	t.Run("skip rollback if version mismatch", func(t *testing.T) {
+		action := newRollbackAction()
+		action.Version = "v0.21.0"
 
 		r.NoError(handler.Handle(ctx, action))
 	})
@@ -64,5 +71,6 @@ func newRollbackAction() *castai.ActionChartRollback {
 	return &castai.ActionChartRollback{
 		Namespace:   "test",
 		ReleaseName: "new-release",
+		Version:     "v0.20.0",
 	}
 }

@@ -24,6 +24,7 @@ type Config struct {
 	AckRetriesCount  int           // Ack retry count.
 	AckRetryWait     time.Duration // How long to wait before next ack retry request.
 	ClusterID        string
+	Version          string
 }
 
 type Service interface {
@@ -56,7 +57,7 @@ func NewService(
 			reflect.TypeOf(&castai.ActionApproveCSR{}):        newApproveCSRHandler(log, clientset),
 			reflect.TypeOf(&castai.ActionChartUpsert{}):       newChartUpsertHandler(log, helmClient),
 			reflect.TypeOf(&castai.ActionChartUninstall{}):    newChartUninstallHandler(log, helmClient),
-			reflect.TypeOf(&castai.ActionChartRollback{}):     newChartRollbackHandler(log, helmClient),
+			reflect.TypeOf(&castai.ActionChartRollback{}):     newChartRollbackHandler(log, helmClient, cfg.Version),
 			reflect.TypeOf(&castai.ActionDisconnectCluster{}): newDisconnectClusterHandler(log, clientset),
 			reflect.TypeOf(&castai.ActionSendAKSInitData{}):   newSendAKSInitDataHandler(log, castaiClient),
 			reflect.TypeOf(&castai.ActionCheckNodeDeleted{}):  newCheckNodeDeletedHandler(log, clientset),

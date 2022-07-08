@@ -136,6 +136,7 @@ func run(
 		AckRetriesCount:  3,
 		AckRetryWait:     1 * time.Second,
 		ClusterID:        cfg.ClusterID,
+		Version:          binVersion.Version,
 	}
 	svc := actions.NewService(
 		log,
