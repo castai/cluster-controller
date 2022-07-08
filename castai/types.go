@@ -141,6 +141,7 @@ type ActionChartUninstall struct {
 type ActionChartRollback struct {
 	Namespace   string `json:"namespace"`
 	ReleaseName string `json:"releaseName"`
+	Version     string `json:"version"`
 }
 
 type ChartSource struct {

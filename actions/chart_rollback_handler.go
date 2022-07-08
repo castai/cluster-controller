@@ -11,16 +11,18 @@ import (
 	"github.com/castai/cluster-controller/helm"
 )
 
-func newChartRollbackHandler(log logrus.FieldLogger, helm helm.Client) ActionHandler {
+func newChartRollbackHandler(log logrus.FieldLogger, helm helm.Client, version string) ActionHandler {
 	return &chartRollbackHandler{
-		log:  log,
-		helm: helm,
+		log:     log,
+		helm:    helm,
+		version: version,
 	}
 }
 
 type chartRollbackHandler struct {
-	log  logrus.FieldLogger
-	helm helm.Client
+	log     logrus.FieldLogger
+	helm    helm.Client
+	version string
 }
 
 func (c *chartRollbackHandler) Handle(_ context.Context, data interface{}) error {
@@ -31,6 +33,11 @@ func (c *chartRollbackHandler) Handle(_ context.Context, data interface{}) error
 
 	if err := c.validateRequest(req); err != nil {
 		return err
+	}
+
+	// Rollback only from requested version.
+	if req.Version != c.version {
+		return nil
 	}
 
 	return c.helm.Rollback(helm.RollbackOptions{
@@ -45,6 +52,9 @@ func (c *chartRollbackHandler) validateRequest(req *castai.ActionChartRollback) 
 	}
 	if req.Namespace == "" {
 		return errors.New("bad request: namespace not provided")
+	}
+	if req.Version == "" {
+		return errors.New("bad request: version not provided")
 	}
 	return nil
 }
