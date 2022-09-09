@@ -2,16 +2,14 @@ package actions
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"math"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	watchv1 "k8s.io/apimachinery/pkg/watch"
+
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/castai"
@@ -40,49 +38,43 @@ func (h *checkNodeStatusHandler) Handle(ctx context.Context, data interface{}) e
 		"node_status": req.NodeStatus,
 	})
 
-	if req.NodeStatus == castai.ActionCheckNodeStatus_DELETED {
-		log.Info("checking if node is deleted")
-		timeout := int32(5)
-		if req.WaitTimeoutSeconds != nil {
-			timeout = *req.WaitTimeoutSeconds
-		}
-		retries := uint64(math.Round(float64(timeout / 1)))
-
-		b := backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(time.Second), retries), ctx)
-		return backoff.Retry(func() error {
-			n, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
-			if apierrors.IsNotFound(err) {
-				return nil
-			}
-			if n != nil {
-				return backoff.Permanent(errors.New("node is not deleted"))
-			}
-			return err
-		}, b)
-	} else if req.NodeStatus == castai.ActionCheckNodeStatus_READY {
-		// 10 minutes default timeout
-		timeout := int32(600)
-		if req.WaitTimeoutSeconds != nil {
-			timeout = *req.WaitTimeoutSeconds
-		}
-		retries := uint64(math.Round(float64(timeout / 30)))
-		log.Infof("checking if node is ready retries: %d", retries)
-		b := backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(time.Second*30), retries), ctx)
-		return backoff.Retry(func() error {
-			n, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
-			if err != nil {
-				return err
-			}
-
-			for _, cond := range n.Status.Conditions {
-				if cond.Type == corev1.NodeReady && cond.Status == corev1.ConditionTrue {
-					return nil
-				}
-			}
-			return err
-		}, b)
-
+	if req.NodeStatus != castai.ActionCheckNodeStatus_DELETED && req.NodeStatus != castai.ActionCheckNodeStatus_READY {
+		return fmt.Errorf("unknown status to check provided node=%s status=%s", req.NodeName, req.NodeStatus)
+	}
+	timeout := 1 * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	watchObject := metav1.SingleObject(metav1.ObjectMeta{Name: req.NodeName})
+	if req.WaitTimeoutSeconds != nil {
+		timeout = time.Duration(*req.WaitTimeoutSeconds) * time.Second
 	}
 
-	return fmt.Errorf("unknown status to check provided node=%s status=%s", req.NodeName, req.NodeStatus)
+	timeoutInSec := int64(timeout.Seconds())
+	watchObject.TimeoutSeconds = &timeoutInSec
+	log.Infof("timeout used %d", timeoutInSec)
+
+	watch, err := h.clientset.CoreV1().Nodes().Watch(ctx, watchObject)
+	if err != nil {
+		return fmt.Errorf("creating node watch: %w", err)
+	}
+
+	for r := range watch.ResultChan() {
+		switch req.NodeStatus {
+		case castai.ActionCheckNodeStatus_DELETED:
+			if r.Type == watchv1.Deleted {
+				return nil
+			}
+		case castai.ActionCheckNodeStatus_READY:
+			if node, ok := r.Object.(*corev1.Node); ok {
+				for _, c := range node.Status.Conditions {
+					if c.Type == corev1.NodeReady && c.Status == corev1.ConditionTrue {
+						log.Infof("node %q ready: %v", req.NodeName, c.Message)
+						return nil
+					}
+				}
+			}
+		}
+	}
+
+	return fmt.Errorf("timeout execeed waiting for node %q to be %s", req.NodeName, req.NodeStatus)
 }
