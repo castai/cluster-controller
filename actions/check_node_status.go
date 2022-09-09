@@ -32,7 +32,7 @@ type checkNodeStatusHandler struct {
 func (h *checkNodeStatusHandler) Handle(ctx context.Context, data interface{}) error {
 	req, ok := data.(*castai.ActionCheckNodeStatus)
 	if !ok {
-		return fmt.Errorf("unexpected type %T for check node deleted handler", data)
+		return fmt.Errorf("unexpected type %T for check node status handler", data)
 	}
 
 	log := h.log.WithFields(logrus.Fields{
