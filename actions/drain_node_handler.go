@@ -76,7 +76,7 @@ func (h *drainNodeHandler) Handle(ctx context.Context, data interface{}) error {
 	defer evictCancel()
 	err = h.evictNodePods(evictCtx, log, node)
 	if err != nil && !errors.Is(err, context.DeadlineExceeded) {
-		return err
+		return fmt.Errorf("eviciting node pods: %w", err)
 	}
 
 	if errors.Is(err, context.DeadlineExceeded) {
@@ -87,7 +87,7 @@ func (h *drainNodeHandler) Handle(ctx context.Context, data interface{}) error {
 		deleteCtx, deleteCancel := context.WithTimeout(ctx, h.cfg.podsDeleteTimeout)
 		defer deleteCancel()
 		if err := h.deleteNodePods(deleteCtx, log, node); err != nil {
-			return err
+			return fmt.Errorf("forcefully deleting pods: %w", err)
 		}
 	}
 
