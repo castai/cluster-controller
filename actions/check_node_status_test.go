@@ -158,10 +158,38 @@ func TestCheckStatus_Ready(t *testing.T) {
 		go func() {
 			time.Sleep(1 * time.Second)
 			node.Status.Conditions[0].Status = v1.ConditionTrue
+			clientset.CoreV1().Nodes().Update(context.Background(), node, metav1.UpdateOptions{})
 			wg.Done()
 		}()
 		wg.Wait()
 
 		r.NoError(err)
+	})
+
+	t.Run("handle error when node is not ready", func(t *testing.T) {
+		nodeName := "node1"
+		node := &v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: nodeName,
+			},
+			Status: v1.NodeStatus{
+				Conditions: []v1.NodeCondition{},
+			},
+		}
+		clientset := fake.NewSimpleClientset(node)
+
+		h := checkNodeStatusHandler{
+			log:       log,
+			clientset: clientset,
+		}
+
+		req := &castai.ActionCheckNodeStatus{
+			NodeName:   "node1",
+			NodeStatus: castai.ActionCheckNodeStatus_READY,
+		}
+
+		err := h.Handle(context.Background(), req)
+		r.Error(err)
+		r.EqualError(err, "node node1 is not ready")
 	})
 }
