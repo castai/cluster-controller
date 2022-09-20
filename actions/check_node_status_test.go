@@ -83,39 +83,7 @@ func TestCheckStatus_Ready(t *testing.T) {
 		}
 
 		err := h.Handle(context.Background(), req)
-		r.EqualError(err, "nodes \"node1\" not found")
-	})
-
-	t.Run("handle check successfully when node is ready", func(t *testing.T) {
-		r := require.New(t)
-		nodeName := "node1"
-		node := &v1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: nodeName,
-			},
-			Status: v1.NodeStatus{
-				Conditions: []v1.NodeCondition{
-					{
-						Type:   v1.NodeReady,
-						Status: v1.ConditionTrue,
-					},
-				},
-			},
-		}
-		clientset := fake.NewSimpleClientset(node)
-
-		h := checkNodeStatusHandler{
-			log:       log,
-			clientset: clientset,
-		}
-
-		req := &castai.ActionCheckNodeStatus{
-			NodeName:   "node1",
-			NodeStatus: castai.ActionCheckNodeStatus_READY,
-		}
-
-		err := h.Handle(context.Background(), req)
-		r.NoError(err)
+		r.EqualError(err, "timeout waiting for node node1 to become ready")
 	})
 
 	t.Run("handle check successfully when node become ready", func(t *testing.T) {
@@ -192,6 +160,6 @@ func TestCheckStatus_Ready(t *testing.T) {
 
 		err := h.Handle(context.Background(), req)
 		r.Error(err)
-		r.EqualError(err, "node node1 is not ready")
+		r.EqualError(err, "timeout waiting for node node1 to become ready")
 	})
 }
