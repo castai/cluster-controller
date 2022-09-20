@@ -1,4 +1,4 @@
-package actions
+package health
 
 import (
 	"time"
@@ -13,11 +13,7 @@ func TestNewHealthzProvider(t *testing.T) {
 	t.Run("unhealthy statuses", func(t *testing.T) {
 
 		log := logrus.New()
-		cfg := Config{
-			PollTimeout: 1 * time.Millisecond,
-		}
-
-		h := NewHealthzProvider(cfg, log)
+		h := NewHealthzProvider(HealthzCfg{HealthyPollIntervalLimit: time.Millisecond}, log)
 
 		t.Run("should return initialize timeout error", func(t *testing.T) {
 			r := require.New(t)
@@ -40,12 +36,7 @@ func TestNewHealthzProvider(t *testing.T) {
 
 	t.Run("healthy statuses", func(t *testing.T) {
 		log := logrus.New()
-		cfg := Config{
-			PollTimeout:      1 * time.Second,
-			PollWaitInterval: 1 * time.Second,
-		}
-
-		h := NewHealthzProvider(cfg, log)
+		h := NewHealthzProvider(HealthzCfg{HealthyPollIntervalLimit: 2 * time.Second}, log)
 
 		t.Run("cluster-controller is considered healthy before initialization", func(t *testing.T) {
 			r := require.New(t)

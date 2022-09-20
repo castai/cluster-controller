@@ -28,6 +28,7 @@ import (
 	"github.com/castai/cluster-controller/aks"
 	"github.com/castai/cluster-controller/castai"
 	"github.com/castai/cluster-controller/config"
+	"github.com/castai/cluster-controller/health"
 	"github.com/castai/cluster-controller/helm"
 	ctrlog "github.com/castai/cluster-controller/log"
 	"github.com/castai/cluster-controller/version"
@@ -138,7 +139,7 @@ func run(
 		ClusterID:        cfg.ClusterID,
 		Version:          binVersion.Version,
 	}
-	healthzAction := actions.NewHealthzProvider(actionsConfig, log)
+	healthzAction := health.NewHealthzProvider(health.HealthzCfg{HealthyPollIntervalLimit: (actionsConfig.PollWaitInterval + actionsConfig.PollTimeout) * 2}, log)
 
 	healthzAction.Initializing()
 	svc := actions.NewService(

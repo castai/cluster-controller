@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/health"
 	"github.com/castai/cluster-controller/helm"
 )
 
@@ -42,7 +43,7 @@ func NewService(
 	clientset *kubernetes.Clientset,
 	castaiClient castai.Client,
 	helmClient helm.Client,
-	healthCheck *HealthzProvider,
+	healthCheck *health.HealthzProvider,
 ) Service {
 	return &service{
 		log:            log,
@@ -79,7 +80,7 @@ type service struct {
 	startedActionsWg sync.WaitGroup
 	startedActions   map[string]struct{}
 	startedActionsMu sync.Mutex
-	healthCheck      *HealthzProvider
+	healthCheck      *health.HealthzProvider
 }
 
 func (s *service) Run(ctx context.Context) {

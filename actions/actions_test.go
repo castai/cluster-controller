@@ -14,6 +14,7 @@ import (
 
 	"github.com/castai/cluster-controller/castai"
 	"github.com/castai/cluster-controller/castai/mock"
+	"github.com/castai/cluster-controller/health"
 )
 
 func TestMain(m *testing.M) {
@@ -40,7 +41,7 @@ func TestActions(t *testing.T) {
 			nil,
 			client,
 			nil,
-			NewHealthzProvider(cfg, log),
+			health.NewHealthzProvider(health.HealthzCfg{HealthyPollIntervalLimit: cfg.PollTimeout}, log),
 		).(*service)
 		handlers := svc.actionHandlers
 		// Patch handlers with a mock one.

@@ -1,4 +1,4 @@
-package actions
+package health
 
 import (
 	"fmt"
@@ -8,18 +8,21 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func NewHealthzProvider(actionCfg Config, log logrus.FieldLogger) *HealthzProvider {
+type HealthzCfg struct {
+	// Max time between successful poll actions to consider cluster-controller alive
+	HealthyPollIntervalLimit time.Duration
+}
+
+func NewHealthzProvider(cfg HealthzCfg, log logrus.FieldLogger) *HealthzProvider {
 	return &HealthzProvider{
 		log: log,
-		// Max time between successful poll actions to consider cluster-controller alive
-		healthyPollIntervalLimit: (actionCfg.PollTimeout + actionCfg.PollWaitInterval) * 2, // 10m10s
+		cfg: cfg,
 	}
 }
 
 type HealthzProvider struct {
-	log                      logrus.FieldLogger
-	healthyPollIntervalLimit time.Duration
-	initHardLimit            time.Duration
+	log logrus.FieldLogger
+	cfg HealthzCfg
 
 	lastHealthyActionAt *time.Time
 	initStartedAt       *time.Time
@@ -33,15 +36,15 @@ func (h *HealthzProvider) Check(_ *http.Request) (err error) {
 	}()
 
 	if h.lastHealthyActionAt != nil {
-		if time.Since(*h.lastHealthyActionAt) > h.healthyPollIntervalLimit {
-			return fmt.Errorf("time since initialization or last poll action is over the considered healthy limit of %s", h.healthyPollIntervalLimit)
+		if time.Since(*h.lastHealthyActionAt) > h.cfg.HealthyPollIntervalLimit {
+			return fmt.Errorf("time since initialization or last poll action is over the considered healthy limit of %s", h.cfg.HealthyPollIntervalLimit)
 		}
 		return nil
 	}
 
 	if h.initStartedAt != nil {
-		if time.Since(*h.initStartedAt) > h.healthyPollIntervalLimit {
-			return fmt.Errorf("there was no sucessful poll action since start of application %s", h.initHardLimit)
+		if time.Since(*h.initStartedAt) > h.cfg.HealthyPollIntervalLimit {
+			return fmt.Errorf("there was no sucessful poll action since start of application %s", h.cfg.HealthyPollIntervalLimit)
 		}
 		return nil
 	}
