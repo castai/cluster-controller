@@ -16,12 +16,11 @@ import (
 )
 
 func TestCheckStatus_Deleted(t *testing.T) {
-	r := require.New(t)
-
 	log := logrus.New()
 	log.SetLevel(logrus.DebugLevel)
 
 	t.Run("return error when node is not deleted", func(t *testing.T) {
+		r := require.New(t)
 		nodeName := "node1"
 		node := &v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
@@ -45,6 +44,7 @@ func TestCheckStatus_Deleted(t *testing.T) {
 	})
 
 	t.Run("handle check successfully when node is not found", func(t *testing.T) {
+		r := require.New(t)
 		clientset := fake.NewSimpleClientset()
 
 		h := checkNodeStatusHandler{
@@ -63,12 +63,11 @@ func TestCheckStatus_Deleted(t *testing.T) {
 }
 
 func TestCheckStatus_Ready(t *testing.T) {
-	r := require.New(t)
-
 	log := logrus.New()
 	log.SetLevel(logrus.DebugLevel)
 
 	t.Run("return error when node is not found", func(t *testing.T) {
+		r := require.New(t)
 		clientset := fake.NewSimpleClientset()
 
 		h := checkNodeStatusHandler{
@@ -88,6 +87,7 @@ func TestCheckStatus_Ready(t *testing.T) {
 	})
 
 	t.Run("handle check successfully when node is ready", func(t *testing.T) {
+		r := require.New(t)
 		nodeName := "node1"
 		node := &v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
@@ -119,6 +119,7 @@ func TestCheckStatus_Ready(t *testing.T) {
 	})
 
 	t.Run("handle check successfully when node become ready", func(t *testing.T) {
+		r := require.New(t)
 		nodeName := "node1"
 		node := &v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
@@ -167,6 +168,7 @@ func TestCheckStatus_Ready(t *testing.T) {
 	})
 
 	t.Run("handle error when node is not ready", func(t *testing.T) {
+		r := require.New(t)
 		nodeName := "node1"
 		node := &v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
