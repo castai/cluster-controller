@@ -138,6 +138,9 @@ func run(
 		ClusterID:        cfg.ClusterID,
 		Version:          binVersion.Version,
 	}
+	healthzAction := actions.NewHealthzProvider(actionsConfig, log)
+
+	healthzAction.Initializing()
 	svc := actions.NewService(
 		log,
 		actionsConfig,
@@ -145,10 +148,12 @@ func run(
 		clientset,
 		client,
 		helmClient,
+		healthzAction,
 	)
 
 	httpMux := http.NewServeMux()
 	var checks []healthz.HealthChecker
+	checks = append(checks, healthzAction)
 	var leaderHealthCheck *leaderelection.HealthzAdaptor
 	if cfg.LeaderElection.Enabled {
 		leaderHealthCheck = leaderelection.NewLeaderHealthzAdaptor(time.Minute * 2)

@@ -42,6 +42,7 @@ func NewService(
 	clientset *kubernetes.Clientset,
 	castaiClient castai.Client,
 	helmClient helm.Client,
+	healthCheck *HealthzProvider,
 ) Service {
 	return &service{
 		log:            log,
@@ -62,6 +63,7 @@ func NewService(
 			reflect.TypeOf(&castai.ActionSendAKSInitData{}):   newSendAKSInitDataHandler(log, castaiClient),
 			reflect.TypeOf(&castai.ActionCheckNodeDeleted{}):  newCheckNodeDeletedHandler(log, clientset),
 		},
+		healthCheck: healthCheck,
 	}
 }
 
@@ -77,6 +79,7 @@ type service struct {
 	startedActionsWg sync.WaitGroup
 	startedActions   map[string]struct{}
 	startedActionsMu sync.Mutex
+	healthCheck      *HealthzProvider
 }
 
 func (s *service) Run(ctx context.Context) {
@@ -108,6 +111,7 @@ func (s *service) doWork(ctx context.Context) error {
 		return fmt.Errorf("polling actions: %w", err)
 	}
 
+	s.healthCheck.ActionPoll()
 	pollDuration := time.Since(start)
 	if len(actions) == 0 {
 		s.log.Infof("no actions returned in %s", pollDuration)

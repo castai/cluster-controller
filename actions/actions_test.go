@@ -40,6 +40,7 @@ func TestActions(t *testing.T) {
 			nil,
 			client,
 			nil,
+			NewHealthzProvider(cfg, log),
 		).(*service)
 		handlers := svc.actionHandlers
 		// Patch handlers with a mock one.
