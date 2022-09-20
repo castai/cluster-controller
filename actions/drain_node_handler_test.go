@@ -103,7 +103,7 @@ func TestDrainNodeHandler(t *testing.T) {
 		}
 
 		err := h.Handle(context.Background(), req)
-		r.EqualError(err, "sending evict pods requests: evicting pod pod1 in namespace default: internal")
+		r.EqualError(err, "eviciting node pods: sending evict pods requests: evicting pod pod1 in namespace default: internal")
 
 		n, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
 		r.NoError(err)
