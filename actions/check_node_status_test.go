@@ -10,7 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stest "k8s.io/client-go/testing"
 
 	"github.com/castai/cluster-controller/castai"
 )
@@ -74,6 +76,14 @@ func TestCheckStatus_Ready(t *testing.T) {
 			log:       log,
 			clientset: clientset,
 		}
+
+		watcher := watch.NewFake()
+
+		clientset.PrependWatchReactor("nodes", k8stest.DefaultWatchReactor(watcher, nil))
+		go func() {
+			time.Sleep(time.Second)
+			watcher.Stop()
+		}()
 
 		timeout := int32(1)
 		req := &castai.ActionCheckNodeStatus{
@@ -147,6 +157,13 @@ func TestCheckStatus_Ready(t *testing.T) {
 			},
 		}
 		clientset := fake.NewSimpleClientset(node)
+		watcher := watch.NewFake()
+
+		clientset.PrependWatchReactor("nodes", k8stest.DefaultWatchReactor(watcher, nil))
+		go func() {
+			time.Sleep(time.Second)
+			watcher.Stop()
+		}()
 
 		h := checkNodeStatusHandler{
 			log:       log,
