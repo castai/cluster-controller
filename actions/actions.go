@@ -85,6 +85,7 @@ type service struct {
 }
 
 func (s *service) Run(ctx context.Context) {
+	s.healthCheck.Initializing()
 	for {
 		select {
 		case <-time.After(s.cfg.PollWaitInterval):
