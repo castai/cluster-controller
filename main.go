@@ -141,7 +141,6 @@ func run(
 	}
 	healthzAction := health.NewHealthzProvider(health.HealthzCfg{HealthyPollIntervalLimit: (actionsConfig.PollWaitInterval + actionsConfig.PollTimeout) * 2}, log)
 
-	healthzAction.Initializing()
 	svc := actions.NewService(
 		log,
 		actionsConfig,
