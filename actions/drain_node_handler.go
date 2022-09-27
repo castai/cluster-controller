@@ -33,7 +33,7 @@ func newDrainNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface)
 		log:       log,
 		clientset: clientset,
 		cfg: drainNodeConfig{
-			podsDeleteTimeout:             5 * time.Minute,
+			podsDeleteTimeout:             2 * time.Minute,
 			podDeleteRetries:              5,
 			podDeleteRetryDelay:           5 * time.Second,
 			podEvictRetryDelay:            5 * time.Second,
@@ -86,8 +86,19 @@ func (h *drainNodeHandler) Handle(ctx context.Context, data interface{}) error {
 		// If force is set and evict timeout exceeded delete pods.
 		deleteCtx, deleteCancel := context.WithTimeout(ctx, h.cfg.podsDeleteTimeout)
 		defer deleteCancel()
-		if err := h.deleteNodePods(deleteCtx, log, node); err != nil {
+		err = h.deleteNodePods(deleteCtx, log, metav1.DeleteOptions{}, node)
+		if err == nil {
+			log.Info("node drained")
+			return nil
+		}
+		if !errors.Is(err, context.DeadlineExceeded) {
 			return fmt.Errorf("forcefully deleting pods: %w", err)
+		}
+
+		deleteForceCtx, deleteForceCancel := context.WithTimeout(ctx, h.cfg.podsDeleteTimeout)
+		defer deleteForceCancel()
+		if err = h.deleteNodePods(deleteForceCtx, log, *metav1.NewDeleteOptions(0), node); err != nil {
+			return fmt.Errorf("deleting gracePeriod=0 pods: %w", err)
 		}
 	}
 
@@ -119,36 +130,36 @@ func (h *drainNodeHandler) evictNodePods(ctx context.Context, log logrus.FieldLo
 
 	log.Infof("evicting %d pods", len(pods))
 
-	if err := h.sendPodsRequests(ctx, pods, h.evictPod); err != nil {
+	if err := h.sendPodsRequests(ctx, metav1.DeleteOptions{}, pods, h.evictPod); err != nil {
 		return fmt.Errorf("sending evict pods requests: %w", err)
 	}
 
 	return h.waitNodePodsTerminated(ctx, node)
 }
 
-func (h *drainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldLogger, node *v1.Node) error {
+func (h *drainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldLogger, options metav1.DeleteOptions, node *v1.Node) error {
 	pods, err := h.listNodePodsToEvict(ctx, node)
 	if err != nil {
 		return err
 	}
 
-	log.Infof("forcefully deleting %d pods", len(pods))
+	log.Infof("forcefully deleting %d pods with options %+v", len(pods), options)
 
-	if err := h.sendPodsRequests(ctx, pods, h.deletePod); err != nil {
+	if err := h.sendPodsRequests(ctx, options, pods, h.deletePod); err != nil {
 		return fmt.Errorf("sending delete pods requests: %w", err)
 	}
 
 	return h.waitNodePodsTerminated(ctx, node)
 }
 
-func (h *drainNodeHandler) sendPodsRequests(ctx context.Context, pods []v1.Pod, f func(context.Context, v1.Pod) error) error {
+func (h *drainNodeHandler) sendPodsRequests(ctx context.Context, options metav1.DeleteOptions, pods []v1.Pod, f func(context.Context, metav1.DeleteOptions, v1.Pod) error) error {
 	const batchSize = 5
 
 	for _, batch := range lo.Chunk(pods, batchSize) {
 		g, ctx := errgroup.WithContext(ctx)
 		for _, pod := range batch {
 			pod := pod
-			g.Go(func() error { return f(ctx, pod) })
+			g.Go(func() error { return f(ctx, options, pod) })
 		}
 		if err := g.Wait(); err != nil {
 			return err
@@ -195,7 +206,7 @@ func (h *drainNodeHandler) waitNodePodsTerminated(ctx context.Context, node *v1.
 
 // evictPod from the k8s node. Error handling is based on eviction api documentation:
 // https://kubernetes.io/docs/tasks/administer-cluster/safely-drain-node/#the-eviction-api
-func (h *drainNodeHandler) evictPod(ctx context.Context, pod v1.Pod) error {
+func (h *drainNodeHandler) evictPod(ctx context.Context, options metav1.DeleteOptions, pod v1.Pod) error {
 	b := backoff.WithContext(backoff.NewConstantBackOff(h.cfg.podEvictRetryDelay), ctx) // nolint:gomnd
 	action := func() error {
 		err := h.clientset.CoreV1().Pods(pod.Namespace).Evict(ctx, &v1beta1.Eviction{
@@ -207,6 +218,7 @@ func (h *drainNodeHandler) evictPod(ctx context.Context, pod v1.Pod) error {
 				Name:      pod.Name,
 				Namespace: pod.Namespace,
 			},
+			DeleteOptions: &options,
 		})
 
 		if err != nil {
@@ -230,10 +242,10 @@ func (h *drainNodeHandler) evictPod(ctx context.Context, pod v1.Pod) error {
 	return nil
 }
 
-func (h *drainNodeHandler) deletePod(ctx context.Context, pod v1.Pod) error {
+func (h *drainNodeHandler) deletePod(ctx context.Context, options metav1.DeleteOptions, pod v1.Pod) error {
 	b := backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(h.cfg.podDeleteRetryDelay), h.cfg.podDeleteRetries), ctx) // nolint:gomnd
 	action := func() error {
-		err := h.clientset.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{})
+		err := h.clientset.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, options)
 		if err != nil {
 			// Pod is not found - ignore.
 			if apierrors.IsNotFound(err) {
