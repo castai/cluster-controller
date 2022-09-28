@@ -51,10 +51,10 @@ type drainNodeHandler struct {
 func (h *drainNodeHandler) Handle(ctx context.Context, data interface{}) error {
 	req, ok := data.(*castai.ActionDrainNode)
 	if !ok {
-		return fmt.Errorf("unexpected type %T for delete drain handler", data)
+		return fmt.Errorf("unexpected type %T for drain handler", data)
 	}
 
-	log := h.log.WithField("node_name", req.NodeName)
+	log := h.log.WithFields(logrus.Fields{"node_name": req.NodeName, "action": "drain"})
 
 	node, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
 	if err != nil {
@@ -86,7 +86,7 @@ func (h *drainNodeHandler) Handle(ctx context.Context, data interface{}) error {
 		// If force is set and evict timeout exceeded delete pods.
 		deleteCtx, deleteCancel := context.WithTimeout(ctx, h.cfg.podsDeleteTimeout)
 		defer deleteCancel()
-		err = h.deleteNodePods(deleteCtx, log, metav1.DeleteOptions{}, node)
+		err = h.deleteNodePods(deleteCtx, log, node, metav1.DeleteOptions{})
 		if err == nil {
 			log.Info("node drained")
 			return nil
@@ -97,7 +97,7 @@ func (h *drainNodeHandler) Handle(ctx context.Context, data interface{}) error {
 
 		deleteForceCtx, deleteForceCancel := context.WithTimeout(ctx, h.cfg.podsDeleteTimeout)
 		defer deleteForceCancel()
-		if err = h.deleteNodePods(deleteForceCtx, log, *metav1.NewDeleteOptions(0), node); err != nil {
+		if err = h.deleteNodePods(deleteForceCtx, log, node, *metav1.NewDeleteOptions(0)); err != nil {
 			return fmt.Errorf("deleting gracePeriod=0 pods: %w", err)
 		}
 	}
@@ -137,13 +137,17 @@ func (h *drainNodeHandler) evictNodePods(ctx context.Context, log logrus.FieldLo
 	return h.waitNodePodsTerminated(ctx, node)
 }
 
-func (h *drainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldLogger, options metav1.DeleteOptions, node *v1.Node) error {
+func (h *drainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldLogger, node *v1.Node, options metav1.DeleteOptions) error {
 	pods, err := h.listNodePodsToEvict(ctx, node)
 	if err != nil {
 		return err
 	}
 
-	log.Infof("forcefully deleting %d pods with options %+v", len(pods), options)
+	if options.GracePeriodSeconds != nil {
+		log.Infof("forcefully deleting %d pods with gracePeriod %d", len(pods), *options.GracePeriodSeconds)
+	} else {
+		log.Infof("forcefully deleting %d pods", len(pods))
+	}
 
 	if err := h.sendPodsRequests(ctx, options, pods, h.deletePod); err != nil {
 		return fmt.Errorf("sending delete pods requests: %w", err)
