@@ -232,7 +232,7 @@ func TestDrainNodeHandler(t *testing.T) {
 		})
 
 		err := h.Handle(context.Background(), req)
-		r.EqualError(err, "deleting gracePeriod=0 pods: sending delete pods requests: deleting pod pod1 in namespace default: internal")
+		r.EqualError(err, "forcefully deleting pods: sending delete pods requests: deleting pod pod1 in namespace default: internal")
 
 		_, err = clientset.CoreV1().Pods("default").Get(context.Background(), podName, metav1.GetOptions{})
 		r.NoError(err)
