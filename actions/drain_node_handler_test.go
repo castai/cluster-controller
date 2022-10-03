@@ -3,6 +3,7 @@ package actions
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -108,6 +109,130 @@ func TestDrainNodeHandler(t *testing.T) {
 		n, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
 		r.NoError(err)
 		r.True(n.Spec.Unschedulable)
+
+		_, err = clientset.CoreV1().Pods("default").Get(context.Background(), podName, metav1.GetOptions{})
+		r.NoError(err)
+	})
+
+	t.Run("eviction timeout - force remove pods", func(t *testing.T) {
+		r := require.New(t)
+		nodeName := "node1"
+		podName := "pod1"
+		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
+
+		h := drainNodeHandler{
+			log:       log,
+			clientset: clientset,
+			cfg: drainNodeConfig{
+				podsDeleteTimeout:             7 * time.Second,
+				podDeleteRetries:              5,
+				podDeleteRetryDelay:           5 * time.Second,
+				podEvictRetryDelay:            5 * time.Second,
+				podsTerminationWaitRetryDelay: 10 * time.Second,
+			}}
+
+		req := &castai.ActionDrainNode{
+			NodeName:            "node1",
+			DrainTimeoutSeconds: 1,
+			Force:               true,
+		}
+
+		clientset.PrependReactor("delete", "pods", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
+			deleteAction := action.(ktest.DeleteActionImpl)
+			if deleteAction.Name == podName {
+				if deleteAction.DeleteOptions.GracePeriodSeconds == nil {
+					return true, nil, context.DeadlineExceeded
+				}
+				return false, nil, nil
+			}
+			return false, nil, nil
+		})
+
+		err := h.Handle(context.Background(), req)
+		r.NoError(err)
+
+		n, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
+		r.NoError(err)
+		r.True(n.Spec.Unschedulable)
+
+		_, err = clientset.CoreV1().Pods("default").Get(context.Background(), podName, metav1.GetOptions{})
+		r.True(apierrors.IsNotFound(err))
+	})
+
+	t.Run("eviction timeout - force remove pods - failure", func(t *testing.T) {
+		r := require.New(t)
+		nodeName := "node1"
+		podName := "pod1"
+		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
+
+		h := drainNodeHandler{
+			log:       log,
+			clientset: clientset,
+			cfg: drainNodeConfig{
+				podsDeleteTimeout:             7 * time.Second,
+				podDeleteRetries:              5,
+				podDeleteRetryDelay:           5 * time.Second,
+				podEvictRetryDelay:            5 * time.Second,
+				podsTerminationWaitRetryDelay: 10 * time.Second,
+			}}
+
+		req := &castai.ActionDrainNode{
+			NodeName:            "node1",
+			DrainTimeoutSeconds: 1,
+			Force:               true,
+		}
+
+		clientset.PrependReactor("delete", "pods", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
+			deleteAction := action.(ktest.DeleteActionImpl)
+			if deleteAction.Name == podName {
+				return true, nil, &apierrors.StatusError{ErrStatus: metav1.Status{Reason: metav1.StatusReasonInternalError, Message: "internal"}}
+			}
+			return false, nil, nil
+		})
+
+		err := h.Handle(context.Background(), req)
+		r.EqualError(err, "forcefully deleting pods: sending delete pods requests: deleting pod pod1 in namespace default: internal")
+
+		_, err = clientset.CoreV1().Pods("default").Get(context.Background(), podName, metav1.GetOptions{})
+		r.NoError(err)
+	})
+
+	t.Run("eviction timeout - force remove pods with grace 0 - failure", func(t *testing.T) {
+		r := require.New(t)
+		nodeName := "node1"
+		podName := "pod1"
+		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
+
+		h := drainNodeHandler{
+			log:       log,
+			clientset: clientset,
+			cfg: drainNodeConfig{
+				podsDeleteTimeout:             7 * time.Second,
+				podDeleteRetries:              5,
+				podDeleteRetryDelay:           5 * time.Second,
+				podEvictRetryDelay:            5 * time.Second,
+				podsTerminationWaitRetryDelay: 10 * time.Second,
+			}}
+
+		req := &castai.ActionDrainNode{
+			NodeName:            "node1",
+			DrainTimeoutSeconds: 1,
+			Force:               true,
+		}
+
+		clientset.PrependReactor("delete", "pods", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
+			deleteAction := action.(ktest.DeleteActionImpl)
+			if deleteAction.Name == podName {
+				if deleteAction.DeleteOptions.GracePeriodSeconds == nil {
+					return true, nil, context.DeadlineExceeded
+				}
+				return true, nil, &apierrors.StatusError{ErrStatus: metav1.Status{Reason: metav1.StatusReasonInternalError, Message: "internal"}}
+			}
+			return false, nil, nil
+		})
+
+		err := h.Handle(context.Background(), req)
+		r.EqualError(err, "forcefully deleting pods: sending delete pods requests: deleting pod pod1 in namespace default: internal")
 
 		_, err = clientset.CoreV1().Pods("default").Get(context.Background(), podName, metav1.GetOptions{})
 		r.NoError(err)
