@@ -139,7 +139,6 @@ func (s *service) pollActions(ctx context.Context) ([]*castai.ClusterAction, err
 func (s *service) handleActions(ctx context.Context, actions []*castai.ClusterAction) {
 	for _, action := range actions {
 		if !s.startProcessing(action.ID) {
-			s.log.Debugf("action is already processing, id=%s", action.ID)
 			continue
 		}
 

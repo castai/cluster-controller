@@ -42,12 +42,17 @@ func (h *approveCSRHandler) Handle(ctx context.Context, data interface{}) error 
 
 	log := h.log.WithField("node_name", req.NodeName)
 
+	cert, err := h.getInitialNodeCSR(ctx, log, req.NodeName)
+	if err != nil {
+		return fmt.Errorf("getting initial csr: %w", err)
+	}
+
 	b := backoff.WithContext(
 		newApproveCSRExponentialBackoff(),
 		ctx,
 	)
 	return backoff.RetryNotify(func() error {
-		return h.handle(ctx, log, req)
+		return h.handle(ctx, log, cert)
 	}, b, func(err error, duration time.Duration) {
 		if err != nil {
 			log.Warnf("csr approval failed, will retry: %v", err)
@@ -55,17 +60,7 @@ func (h *approveCSRHandler) Handle(ctx context.Context, data interface{}) error 
 	})
 }
 
-func (h *approveCSRHandler) handle(ctx context.Context, log logrus.FieldLogger, req *castai.ActionApproveCSR) error {
-	// First get original csr which is created by kubelet.
-	log.Debug("getting initial csr")
-	cert, err := h.getInitialNodeCSR(ctx, req.NodeName)
-	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			return backoff.Permanent(fmt.Errorf("getting initial csr: %w", err))
-		}
-		return fmt.Errorf("getting initial csr: %w", err)
-	}
-
+func (h *approveCSRHandler) handle(ctx context.Context, log logrus.FieldLogger, cert *csr.Certificate) error {
 	if cert.Approved() {
 		log.Debug("initial csr is already approved")
 		return nil
@@ -79,7 +74,7 @@ func (h *approveCSRHandler) handle(ctx context.Context, log logrus.FieldLogger, 
 
 	// Create new csr with the same request data as original csr.
 	log.Debug("requesting new csr")
-	cert, err = csr.RequestCertificate(
+	cert, err := csr.RequestCertificate(
 		ctx,
 		h.clientset,
 		cert,
@@ -100,7 +95,9 @@ func (h *approveCSRHandler) handle(ctx context.Context, log logrus.FieldLogger, 
 	return errors.New("certificate signing request was not approved")
 }
 
-func (h *approveCSRHandler) getInitialNodeCSR(ctx context.Context, nodeName string) (*csr.Certificate, error) {
+func (h *approveCSRHandler) getInitialNodeCSR(ctx context.Context, log *logrus.Entry, nodeName string) (*csr.Certificate, error) {
+	log.Debug("getting initial csr")
+
 	csrFetchCtx, cancel := context.WithTimeout(ctx, h.initialCSRFetchTimeout)
 	defer cancel()
 
@@ -110,7 +107,7 @@ func (h *approveCSRHandler) getInitialNodeCSR(ctx context.Context, nodeName stri
 			return nil, csrFetchCtx.Err()
 		case <-time.After(h.csrFetchInterval):
 			cert, err := csr.GetCertificateByNodeName(ctx, h.clientset, nodeName)
-			if err != nil && !errors.Is(err, csr.ErrNodeCertificateNotFound) {
+			if err != nil && errors.Is(err, context.DeadlineExceeded) {
 				return nil, err
 			}
 			if cert != nil {
