@@ -264,7 +264,7 @@ func getNodeCSRV1Beta1(ctx context.Context, client kubernetes.Interface, nodeNam
 	for _, item := range csrList.Items {
 		item := item
 		if len(item.Status.Certificate) != 0 {
-			// If certificate is present means that CSR is already approved.
+			// If certificate is present - CSR is already approved.
 			continue
 		}
 
