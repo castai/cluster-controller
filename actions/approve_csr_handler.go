@@ -98,13 +98,13 @@ func (h *approveCSRHandler) handle(ctx context.Context, log logrus.FieldLogger, 
 func (h *approveCSRHandler) getInitialNodeCSR(ctx context.Context, log *logrus.Entry, nodeName string) (*csr.Certificate, error) {
 	log.Debug("getting initial csr")
 
-	csrFetchCtx, cancel := context.WithTimeout(ctx, h.initialCSRFetchTimeout)
+	ctx, cancel := context.WithTimeout(ctx, h.initialCSRFetchTimeout)
 	defer cancel()
 
 	for {
 		select {
-		case <-csrFetchCtx.Done():
-			return nil, csrFetchCtx.Err()
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		case <-time.After(h.csrFetchInterval):
 			cert, err := csr.GetCertificateByNodeName(ctx, h.clientset, nodeName)
 			if err != nil && errors.Is(err, context.DeadlineExceeded) {

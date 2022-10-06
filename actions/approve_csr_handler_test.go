@@ -153,6 +153,10 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 			initialCSRFetchTimeout: 10 * time.Millisecond,
 		}
 
+		watcher := watch.NewFake()
+		watcher.Stop()
+		client.PrependWatchReactor("certificatesigningrequests", ktest.DefaultWatchReactor(watcher, nil))
+
 		ctx := context.Background()
 		err := h.Handle(ctx, &castai.ActionApproveCSR{NodeName: "node"})
 		r.EqualError(err, "getting initial csr: context deadline exceeded")

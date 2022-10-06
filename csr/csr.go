@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	certv1 "k8s.io/api/certificates/v1"
 	certv1beta1 "k8s.io/api/certificates/v1beta1"
@@ -212,9 +211,6 @@ func getNodeCSRV1(ctx context.Context, client kubernetes.Interface, nodeName str
 			"spec.signerName": certv1.KubeAPIServerClientKubeletSignerName,
 		}).String(),
 	}
-
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-	defer cancel()
 
 	watch, err := client.CertificatesV1().CertificateSigningRequests().Watch(ctx, options)
 	if err != nil {
