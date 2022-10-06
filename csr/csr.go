@@ -216,7 +216,7 @@ func getNodeCSRV1(ctx context.Context, client kubernetes.Interface, nodeName str
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
-	watch, err := client.CertificatesV1beta1().CertificateSigningRequests().Watch(ctx, options)
+	watch, err := client.CertificatesV1().CertificateSigningRequests().Watch(ctx, options)
 	if err != nil {
 		return nil, err
 	}
