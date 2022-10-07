@@ -73,7 +73,8 @@ func (h *approveCSRHandler) handle(ctx context.Context, log logrus.FieldLogger, 
 
 	defer func() {
 		if errors.Is(reterr, context.Canceled) && newCert == nil {
-			// Rollback csr deletion.
+			// Rollback csr deletion if cluster-controller is restarted.
+			h.log.Debugf("rolling back csr deletion: %v", reterr)
 			_, _ = csr.RequestCertificate(context.Background(), h.clientset, cert)
 		}
 	}()
