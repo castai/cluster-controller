@@ -18,20 +18,14 @@ func newApproveCSRHandler(log logrus.FieldLogger, clientset kubernetes.Interface
 	return &approveCSRHandler{
 		log:                    log,
 		clientset:              clientset,
-		csrFetchInterval:       5 * time.Second,
 		initialCSRFetchTimeout: 5 * time.Minute,
-		maxRetries:             10,
-		retryAfter:             1 * time.Second,
 	}
 }
 
 type approveCSRHandler struct {
 	log                    logrus.FieldLogger
 	clientset              kubernetes.Interface
-	csrFetchInterval       time.Duration
 	initialCSRFetchTimeout time.Duration
-	maxRetries             uint64
-	retryAfter             time.Duration
 }
 
 func (h *approveCSRHandler) Handle(ctx context.Context, data interface{}) error {

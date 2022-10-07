@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"testing"
@@ -31,26 +32,7 @@ func TestApproveCSRHandler(t *testing.T) {
 	t.Run("approve v1 csr successfully", func(t *testing.T) {
 		r := require.New(t)
 
-		csrRes := &certv1.CertificateSigningRequest{
-			ObjectMeta: metav1.ObjectMeta{Name: "node-csr-123"},
-			Spec: certv1.CertificateSigningRequestSpec{
-				Request: []byte(`-----BEGIN CERTIFICATE REQUEST-----
-MIIBADCBqAIBADBGMRUwEwYDVQQKEwxzeXN0ZW06bm9kZXMxLTArBgNVBAMTJHN5
-c3RlbTpub2RlOmdrZS1hbS1nY3AtY2FzdC01ZGM0ZjRlYzBZMBMGByqGSM49AgEG
-CCqGSM49AwEHA0IABF/9p5y4t09Y6yAlhF0OthexpL0CEyNHVnVmmbB4jridyJzW
-vrcLKbFat0qvJftODQhEA/lqByJepB4YGqQGhregADAKBggqhkjOPQQDAgNHADBE
-AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
-39zKjbxU1t82BlrW9/NrmaadNHQ=
------END CERTIFICATE REQUEST-----`),
-				SignerName: certv1.KubeAPIServerClientKubeletSignerName,
-				Usages: []certv1.KeyUsage{
-					certv1.KeyUsage("kubelet"),
-				},
-				Username: "kubelet",
-			},
-			Status: certv1.CertificateSigningRequestStatus{},
-		}
-
+		csrRes := getCSR()
 		client := fake.NewSimpleClientset(csrRes)
 		watcher := watch.NewFake()
 		client.PrependWatchReactor("certificatesigningrequests", ktest.DefaultWatchReactor(watcher, nil))
@@ -79,10 +61,7 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 		h := &approveCSRHandler{
 			log:                    log,
 			clientset:              client,
-			csrFetchInterval:       1 * time.Millisecond,
 			initialCSRFetchTimeout: 10 * time.Millisecond,
-			retryAfter:             100 * time.Millisecond,
-			maxRetries:             5,
 		}
 
 		go func() {
@@ -91,6 +70,38 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 		ctx := context.Background()
 		err := h.Handle(ctx, &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"})
 		r.NoError(err)
+	})
+
+	t.Run("retry getting initial csr", func(t *testing.T) {
+		r := require.New(t)
+
+		csrRes := getCSR()
+		watcher := watch.NewFake()
+		count := 0
+		fn := ktest.WatchReactionFunc(func(action ktest.Action) (handled bool, ret watch.Interface, err error) {
+			if count == 0 {
+				count++
+				return true, watcher, errors.New("api server timeout")
+			}
+			return true, watcher, err
+		})
+
+		client := fake.NewSimpleClientset(csrRes)
+		client.PrependWatchReactor("certificatesigningrequests", fn)
+
+		h := &approveCSRHandler{
+			log:                    log,
+			clientset:              client,
+			initialCSRFetchTimeout: 1000 * time.Millisecond,
+		}
+
+		go func() {
+			watcher.Add(csrRes)
+		}()
+		ctx := context.Background()
+		err := h.Handle(ctx, &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"})
+		r.NoError(err)
+
 	})
 
 	t.Run("approve v1beta1 csr successfully", func(t *testing.T) {
@@ -133,7 +144,6 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 		h := &approveCSRHandler{
 			log:                    log,
 			clientset:              client,
-			csrFetchInterval:       1 * time.Millisecond,
 			initialCSRFetchTimeout: 10 * time.Millisecond,
 		}
 
@@ -149,7 +159,6 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 		h := &approveCSRHandler{
 			log:                    log,
 			clientset:              client,
-			csrFetchInterval:       1 * time.Millisecond,
 			initialCSRFetchTimeout: 10 * time.Millisecond,
 		}
 
@@ -172,4 +181,24 @@ func TestApproveCSRExponentialBackoff(t *testing.T) {
 		sum += tmp
 	}
 	r.Truef(100 < sum.Seconds(), "actual elapsed seconds %s", sum.Seconds())
+}
+
+func getCSR() *certv1.CertificateSigningRequest {
+	return &certv1.CertificateSigningRequest{
+		ObjectMeta: metav1.ObjectMeta{Name: "node-csr-123"},
+		Spec: certv1.CertificateSigningRequestSpec{
+			Request: []byte(`-----BEGIN CERTIFICATE REQUEST-----
+MIIBADCBqAIBADBGMRUwEwYDVQQKEwxzeXN0ZW06bm9kZXMxLTArBgNVBAMTJHN5
+c3RlbTpub2RlOmdrZS1hbS1nY3AtY2FzdC01ZGM0ZjRlYzBZMBMGByqGSM49AgEG
+CCqGSM49AwEHA0IABF/9p5y4t09Y6yAlhF0OthexpL0CEyNHVnVmmbB4jridyJzW
+vrcLKbFat0qvJftODQhEA/lqByJepB4YGqQGhregADAKBggqhkjOPQQDAgNHADBE
+AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
+39zKjbxU1t82BlrW9/NrmaadNHQ=
+-----END CERTIFICATE REQUEST-----`),
+			SignerName: certv1.KubeAPIServerClientKubeletSignerName,
+			Usages:     []certv1.KeyUsage{"kubelet"},
+			Username:   "kubelet",
+		},
+		//Status: certv1.CertificateSigningRequestStatus{},
+	}
 }
