@@ -101,20 +101,22 @@ func (h *approveCSRHandler) getInitialNodeCSR(ctx context.Context, log *logrus.E
 	ctx, cancel := context.WithTimeout(ctx, h.initialCSRFetchTimeout)
 	defer cancel()
 
-	for {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(h.csrFetchInterval):
-			cert, err := csr.GetCertificateByNodeName(ctx, h.clientset, nodeName)
-			if err != nil && errors.Is(err, context.DeadlineExceeded) {
-				return nil, err
-			}
-			if cert != nil {
-				return cert, nil
-			}
+	var cert *csr.Certificate
+	var err error
+
+	b := backoff.WithContext(backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 3), ctx)
+	err = backoff.Retry(func() error {
+		cert, err = csr.GetCertificateByNodeName(ctx, h.clientset, nodeName)
+		if err != nil && errors.Is(err, context.DeadlineExceeded) {
+			return backoff.Permanent(err)
 		}
+		return err
+	}, b)
+	if err != nil {
+		return nil, err
 	}
+
+	return cert, nil
 }
 
 func newApproveCSRExponentialBackoff() *backoff.ExponentialBackOff {
