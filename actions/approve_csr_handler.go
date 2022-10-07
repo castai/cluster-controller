@@ -101,7 +101,7 @@ func (h *approveCSRHandler) getInitialNodeCSR(ctx context.Context, log *logrus.E
 	b := backoff.WithContext(backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 3), ctx)
 	err = backoff.Retry(func() error {
 		cert, err = csr.GetCertificateByNodeName(ctx, h.clientset, nodeName)
-		if err != nil && errors.Is(err, context.DeadlineExceeded) {
+		if errors.Is(err, context.DeadlineExceeded) {
 			return backoff.Permanent(err)
 		}
 		return err
