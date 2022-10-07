@@ -14,12 +14,13 @@ import (
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/kubernetes"
 )
 
 const (
-	reasonApproved  = "CastaiApprove"
-	approvedMessage = "This CSR was approved by cast.ai"
+	ReasonApproved  = "AutoApproved"
+	approvedMessage = "This CSR was approved by CAST AI"
 )
 
 var (
@@ -42,7 +43,7 @@ func (c *Certificate) Validate() error {
 func (c *Certificate) Approved() bool {
 	if c.V1Beta1 != nil {
 		for _, condition := range c.V1Beta1.Status.Conditions {
-			if condition.Reason == reasonApproved {
+			if condition.Reason == ReasonApproved {
 				return true
 			}
 		}
@@ -50,7 +51,7 @@ func (c *Certificate) Approved() bool {
 	}
 
 	for _, condition := range c.V1.Status.Conditions {
-		if condition.Reason == reasonApproved && condition.Status == v1.ConditionTrue {
+		if condition.Reason == ReasonApproved && condition.Status == v1.ConditionTrue {
 			return true
 		}
 	}
@@ -66,7 +67,7 @@ func ApproveCertificate(ctx context.Context, client kubernetes.Interface, cert *
 	if cert.V1Beta1 != nil {
 		cert.V1Beta1.Status.Conditions = append(cert.V1Beta1.Status.Conditions, certv1beta1.CertificateSigningRequestCondition{
 			Type:           certv1beta1.CertificateApproved,
-			Reason:         reasonApproved,
+			Reason:         ReasonApproved,
 			Message:        approvedMessage,
 			LastUpdateTime: metav1.Now(),
 		})
@@ -79,7 +80,7 @@ func ApproveCertificate(ctx context.Context, client kubernetes.Interface, cert *
 
 	cert.V1.Status.Conditions = append(cert.V1.Status.Conditions, certv1.CertificateSigningRequestCondition{
 		Type:           certv1.CertificateApproved,
-		Reason:         reasonApproved,
+		Reason:         ReasonApproved,
 		Message:        approvedMessage,
 		Status:         v1.ConditionTrue,
 		LastUpdateTime: metav1.Now(),
@@ -205,26 +206,35 @@ func GetCertificateByNodeName(ctx context.Context, client kubernetes.Interface, 
 }
 
 func getNodeCSRV1(ctx context.Context, client kubernetes.Interface, nodeName string) (*Certificate, error) {
-	csrList, err := client.CertificatesV1().CertificateSigningRequests().List(ctx, metav1.ListOptions{})
+	options := metav1.ListOptions{
+		FieldSelector: fields.SelectorFromSet(fields.Set{
+			"spec.signerName": certv1.KubeAPIServerClientKubeletSignerName,
+		}).String(),
+	}
+
+	watch, err := client.CertificatesV1().CertificateSigningRequests().Watch(ctx, options)
 	if err != nil {
 		return nil, err
 	}
+	defer watch.Stop()
 
-	// Sort by newest first soo we don't need to parse old items.
-	sort.Slice(csrList.Items, func(i, j int) bool {
-		return csrList.Items[i].CreationTimestamp.After(csrList.Items[j].CreationTimestamp.Time)
-	})
+	for r := range watch.ResultChan() {
+		csr, ok := r.Object.(*certv1.CertificateSigningRequest)
+		if !ok {
+			continue
+		}
 
-	for _, item := range csrList.Items {
-		item := item
-		ok, err := isNodeCsr(item.Name, item.Spec.Request, nodeName)
+		if len(csr.Status.Certificate) != 0 {
+			// If certificate is present - CSR is already approved.
+			continue
+		}
+
+		found, err := isNodeCSR(csr.Name, csr.Spec.Request, nodeName)
 		if err != nil {
 			return nil, err
 		}
-		if ok {
-			return &Certificate{
-				V1: &item,
-			}, nil
+		if found {
+			return &Certificate{V1: csr}, nil
 		}
 	}
 
@@ -232,7 +242,12 @@ func getNodeCSRV1(ctx context.Context, client kubernetes.Interface, nodeName str
 }
 
 func getNodeCSRV1Beta1(ctx context.Context, client kubernetes.Interface, nodeName string) (*Certificate, error) {
-	csrList, err := client.CertificatesV1beta1().CertificateSigningRequests().List(ctx, metav1.ListOptions{})
+	fs := fields.SelectorFromSet(fields.Set{
+		"spec.signerName": certv1beta1.KubeAPIServerClientKubeletSignerName,
+	})
+	csrList, err := client.CertificatesV1beta1().CertificateSigningRequests().List(ctx, metav1.ListOptions{
+		FieldSelector: fs.String(),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -244,7 +259,12 @@ func getNodeCSRV1Beta1(ctx context.Context, client kubernetes.Interface, nodeNam
 
 	for _, item := range csrList.Items {
 		item := item
-		ok, err := isNodeCsr(item.Name, item.Spec.Request, nodeName)
+		if len(item.Status.Certificate) != 0 {
+			// If certificate is present - CSR is already approved.
+			continue
+		}
+
+		ok, err := isNodeCSR(item.Name, item.Spec.Request, nodeName)
 		if err != nil {
 			return nil, err
 		}
@@ -258,14 +278,16 @@ func getNodeCSRV1Beta1(ctx context.Context, client kubernetes.Interface, nodeNam
 	return nil, ErrNodeCertificateNotFound
 }
 
-func isNodeCsr(csrName string, csrRequest []byte, nodeName string) (bool, error) {
+func isNodeCSR(csrName string, csrRequest []byte, nodeName string) (bool, error) {
+	if !strings.HasPrefix(csrName, "node-csr") {
+		return false, nil
+	}
+
 	certReq, err := parseCSR(csrRequest)
 	if err != nil {
 		return false, err
 	}
-	hasPrefix := strings.HasPrefix(csrName, "node-csr")
-	containsNodeName := certReq.Subject.CommonName == fmt.Sprintf("system:node:%s", nodeName)
-	return hasPrefix && containsNodeName, nil
+	return certReq.Subject.CommonName == fmt.Sprintf("system:node:%s", nodeName), nil
 }
 
 // parseCSR is mostly needed to extract node name from cert subject common name.

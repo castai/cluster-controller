@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"testing"
@@ -16,10 +17,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/fake"
 	ktest "k8s.io/client-go/testing"
 
 	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/csr"
 )
 
 func TestApproveCSRHandler(t *testing.T) {
@@ -29,48 +32,18 @@ func TestApproveCSRHandler(t *testing.T) {
 	t.Run("approve v1 csr successfully", func(t *testing.T) {
 		r := require.New(t)
 
-		csr := &certv1.CertificateSigningRequest{
-			TypeMeta: metav1.TypeMeta{},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "node-csr-123",
-			},
-			Spec: certv1.CertificateSigningRequestSpec{
-				Request: []byte(`-----BEGIN CERTIFICATE REQUEST-----
-MIIBADCBqAIBADBGMRUwEwYDVQQKEwxzeXN0ZW06bm9kZXMxLTArBgNVBAMTJHN5
-c3RlbTpub2RlOmdrZS1hbS1nY3AtY2FzdC01ZGM0ZjRlYzBZMBMGByqGSM49AgEG
-CCqGSM49AwEHA0IABF/9p5y4t09Y6yAlhF0OthexpL0CEyNHVnVmmbB4jridyJzW
-vrcLKbFat0qvJftODQhEA/lqByJepB4YGqQGhregADAKBggqhkjOPQQDAgNHADBE
-AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
-39zKjbxU1t82BlrW9/NrmaadNHQ=
------END CERTIFICATE REQUEST-----`),
-				SignerName:        "kubelet",
-				ExpirationSeconds: nil,
-				Usages: []certv1.KeyUsage{
-					certv1.KeyUsage("kubelet"),
-				},
-				Username: "kubelet",
-				UID:      "",
-				Groups:   nil,
-				Extra:    nil,
-			},
-			Status: certv1.CertificateSigningRequestStatus{},
-		}
-		client := fake.NewSimpleClientset(csr)
-		// Return NotFound for all v1beta1 resources.
-		client.PrependReactor("*", "*", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
-			if action.GetResource().Version == "v1beta1" {
-				err = apierrors.NewNotFound(schema.GroupResource{}, action.GetResource().String())
-				return true, nil, err
-			}
-			return
-		})
+		csrRes := getCSR()
+		client := fake.NewSimpleClientset(csrRes)
+		watcher := watch.NewFake()
+		client.PrependWatchReactor("certificatesigningrequests", ktest.DefaultWatchReactor(watcher, nil))
+
 		var approveCalls int32
 		client.PrependReactor("update", "certificatesigningrequests", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
-			approved := csr.DeepCopy()
+			approved := csrRes.DeepCopy()
 			approved.Status.Conditions = []certv1.CertificateSigningRequestCondition{
 				{
 					Type:           certv1.CertificateApproved,
-					Reason:         "CastaiApprove",
+					Reason:         csr.ReasonApproved,
 					Message:        "approved",
 					LastUpdateTime: metav1.Now(),
 					Status:         v1.ConditionTrue,
@@ -88,25 +61,55 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 		h := &approveCSRHandler{
 			log:                    log,
 			clientset:              client,
-			csrFetchInterval:       1 * time.Millisecond,
 			initialCSRFetchTimeout: 10 * time.Millisecond,
-			retryAfter:             100 * time.Millisecond,
-			maxRetries:             5,
 		}
 
+		go func() {
+			watcher.Add(csrRes)
+		}()
 		ctx := context.Background()
 		err := h.Handle(ctx, &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"})
 		r.NoError(err)
 	})
 
+	t.Run("retry getting initial csr", func(t *testing.T) {
+		r := require.New(t)
+
+		csrRes := getCSR()
+		watcher := watch.NewFake()
+		count := 0
+		fn := ktest.WatchReactionFunc(func(action ktest.Action) (handled bool, ret watch.Interface, err error) {
+			if count == 0 {
+				count++
+				return true, watcher, errors.New("api server timeout")
+			}
+			return true, watcher, err
+		})
+
+		client := fake.NewSimpleClientset(csrRes)
+		client.PrependWatchReactor("certificatesigningrequests", fn)
+
+		h := &approveCSRHandler{
+			log:                    log,
+			clientset:              client,
+			initialCSRFetchTimeout: 1000 * time.Millisecond,
+		}
+
+		go func() {
+			watcher.Add(csrRes)
+		}()
+		ctx := context.Background()
+		err := h.Handle(ctx, &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"})
+		r.NoError(err)
+
+	})
+
 	t.Run("approve v1beta1 csr successfully", func(t *testing.T) {
 		r := require.New(t)
 
-		csr := &certv1beta1.CertificateSigningRequest{
-			TypeMeta: metav1.TypeMeta{},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "node-csr-123",
-			},
+		signer := certv1beta1.KubeAPIServerClientKubeletSignerName
+		csrRes := &certv1beta1.CertificateSigningRequest{
+			ObjectMeta: metav1.ObjectMeta{Name: "node-csr-123"},
 			Spec: certv1beta1.CertificateSigningRequestSpec{
 				Request: []byte(`-----BEGIN CERTIFICATE REQUEST-----
 MIIBADCBqAIBADBGMRUwEwYDVQQKEwxzeXN0ZW06bm9kZXMxLTArBgNVBAMTJHN5
@@ -116,30 +119,20 @@ vrcLKbFat0qvJftODQhEA/lqByJepB4YGqQGhregADAKBggqhkjOPQQDAgNHADBE
 AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 39zKjbxU1t82BlrW9/NrmaadNHQ=
 -----END CERTIFICATE REQUEST-----`),
-				ExpirationSeconds: nil,
-				Username:          "kubelet",
-				UID:               "",
-				Groups:            nil,
-				Extra:             nil,
+				Username:   "kubelet",
+				SignerName: &signer,
 			},
-			Status: certv1beta1.CertificateSigningRequestStatus{},
 		}
-		client := fake.NewSimpleClientset(csr)
-		// Return NotFound for all v1 resources.
-		client.PrependReactor("*", "*", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
-			if action.GetResource().Version == "v1" {
-				err = apierrors.NewNotFound(schema.GroupResource{}, action.GetResource().String())
-				return true, nil, err
-			}
-			return
-		})
+		client := fake.NewSimpleClientset(csrRes)
+		notFoundErr := apierrors.NewNotFound(schema.GroupResource{}, "csr")
+		client.PrependWatchReactor("certificatesigningrequests", ktest.DefaultWatchReactor(nil, notFoundErr))
 
 		client.PrependReactor("update", "certificatesigningrequests", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
-			approved := csr.DeepCopy()
+			approved := csrRes.DeepCopy()
 			approved.Status.Conditions = []certv1beta1.CertificateSigningRequestCondition{
 				{
 					Type:           certv1beta1.CertificateApproved,
-					Reason:         "CastaiApprove",
+					Reason:         csr.ReasonApproved,
 					Message:        "approved",
 					LastUpdateTime: metav1.Now(),
 					Status:         v1.ConditionTrue,
@@ -151,7 +144,6 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 		h := &approveCSRHandler{
 			log:                    log,
 			clientset:              client,
-			csrFetchInterval:       1 * time.Millisecond,
 			initialCSRFetchTimeout: 10 * time.Millisecond,
 		}
 
@@ -167,9 +159,12 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 		h := &approveCSRHandler{
 			log:                    log,
 			clientset:              client,
-			csrFetchInterval:       1 * time.Millisecond,
 			initialCSRFetchTimeout: 10 * time.Millisecond,
 		}
+
+		watcher := watch.NewFake()
+		watcher.Stop()
+		client.PrependWatchReactor("certificatesigningrequests", ktest.DefaultWatchReactor(watcher, nil))
 
 		ctx := context.Background()
 		err := h.Handle(ctx, &castai.ActionApproveCSR{NodeName: "node"})
@@ -186,4 +181,24 @@ func TestApproveCSRExponentialBackoff(t *testing.T) {
 		sum += tmp
 	}
 	r.Truef(100 < sum.Seconds(), "actual elapsed seconds %s", sum.Seconds())
+}
+
+func getCSR() *certv1.CertificateSigningRequest {
+	return &certv1.CertificateSigningRequest{
+		ObjectMeta: metav1.ObjectMeta{Name: "node-csr-123"},
+		Spec: certv1.CertificateSigningRequestSpec{
+			Request: []byte(`-----BEGIN CERTIFICATE REQUEST-----
+MIIBADCBqAIBADBGMRUwEwYDVQQKEwxzeXN0ZW06bm9kZXMxLTArBgNVBAMTJHN5
+c3RlbTpub2RlOmdrZS1hbS1nY3AtY2FzdC01ZGM0ZjRlYzBZMBMGByqGSM49AgEG
+CCqGSM49AwEHA0IABF/9p5y4t09Y6yAlhF0OthexpL0CEyNHVnVmmbB4jridyJzW
+vrcLKbFat0qvJftODQhEA/lqByJepB4YGqQGhregADAKBggqhkjOPQQDAgNHADBE
+AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
+39zKjbxU1t82BlrW9/NrmaadNHQ=
+-----END CERTIFICATE REQUEST-----`),
+			SignerName: certv1.KubeAPIServerClientKubeletSignerName,
+			Usages:     []certv1.KeyUsage{"kubelet"},
+			Username:   "kubelet",
+		},
+		//Status: certv1.CertificateSigningRequestStatus{},
+	}
 }
