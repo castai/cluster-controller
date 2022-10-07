@@ -75,6 +75,28 @@ func (c *ClusterAction) Data() interface{} {
 	return nil
 }
 
+func (c *ClusterAction) NodeID() string {
+	if c.ActionDeleteNode != nil {
+		return c.ActionDeleteNode.NodeID
+	}
+	if c.ActionDrainNode != nil {
+		return c.ActionDrainNode.NodeID
+	}
+	if c.ActionPatchNode != nil {
+		return c.ActionPatchNode.NodeID
+	}
+	if c.ActionApproveCSR != nil {
+		return c.ActionApproveCSR.NodeID
+	}
+	if c.ActionCheckNodeDeleted != nil {
+		return c.ActionCheckNodeDeleted.NodeID
+	}
+	if c.ActionCheckNodeStatus != nil {
+		return c.ActionCheckNodeStatus.NodeID
+	}
+	return "nil"
+}
+
 type LogEvent struct {
 	Level   string        `json:"level"`
 	Time    time.Time     `json:"time"`
@@ -84,20 +106,24 @@ type LogEvent struct {
 
 type ActionDeleteNode struct {
 	NodeName string `json:"nodeName"`
+	NodeID   string `json:"ID"`
 }
 
 type ActionDrainNode struct {
 	NodeName            string `json:"nodeName"`
+	NodeID              string `json:"ID"`
 	DrainTimeoutSeconds int    `json:"drainTimeoutSeconds"`
 	Force               bool   `json:"force"`
 }
 
 type ActionApproveCSR struct {
 	NodeName string `json:"nodeName"`
+	NodeID   string `json:"ID"`
 }
 
 type ActionPatchNode struct {
 	NodeName    string            `json:"nodeName"`
+	NodeID      string            `json:"ID"`
 	Labels      map[string]string `json:"labels"`
 	Taints      []NodeTaint       `json:"taints"`
 	Annotations map[string]string `json:"annotations"`
@@ -127,6 +153,7 @@ type ActionSendAKSInitData struct {
 
 type ActionCheckNodeDeleted struct {
 	NodeName string `json:"nodeName"`
+	NodeID   string `json:"ID"`
 }
 
 type ActionCheckNodeStatus_Status string
@@ -138,6 +165,7 @@ const (
 
 type ActionCheckNodeStatus struct {
 	NodeName           string                       `json:"nodeName"`
+	NodeID             string                       `json:"ID"`
 	NodeStatus         ActionCheckNodeStatus_Status `json:"nodeStatus,omitempty"`
 	WaitTimeoutSeconds *int32                       `json:"waitTimeoutSeconds,omitempty"`
 }
