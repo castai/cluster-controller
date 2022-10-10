@@ -68,20 +68,9 @@ func (h *approveCSRHandler) handle(ctx context.Context, log logrus.FieldLogger, 
 		return fmt.Errorf("deleting csr: %w", err)
 	}
 
-	var newCert *csr.Certificate
-	var err error
-
-	defer func() {
-		if errors.Is(reterr, context.Canceled) && newCert == nil {
-			// Rollback csr deletion if cluster-controller is restarted.
-			h.log.Debugf("rolling back csr deletion: %v", reterr)
-			_, _ = csr.RequestCertificate(context.Background(), h.clientset, cert)
-		}
-	}()
-
 	// Create new csr with the same request data as original csr.
 	log.Debug("requesting new csr")
-	newCert, err = csr.RequestCertificate(
+	newCert, err := csr.RequestCertificate(
 		ctx,
 		h.clientset,
 		cert,

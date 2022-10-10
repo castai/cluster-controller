@@ -95,35 +95,6 @@ func TestApproveCSRHandler(t *testing.T) {
 		r.NoError(err)
 	})
 
-	t.Run("rollback csr deletion if cluster-controller is restarted", func(t *testing.T) {
-		r := require.New(t)
-		ctx, cancel := context.WithCancel(context.Background())
-
-		csrRes := getCSR()
-		client := fake.NewSimpleClientset(csrRes)
-
-		createCalls := 0
-		client.PrependReactor("create", "certificatesigningrequests", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
-			cancel()
-			createCalls++
-			if createCalls == 1 {
-				return true, nil, context.Canceled
-			}
-			return true, csrRes, nil
-		})
-
-		h := &approveCSRHandler{
-			log:                    log,
-			clientset:              client,
-			csrFetchInterval:       1 * time.Millisecond,
-			initialCSRFetchTimeout: 10 * time.Millisecond,
-		}
-
-		err := h.Handle(ctx, &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"})
-		r.Equal(context.Canceled, err)
-		r.Equal(2, createCalls)
-	})
-
 	t.Run("retry getting initial csr", func(t *testing.T) {
 		r := require.New(t)
 
