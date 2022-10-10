@@ -34,8 +34,6 @@ func TestApproveCSRHandler(t *testing.T) {
 
 		csrRes := getCSR()
 		client := fake.NewSimpleClientset(csrRes)
-		watcher := watch.NewFake()
-		client.PrependWatchReactor("certificatesigningrequests", ktest.DefaultWatchReactor(watcher, nil))
 
 		var approveCalls int32
 		client.PrependReactor("update", "certificatesigningrequests", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
@@ -61,12 +59,37 @@ func TestApproveCSRHandler(t *testing.T) {
 		h := &approveCSRHandler{
 			log:                    log,
 			clientset:              client,
+			csrFetchInterval:       1 * time.Millisecond,
 			initialCSRFetchTimeout: 10 * time.Millisecond,
 		}
 
-		go func() {
-			watcher.Add(csrRes)
-		}()
+		ctx := context.Background()
+		err := h.Handle(ctx, &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"})
+		r.NoError(err)
+	})
+
+	t.Run("return if csr is already approved", func(t *testing.T) {
+		r := require.New(t)
+
+		csrRes := getCSR()
+		csrRes.Status.Conditions = []certv1.CertificateSigningRequestCondition{
+			{
+				Type:           certv1.CertificateApproved,
+				Reason:         csr.ReasonApproved,
+				Message:        "approved",
+				LastUpdateTime: metav1.Now(),
+				Status:         v1.ConditionTrue,
+			},
+		}
+		client := fake.NewSimpleClientset(csrRes)
+
+		h := &approveCSRHandler{
+			log:                    log,
+			clientset:              client,
+			csrFetchInterval:       1 * time.Millisecond,
+			initialCSRFetchTimeout: 10 * time.Millisecond,
+		}
+
 		ctx := context.Background()
 		err := h.Handle(ctx, &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"})
 		r.NoError(err)
@@ -76,32 +99,28 @@ func TestApproveCSRHandler(t *testing.T) {
 		r := require.New(t)
 
 		csrRes := getCSR()
-		watcher := watch.NewFake()
 		count := 0
-		fn := ktest.WatchReactionFunc(func(action ktest.Action) (handled bool, ret watch.Interface, err error) {
+		fn := ktest.ReactionFunc(func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
 			if count == 0 {
 				count++
-				return true, watcher, errors.New("api server timeout")
+				return true, nil, errors.New("api server timeout")
 			}
-			return true, watcher, err
+			out := certv1.CertificateSigningRequestList{Items: []certv1.CertificateSigningRequest{*csrRes}}
+			return true, &out, err
 		})
-
 		client := fake.NewSimpleClientset(csrRes)
-		client.PrependWatchReactor("certificatesigningrequests", fn)
+		client.PrependReactor("list", "certificatesigningrequests", fn)
 
 		h := &approveCSRHandler{
 			log:                    log,
 			clientset:              client,
+			csrFetchInterval:       100 * time.Millisecond,
 			initialCSRFetchTimeout: 1000 * time.Millisecond,
 		}
 
-		go func() {
-			watcher.Add(csrRes)
-		}()
 		ctx := context.Background()
 		err := h.Handle(ctx, &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"})
 		r.NoError(err)
-
 	})
 
 	t.Run("approve v1beta1 csr successfully", func(t *testing.T) {
@@ -124,9 +143,14 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 			},
 		}
 		client := fake.NewSimpleClientset(csrRes)
-		notFoundErr := apierrors.NewNotFound(schema.GroupResource{}, "csr")
-		client.PrependWatchReactor("certificatesigningrequests", ktest.DefaultWatchReactor(nil, notFoundErr))
-
+		// Return NotFound for all v1 resources.
+		client.PrependReactor("*", "*", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
+			if action.GetResource().Version == "v1" {
+				err = apierrors.NewNotFound(schema.GroupResource{}, action.GetResource().String())
+				return true, nil, err
+			}
+			return
+		})
 		client.PrependReactor("update", "certificatesigningrequests", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
 			approved := csrRes.DeepCopy()
 			approved.Status.Conditions = []certv1beta1.CertificateSigningRequestCondition{
@@ -144,6 +168,7 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 		h := &approveCSRHandler{
 			log:                    log,
 			clientset:              client,
+			csrFetchInterval:       1 * time.Millisecond,
 			initialCSRFetchTimeout: 10 * time.Millisecond,
 		}
 
@@ -159,6 +184,7 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 		h := &approveCSRHandler{
 			log:                    log,
 			clientset:              client,
+			csrFetchInterval:       1 * time.Millisecond,
 			initialCSRFetchTimeout: 10 * time.Millisecond,
 		}
 

@@ -19,6 +19,7 @@ func newApproveCSRHandler(log logrus.FieldLogger, clientset kubernetes.Interface
 		log:                    log,
 		clientset:              clientset,
 		initialCSRFetchTimeout: 5 * time.Minute,
+		csrFetchInterval:       5 * time.Second,
 	}
 }
 
@@ -26,6 +27,7 @@ type approveCSRHandler struct {
 	log                    logrus.FieldLogger
 	clientset              kubernetes.Interface
 	initialCSRFetchTimeout time.Duration
+	csrFetchInterval       time.Duration
 }
 
 func (h *approveCSRHandler) Handle(ctx context.Context, data interface{}) error {
@@ -41,6 +43,11 @@ func (h *approveCSRHandler) Handle(ctx context.Context, data interface{}) error 
 		return fmt.Errorf("getting initial csr: %w", err)
 	}
 
+	if cert.Approved() {
+		log.Debug("csr is already approved")
+		return nil
+	}
+
 	b := backoff.WithContext(
 		newApproveCSRExponentialBackoff(),
 		ctx,
@@ -54,12 +61,7 @@ func (h *approveCSRHandler) Handle(ctx context.Context, data interface{}) error 
 	})
 }
 
-func (h *approveCSRHandler) handle(ctx context.Context, log logrus.FieldLogger, cert *csr.Certificate) error {
-	if cert.Approved() {
-		log.Debug("initial csr is already approved")
-		return nil
-	}
-
+func (h *approveCSRHandler) handle(ctx context.Context, log logrus.FieldLogger, cert *csr.Certificate) (reterr error) {
 	// Since this new csr may be denied we need to delete it.
 	log.Debug("deleting old csr")
 	if err := csr.DeleteCertificate(ctx, h.clientset, cert); err != nil {
@@ -68,7 +70,7 @@ func (h *approveCSRHandler) handle(ctx context.Context, log logrus.FieldLogger, 
 
 	// Create new csr with the same request data as original csr.
 	log.Debug("requesting new csr")
-	cert, err := csr.RequestCertificate(
+	newCert, err := csr.RequestCertificate(
 		ctx,
 		h.clientset,
 		cert,
@@ -79,7 +81,7 @@ func (h *approveCSRHandler) handle(ctx context.Context, log logrus.FieldLogger, 
 
 	// Approve new csr.
 	log.Debug("approving new csr")
-	resp, err := csr.ApproveCertificate(ctx, h.clientset, cert)
+	resp, err := csr.ApproveCertificate(ctx, h.clientset, newCert)
 	if err != nil {
 		return fmt.Errorf("approving csr: %w", err)
 	}
@@ -89,28 +91,45 @@ func (h *approveCSRHandler) handle(ctx context.Context, log logrus.FieldLogger, 
 	return errors.New("certificate signing request was not approved")
 }
 
-func (h *approveCSRHandler) getInitialNodeCSR(ctx context.Context, log *logrus.Entry, nodeName string) (*csr.Certificate, error) {
+func (h *approveCSRHandler) getInitialNodeCSR(ctx context.Context, log logrus.FieldLogger, nodeName string) (*csr.Certificate, error) {
 	log.Debug("getting initial csr")
 
 	ctx, cancel := context.WithTimeout(ctx, h.initialCSRFetchTimeout)
 	defer cancel()
 
+	poll := func() (*csr.Certificate, error) {
+		for {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(h.csrFetchInterval):
+				cert, err := csr.GetCertificateByNodeName(ctx, h.clientset, nodeName)
+				if err != nil && !errors.Is(err, csr.ErrNodeCertificateNotFound) {
+					return nil, err
+				}
+				if cert != nil {
+					return cert, nil
+				}
+			}
+		}
+	}
+
 	var cert *csr.Certificate
 	var err error
 
-	b := backoff.WithContext(backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 3), ctx)
-	err = backoff.Retry(func() error {
-		cert, err = csr.GetCertificateByNodeName(ctx, h.clientset, nodeName)
+	logRetry := func(err error, _ time.Duration) {
+		log.Warnf("getting initial csr, will retry: %v", err)
+	}
+	b := backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 3)
+	err = backoff.RetryNotify(func() error {
+		cert, err = poll()
 		if errors.Is(err, context.DeadlineExceeded) {
 			return backoff.Permanent(err)
 		}
 		return err
-	}, b)
-	if err != nil {
-		return nil, err
-	}
+	}, b, logRetry)
 
-	return cert, nil
+	return cert, err
 }
 
 func newApproveCSRExponentialBackoff() *backoff.ExponentialBackOff {

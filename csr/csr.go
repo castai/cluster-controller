@@ -212,29 +212,24 @@ func getNodeCSRV1(ctx context.Context, client kubernetes.Interface, nodeName str
 		}).String(),
 	}
 
-	watch, err := client.CertificatesV1().CertificateSigningRequests().Watch(ctx, options)
+	csrList, err := client.CertificatesV1().CertificateSigningRequests().List(ctx, options)
 	if err != nil {
 		return nil, err
 	}
-	defer watch.Stop()
 
-	for r := range watch.ResultChan() {
-		csr, ok := r.Object.(*certv1.CertificateSigningRequest)
-		if !ok {
-			continue
-		}
+	// Sort by newest first soo we don't need to parse old items.
+	sort.Slice(csrList.Items, func(i, j int) bool {
+		return csrList.Items[i].CreationTimestamp.After(csrList.Items[j].CreationTimestamp.Time)
+	})
 
-		if len(csr.Status.Certificate) != 0 {
-			// If certificate is present - CSR is already approved.
-			continue
-		}
-
+	for _, csr := range csrList.Items {
+		csr := csr
 		found, err := isNodeCSR(csr.Name, csr.Spec.Request, nodeName)
 		if err != nil {
 			return nil, err
 		}
 		if found {
-			return &Certificate{V1: csr}, nil
+			return &Certificate{V1: &csr}, nil
 		}
 	}
 
@@ -259,11 +254,6 @@ func getNodeCSRV1Beta1(ctx context.Context, client kubernetes.Interface, nodeNam
 
 	for _, item := range csrList.Items {
 		item := item
-		if len(item.Status.Certificate) != 0 {
-			// If certificate is present - CSR is already approved.
-			continue
-		}
-
 		ok, err := isNodeCSR(item.Name, item.Spec.Request, nodeName)
 		if err != nil {
 			return nil, err
