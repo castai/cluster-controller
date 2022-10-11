@@ -111,9 +111,9 @@ type ActionDeleteNode struct {
 
 type ActionDrainNode struct {
 	NodeName            string `json:"nodeName"`
-	NodeID              string `json:"ID"`
 	DrainTimeoutSeconds int    `json:"drainTimeoutSeconds"`
 	Force               bool   `json:"force"`
+	NodeID              string `json:"ID"`
 }
 
 type ActionApproveCSR struct {
@@ -123,10 +123,10 @@ type ActionApproveCSR struct {
 
 type ActionPatchNode struct {
 	NodeName    string            `json:"nodeName"`
-	NodeID      string            `json:"ID"`
 	Labels      map[string]string `json:"labels"`
 	Taints      []NodeTaint       `json:"taints"`
 	Annotations map[string]string `json:"annotations"`
+	NodeID      string            `json:"ID"`
 }
 
 type NodeTaint struct {
@@ -165,9 +165,9 @@ const (
 
 type ActionCheckNodeStatus struct {
 	NodeName           string                       `json:"nodeName"`
-	NodeID             string                       `json:"ID"`
 	NodeStatus         ActionCheckNodeStatus_Status `json:"nodeStatus,omitempty"`
 	WaitTimeoutSeconds *int32                       `json:"waitTimeoutSeconds,omitempty"`
+	NodeID             string                       `json:"ID"`
 }
 
 type ActionChartUpsert struct {
