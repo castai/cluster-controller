@@ -3,6 +3,7 @@ package actions
 import (
 	"context"
 	"fmt"
+	"github.com/google/uuid"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -25,45 +26,48 @@ func TestChartRollbackHandler(t *testing.T) {
 	t.Run("successfully rollback chart", func(t *testing.T) {
 		action := newRollbackAction()
 
+		actionID, _ := uuid.NewUUID()
 		helmMock.EXPECT().Rollback(helm.RollbackOptions{
 			Namespace:   action.Namespace,
 			ReleaseName: action.ReleaseName,
 		}).Return(nil)
 
-		r.NoError(handler.Handle(ctx, action))
+		r.NoError(handler.Handle(ctx, action, actionID.String()))
 	})
 
 	t.Run("skip rollback if version mismatch", func(t *testing.T) {
 		action := newRollbackAction()
 		action.Version = "v0.21.0"
-
-		r.NoError(handler.Handle(ctx, action))
+		actionID := uuid.New().String()
+		r.NoError(handler.Handle(ctx, action, actionID))
 	})
 
 	t.Run("error when rolling back chart", func(t *testing.T) {
 		action := newRollbackAction()
 		someError := fmt.Errorf("some error")
-
+		actionID := uuid.New().String()
 		helmMock.EXPECT().Rollback(helm.RollbackOptions{
 			Namespace:   action.Namespace,
 			ReleaseName: action.ReleaseName,
 		}).Return(someError)
 
-		r.Error(handler.Handle(ctx, action), someError)
+		r.Error(handler.Handle(ctx, action, actionID), someError)
 	})
 
 	t.Run("namespace is missing in rollback action", func(t *testing.T) {
 		action := newRollbackAction()
 		action.Namespace = ""
+		actionID := uuid.New().String()
 
-		r.Error(handler.Handle(ctx, action))
+		r.Error(handler.Handle(ctx, action, actionID))
 	})
 
 	t.Run("helm release is missing in rollback action", func(t *testing.T) {
 		action := newRollbackAction()
 		action.ReleaseName = ""
+		actionID := uuid.New().String()
 
-		r.Error(handler.Handle(ctx, action))
+		r.Error(handler.Handle(ctx, action, actionID))
 	})
 }
 

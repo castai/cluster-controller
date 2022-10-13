@@ -21,6 +21,7 @@ import (
 func TestCreateEvent(t *testing.T) {
 	r := require.New(t)
 	id := types.UID(uuid.New().String())
+	actionID := uuid.New().String()
 
 	tests := []struct {
 		name          string
@@ -86,7 +87,7 @@ func TestCreateEvent(t *testing.T) {
 
 			ctx := context.Background()
 			for i := 0; i < test.actionCount; i++ {
-				err := h.Handle(ctx, test.action)
+				err := h.Handle(ctx, test.action, actionID)
 				r.NoError(err)
 			}
 

@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"testing"
 	"time"
 
@@ -30,6 +31,7 @@ func TestDrainNodeHandler(t *testing.T) {
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 		prependEvictionReaction(t, clientset, true)
 
+		actionID := uuid.New().String()
 		h := drainNodeHandler{
 			log:       log,
 			clientset: clientset,
@@ -42,7 +44,7 @@ func TestDrainNodeHandler(t *testing.T) {
 			Force:               true,
 		}
 
-		err := h.Handle(context.Background(), req)
+		err := h.Handle(context.Background(), req, actionID)
 		r.NoError(err)
 
 		n, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
@@ -66,6 +68,7 @@ func TestDrainNodeHandler(t *testing.T) {
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 		prependEvictionReaction(t, clientset, true)
 
+		actionID := uuid.New().String()
 		h := drainNodeHandler{
 			log:       log,
 			clientset: clientset,
@@ -78,7 +81,7 @@ func TestDrainNodeHandler(t *testing.T) {
 			Force:               true,
 		}
 
-		err := h.Handle(context.Background(), req)
+		err := h.Handle(context.Background(), req, actionID)
 		r.NoError(err)
 
 		_, err = clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
@@ -91,6 +94,7 @@ func TestDrainNodeHandler(t *testing.T) {
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 		prependEvictionReaction(t, clientset, false)
 
+		actionID := uuid.New().String()
 		h := drainNodeHandler{
 			log:       log,
 			clientset: clientset,
@@ -103,7 +107,7 @@ func TestDrainNodeHandler(t *testing.T) {
 			Force:               true,
 		}
 
-		err := h.Handle(context.Background(), req)
+		err := h.Handle(context.Background(), req, actionID)
 		r.EqualError(err, "eviciting node pods: sending evict pods requests: evicting pod pod1 in namespace default: internal")
 
 		n, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
@@ -120,6 +124,7 @@ func TestDrainNodeHandler(t *testing.T) {
 		podName := "pod1"
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 
+		actionID := uuid.New().String()
 		h := drainNodeHandler{
 			log:       log,
 			clientset: clientset,
@@ -148,7 +153,7 @@ func TestDrainNodeHandler(t *testing.T) {
 			return false, nil, nil
 		})
 
-		err := h.Handle(context.Background(), req)
+		err := h.Handle(context.Background(), req, actionID)
 		r.NoError(err)
 
 		n, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
@@ -165,6 +170,7 @@ func TestDrainNodeHandler(t *testing.T) {
 		podName := "pod1"
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 
+		actionID := uuid.New().String()
 		h := drainNodeHandler{
 			log:       log,
 			clientset: clientset,
@@ -190,7 +196,7 @@ func TestDrainNodeHandler(t *testing.T) {
 			return false, nil, nil
 		})
 
-		err := h.Handle(context.Background(), req)
+		err := h.Handle(context.Background(), req, actionID)
 		r.EqualError(err, "forcefully deleting pods: sending delete pods requests: deleting pod pod1 in namespace default: internal")
 
 		_, err = clientset.CoreV1().Pods("default").Get(context.Background(), podName, metav1.GetOptions{})
@@ -203,6 +209,7 @@ func TestDrainNodeHandler(t *testing.T) {
 		podName := "pod1"
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 
+		actionID := uuid.New().String()
 		h := drainNodeHandler{
 			log:       log,
 			clientset: clientset,
@@ -231,7 +238,7 @@ func TestDrainNodeHandler(t *testing.T) {
 			return false, nil, nil
 		})
 
-		err := h.Handle(context.Background(), req)
+		err := h.Handle(context.Background(), req, actionID)
 		r.EqualError(err, "forcefully deleting pods: sending delete pods requests: deleting pod pod1 in namespace default: internal")
 
 		_, err = clientset.CoreV1().Pods("default").Get(context.Background(), podName, metav1.GetOptions{})

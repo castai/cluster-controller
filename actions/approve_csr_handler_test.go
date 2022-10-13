@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -55,7 +56,7 @@ func TestApproveCSRHandler(t *testing.T) {
 			}
 			return true, approved, nil
 		})
-
+		actionID := uuid.New().String()
 		h := &approveCSRHandler{
 			log:                    log,
 			clientset:              client,
@@ -64,7 +65,7 @@ func TestApproveCSRHandler(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		err := h.Handle(ctx, &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"})
+		err := h.Handle(ctx, &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"}, actionID)
 		r.NoError(err)
 	})
 
@@ -83,6 +84,7 @@ func TestApproveCSRHandler(t *testing.T) {
 		}
 		client := fake.NewSimpleClientset(csrRes)
 
+		actionID := uuid.New().String()
 		h := &approveCSRHandler{
 			log:                    log,
 			clientset:              client,
@@ -91,7 +93,7 @@ func TestApproveCSRHandler(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		err := h.Handle(ctx, &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"})
+		err := h.Handle(ctx, &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"}, actionID)
 		r.NoError(err)
 	})
 
@@ -111,6 +113,7 @@ func TestApproveCSRHandler(t *testing.T) {
 		client := fake.NewSimpleClientset(csrRes)
 		client.PrependReactor("list", "certificatesigningrequests", fn)
 
+		actionID := uuid.New().String()
 		h := &approveCSRHandler{
 			log:                    log,
 			clientset:              client,
@@ -119,7 +122,7 @@ func TestApproveCSRHandler(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		err := h.Handle(ctx, &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"})
+		err := h.Handle(ctx, &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"}, actionID)
 		r.NoError(err)
 	})
 
@@ -165,6 +168,7 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 			return true, approved, nil
 		})
 
+		actionID := uuid.New().String()
 		h := &approveCSRHandler{
 			log:                    log,
 			clientset:              client,
@@ -173,7 +177,7 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 		}
 
 		ctx := context.Background()
-		err := h.Handle(ctx, &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"})
+		err := h.Handle(ctx, &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"}, actionID)
 		r.NoError(err)
 	})
 
@@ -192,8 +196,9 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 		watcher.Stop()
 		client.PrependWatchReactor("certificatesigningrequests", ktest.DefaultWatchReactor(watcher, nil))
 
+		actionID := uuid.New().String()
 		ctx := context.Background()
-		err := h.Handle(ctx, &castai.ActionApproveCSR{NodeName: "node"})
+		err := h.Handle(ctx, &castai.ActionApproveCSR{NodeName: "node"}, actionID)
 		r.EqualError(err, "getting initial csr: context deadline exceeded")
 	})
 }

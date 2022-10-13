@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"sync"
 	"testing"
 	"time"
@@ -31,6 +32,7 @@ func TestCheckStatus_Deleted(t *testing.T) {
 		}
 		clientset := fake.NewSimpleClientset(node)
 
+		actionID := uuid.New().String()
 		h := checkNodeStatusHandler{
 			log:       log,
 			clientset: clientset,
@@ -41,7 +43,7 @@ func TestCheckStatus_Deleted(t *testing.T) {
 			NodeStatus: castai.ActionCheckNodeStatus_DELETED,
 		}
 
-		err := h.Handle(context.Background(), req)
+		err := h.Handle(context.Background(), req, actionID)
 		r.EqualError(err, "node is not deleted")
 	})
 
@@ -49,6 +51,7 @@ func TestCheckStatus_Deleted(t *testing.T) {
 		r := require.New(t)
 		clientset := fake.NewSimpleClientset()
 
+		actionID := uuid.New().String()
 		h := checkNodeStatusHandler{
 			log:       log,
 			clientset: clientset,
@@ -59,7 +62,7 @@ func TestCheckStatus_Deleted(t *testing.T) {
 			NodeStatus: castai.ActionCheckNodeStatus_DELETED,
 		}
 
-		err := h.Handle(context.Background(), req)
+		err := h.Handle(context.Background(), req, actionID)
 		r.NoError(err)
 	})
 }
@@ -72,6 +75,7 @@ func TestCheckStatus_Ready(t *testing.T) {
 		r := require.New(t)
 		clientset := fake.NewSimpleClientset()
 
+		actionID := uuid.New().String()
 		h := checkNodeStatusHandler{
 			log:       log,
 			clientset: clientset,
@@ -92,7 +96,7 @@ func TestCheckStatus_Ready(t *testing.T) {
 			WaitTimeoutSeconds: &timeout,
 		}
 
-		err := h.Handle(context.Background(), req)
+		err := h.Handle(context.Background(), req, actionID)
 		r.EqualError(err, "timeout waiting for node node1 to become ready")
 	})
 
@@ -114,6 +118,7 @@ func TestCheckStatus_Ready(t *testing.T) {
 		}
 		clientset := fake.NewSimpleClientset(node)
 
+		actionID := uuid.New().String()
 		h := checkNodeStatusHandler{
 			log:       log,
 			clientset: clientset,
@@ -130,7 +135,7 @@ func TestCheckStatus_Ready(t *testing.T) {
 		wg.Add(2)
 		var err error
 		go func() {
-			err = h.Handle(context.Background(), req)
+			err = h.Handle(context.Background(), req, actionID)
 			wg.Done()
 		}()
 
@@ -165,6 +170,7 @@ func TestCheckStatus_Ready(t *testing.T) {
 			watcher.Stop()
 		}()
 
+		actionID := uuid.New().String()
 		h := checkNodeStatusHandler{
 			log:       log,
 			clientset: clientset,
@@ -175,7 +181,7 @@ func TestCheckStatus_Ready(t *testing.T) {
 			NodeStatus: castai.ActionCheckNodeStatus_READY,
 		}
 
-		err := h.Handle(context.Background(), req)
+		err := h.Handle(context.Background(), req, actionID)
 		r.Error(err)
 		r.EqualError(err, "timeout waiting for node node1 to become ready")
 	})

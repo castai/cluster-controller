@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -25,6 +26,7 @@ func TestChartUpsertHandler(t *testing.T) {
 
 	t.Run("install chart given release is not found", func(t *testing.T) {
 		action := chartUpsertAction()
+		actionID := uuid.New().String()
 
 		helmMock.EXPECT().GetRelease(helm.GetReleaseOptions{
 			Namespace:   action.Namespace,
@@ -38,11 +40,12 @@ func TestChartUpsertHandler(t *testing.T) {
 			ValuesOverrides: action.ValuesOverrides,
 		}).Return(nil, nil)
 
-		r.NoError(handler.Handle(ctx, action))
+		r.NoError(handler.Handle(ctx, action, actionID))
 	})
 
 	t.Run("upgrade chart given release is found", func(t *testing.T) {
 		action := chartUpsertAction()
+		actionID := uuid.New().String()
 
 		rel := &release.Release{
 			Name:      "new-release",
@@ -65,11 +68,12 @@ func TestChartUpsertHandler(t *testing.T) {
 			MaxHistory:      3,
 		}).Return(nil, nil)
 
-		r.NoError(handler.Handle(ctx, action))
+		r.NoError(handler.Handle(ctx, action, actionID))
 	})
 
 	t.Run("rollback previous release before upgrade", func(t *testing.T) {
 		action := chartUpsertAction()
+		actionID := uuid.New().String()
 
 		rel := &release.Release{
 			Name:      "new-release",
@@ -89,7 +93,7 @@ func TestChartUpsertHandler(t *testing.T) {
 
 		helmMock.EXPECT().Upgrade(ctx, gomock.Any()).Return(nil, nil)
 
-		r.NoError(handler.Handle(ctx, action))
+		r.NoError(handler.Handle(ctx, action, actionID))
 	})
 }
 

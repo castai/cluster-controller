@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"testing"
 
 	"github.com/sirupsen/logrus"
@@ -48,6 +49,7 @@ func TestPatchNodeHandler(t *testing.T) {
 		}
 		clientset := fake.NewSimpleClientset(node)
 
+		actionID := uuid.New().String()
 		h := patchNodeHandler{
 			log:       log,
 			clientset: clientset,
@@ -77,7 +79,7 @@ func TestPatchNodeHandler(t *testing.T) {
 			},
 		}
 
-		err := h.Handle(context.Background(), req)
+		err := h.Handle(context.Background(), req, actionID)
 		r.NoError(err)
 
 		n, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
@@ -109,6 +111,7 @@ func TestPatchNodeHandler(t *testing.T) {
 		}
 		clientset := fake.NewSimpleClientset(node)
 
+		actionID := uuid.New().String()
 		h := patchNodeHandler{
 			log:       log,
 			clientset: clientset,
@@ -118,7 +121,7 @@ func TestPatchNodeHandler(t *testing.T) {
 			NodeName: "already-deleted-node",
 		}
 
-		err := h.Handle(context.Background(), req)
+		err := h.Handle(context.Background(), req, actionID)
 		r.NoError(err)
 
 		_, err = clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})

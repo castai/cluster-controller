@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"testing"
 
 	"github.com/sirupsen/logrus"
@@ -29,6 +30,7 @@ func TestDeleteNodeHandler(t *testing.T) {
 		}
 		clientset := fake.NewSimpleClientset(node)
 
+		actionID, _ := uuid.NewUUID()
 		h := deleteNodeHandler{
 			log:       log,
 			clientset: clientset,
@@ -39,7 +41,7 @@ func TestDeleteNodeHandler(t *testing.T) {
 			NodeName: "node1",
 		}
 
-		err := h.Handle(context.Background(), req)
+		err := h.Handle(context.Background(), req, actionID.String())
 		r.NoError(err)
 
 		_, err = clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
@@ -56,6 +58,7 @@ func TestDeleteNodeHandler(t *testing.T) {
 		}
 		clientset := fake.NewSimpleClientset(node)
 
+		actionID := uuid.New().String()
 		h := deleteNodeHandler{
 			log:       log,
 			clientset: clientset,
@@ -65,7 +68,7 @@ func TestDeleteNodeHandler(t *testing.T) {
 		req := &castai.ActionDeleteNode{
 			NodeName: "already-deleted-node",
 		}
-		err := h.Handle(context.Background(), req)
+		err := h.Handle(context.Background(), req, actionID)
 		r.NoError(err)
 
 		_, err = clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})

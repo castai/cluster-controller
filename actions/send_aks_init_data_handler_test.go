@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"testing"
 
 	"github.com/sirupsen/logrus"
@@ -17,6 +18,7 @@ func TestAKSInitDataHandler(t *testing.T) {
 	log.SetLevel(logrus.DebugLevel)
 
 	client := mock.NewMockAPIClient(nil)
+	actionID := uuid.New().String()
 	h := sendAKSInitDataHandler{
 		log:             log,
 		client:          client,
@@ -26,7 +28,7 @@ func TestAKSInitDataHandler(t *testing.T) {
 
 	req := castai.ActionSendAKSInitData{}
 	ctx := context.Background()
-	err := h.Handle(ctx, req)
+	err := h.Handle(ctx, req, actionID)
 
 	r.NoError(err)
 	r.NotEmpty(client.AKSInitDataReq.CloudConfigBase64)

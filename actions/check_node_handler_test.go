@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"testing"
 
 	"github.com/sirupsen/logrus"
@@ -28,6 +29,7 @@ func TestCheckNodeDeletedHandler(t *testing.T) {
 		}
 		clientset := fake.NewSimpleClientset(node)
 
+		actionID := uuid.New().String()
 		h := checkNodeDeletedHandler{
 			log:       log,
 			clientset: clientset,
@@ -38,13 +40,14 @@ func TestCheckNodeDeletedHandler(t *testing.T) {
 			NodeName: "node1",
 		}
 
-		err := h.Handle(context.Background(), req)
+		err := h.Handle(context.Background(), req, actionID)
 		r.EqualError(err, "node is not deleted")
 	})
 
 	t.Run("handle check successfully when node is not found", func(t *testing.T) {
 		clientset := fake.NewSimpleClientset()
 
+		actionID := uuid.New().String()
 		h := checkNodeDeletedHandler{
 			log:       log,
 			clientset: clientset,
@@ -55,7 +58,7 @@ func TestCheckNodeDeletedHandler(t *testing.T) {
 			NodeName: "node1",
 		}
 
-		err := h.Handle(context.Background(), req)
+		err := h.Handle(context.Background(), req, actionID)
 		r.NoError(err)
 	})
 }
