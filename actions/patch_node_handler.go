@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
@@ -26,7 +27,7 @@ type patchNodeHandler struct {
 	clientset kubernetes.Interface
 }
 
-func (h *patchNodeHandler) Handle(ctx context.Context, data interface{}) error {
+func (h *patchNodeHandler) Handle(ctx context.Context, data interface{}, actionID string) error {
 	req, ok := data.(*castai.ActionPatchNode)
 	if !ok {
 		return fmt.Errorf("unexpected type %T for delete patch handler", data)
@@ -47,7 +48,12 @@ func (h *patchNodeHandler) Handle(ctx context.Context, data interface{}) error {
 		}
 	}
 
-	log := h.log.WithField("node_name", req.NodeName)
+	log := h.log.WithFields(logrus.Fields{
+		"node_name": req.NodeName,
+		"node_id":   req.NodeID,
+		"action":    reflect.TypeOf(data.(*castai.ActionPatchNode)).String(),
+		"id":        actionID,
+	})
 
 	node, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
 	if err != nil {

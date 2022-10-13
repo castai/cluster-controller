@@ -23,7 +23,7 @@ type chartUninstallHandler struct {
 	helm helm.Client
 }
 
-func (c *chartUninstallHandler) Handle(_ context.Context, data interface{}) error {
+func (c *chartUninstallHandler) Handle(_ context.Context, data interface{}, _ string) error {
 	req, ok := data.(*castai.ActionChartUninstall)
 	if !ok {
 		return fmt.Errorf("unexpected type %T for upsert uninstall handler", data)

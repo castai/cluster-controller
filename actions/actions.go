@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/davecgh/go-spew/spew"
 	"reflect"
 	"runtime/debug"
 	"sync"
@@ -33,7 +34,7 @@ type Service interface {
 }
 
 type ActionHandler interface {
-	Handle(ctx context.Context, data interface{}) error
+	Handle(ctx context.Context, data interface{}, actionID string) error
 }
 
 func NewService(
@@ -187,6 +188,7 @@ func (s *service) startProcessing(actionID string) bool {
 }
 
 func (s *service) handleAction(ctx context.Context, action *castai.ClusterAction) (err error) {
+	spew.Dump(action.Data())
 	data := action.Data()
 	actionType := reflect.TypeOf(data)
 
@@ -196,13 +198,13 @@ func (s *service) handleAction(ctx context.Context, action *castai.ClusterAction
 		}
 	}()
 
-	s.log.Infof("handling action, id=%s, type=%s, NodeID=%s", action.ID, action.NodeID())
+	s.log.Infof("handling action, id=%s, type=%s", action.ID, actionType)
 	handler, ok := s.actionHandlers[actionType]
 	if !ok {
 		return fmt.Errorf("handler not found for agent action=%s", actionType)
 	}
 
-	if err := handler.Handle(ctx, data); err != nil {
+	if err := handler.Handle(ctx, data, action.ID); err != nil {
 		return fmt.Errorf("handling action %v: %w", actionType, err)
 	}
 	return nil
@@ -210,7 +212,7 @@ func (s *service) handleAction(ctx context.Context, action *castai.ClusterAction
 
 func (s *service) ackAction(ctx context.Context, action *castai.ClusterAction, handleErr error) error {
 	actionType := reflect.TypeOf(action.Data())
-	s.log.Infof("ack action, id=%s, type=%s, NodeID=%s", action.ID, actionType, action.NodeID())
+	s.log.Infof("ack action, id=%s, type=%s", action.ID, actionType)
 
 	return backoff.RetryNotify(func() error {
 		ctx, cancel := context.WithTimeout(ctx, s.cfg.AckTimeout)

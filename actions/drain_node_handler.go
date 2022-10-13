@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -48,13 +49,18 @@ type drainNodeHandler struct {
 	cfg       drainNodeConfig
 }
 
-func (h *drainNodeHandler) Handle(ctx context.Context, data interface{}) error {
+func (h *drainNodeHandler) Handle(ctx context.Context, data interface{}, actionID string) error {
 	req, ok := data.(*castai.ActionDrainNode)
 	if !ok {
 		return fmt.Errorf("unexpected type %T for drain handler", data)
 	}
 
-	log := h.log.WithFields(logrus.Fields{"node_name": req.NodeName, "action": "drain"})
+	log := h.log.WithFields(logrus.Fields{
+		"node_name": req.NodeName,
+		"node_id":   req.NodeID,
+		"action":    reflect.TypeOf(data.(*castai.ActionDrainNode)).String(),
+		"id":        actionID,
+	})
 
 	node, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
 	if err != nil {

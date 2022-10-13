@@ -25,7 +25,7 @@ type chartRollbackHandler struct {
 	version string
 }
 
-func (c *chartRollbackHandler) Handle(_ context.Context, data interface{}) error {
+func (c *chartRollbackHandler) Handle(_ context.Context, data interface{}, _ string) error {
 	req, ok := data.(*castai.ActionChartRollback)
 	if !ok {
 		return fmt.Errorf("unexpected type %T for chart rollback handler", data)

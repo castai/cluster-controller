@@ -3,6 +3,8 @@ package actions
 import (
 	"context"
 	"fmt"
+	"github.com/castai/cluster-controller/castai"
+	"reflect"
 
 	"github.com/sirupsen/logrus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -22,7 +24,7 @@ type disconnectClusterHandler struct {
 	client kubernetes.Interface
 }
 
-func (c *disconnectClusterHandler) Handle(ctx context.Context, data interface{}) error {
+func (c *disconnectClusterHandler) Handle(ctx context.Context, data interface{}, actionID string) error {
 	ns := "castai-agent"
 	_, err := c.client.CoreV1().Namespaces().Get(ctx, ns, metav1.GetOptions{})
 	if err != nil {
@@ -37,8 +39,12 @@ func (c *disconnectClusterHandler) Handle(ctx context.Context, data interface{})
 
 		return err
 	}
+	log := c.log.WithFields(logrus.Fields{
+		"type": reflect.TypeOf(data.(*castai.ActionDisconnectCluster)).String(),
+		"id":   actionID,
+	})
 
-	c.log.Infof("deleting namespace %q", ns)
+	log.Infof("deleting namespace %q", ns)
 	gracePeriod := int64(0) // Delete immediately.
 	if err := c.client.CoreV1().Namespaces().Delete(ctx, ns, metav1.DeleteOptions{GracePeriodSeconds: &gracePeriod}); err != nil {
 		return fmt.Errorf("deleting namespace %q: %v", ns, err)

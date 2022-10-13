@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -30,13 +31,17 @@ type approveCSRHandler struct {
 	csrFetchInterval       time.Duration
 }
 
-func (h *approveCSRHandler) Handle(ctx context.Context, data interface{}) error {
+func (h *approveCSRHandler) Handle(ctx context.Context, data interface{}, actionID string) error {
 	req, ok := data.(*castai.ActionApproveCSR)
 	if !ok {
 		return fmt.Errorf("unexpected type %T for approve csr handler", data)
 	}
-
-	log := h.log.WithField("node_name", req.NodeName)
+	log := h.log.WithFields(logrus.Fields{
+		"node_name": req.NodeName,
+		"node_id":   req.NodeID,
+		"type":      reflect.TypeOf(data.(*castai.ActionApproveCSR)).String(),
+		"id":        actionID,
+	})
 
 	cert, err := h.getInitialNodeCSR(ctx, log, req.NodeName)
 	if err != nil {
