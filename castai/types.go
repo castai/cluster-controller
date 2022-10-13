@@ -106,29 +106,27 @@ type LogEvent struct {
 
 type ActionDeleteNode struct {
 	NodeName string `json:"nodeName"`
-	NodeID   string `json:"ID"`
+	NodeID   string `json:"nodeId"`
 }
 
 type ActionDrainNode struct {
 	NodeName            string `json:"nodeName"`
-	NodeID              string `json:"ID"`
+	NodeID              string `json:"nodeId"`
 	DrainTimeoutSeconds int    `json:"drainTimeoutSeconds"`
 	Force               bool   `json:"force"`
-	NodeID              string `json:"ID"`
 }
 
 type ActionApproveCSR struct {
 	NodeName string `json:"nodeName"`
-	NodeID   string `json:"ID"`
+	NodeID   string `json:"nodeId"`
 }
 
 type ActionPatchNode struct {
 	NodeName    string            `json:"nodeName"`
-	NodeID      string            `json:"ID"`
+	NodeID      string            `json:"nodeId"`
 	Labels      map[string]string `json:"labels"`
 	Taints      []NodeTaint       `json:"taints"`
 	Annotations map[string]string `json:"annotations"`
-	NodeID      string            `json:"ID"`
 }
 
 type NodeTaint struct {
@@ -155,7 +153,7 @@ type ActionSendAKSInitData struct {
 
 type ActionCheckNodeDeleted struct {
 	NodeName string `json:"nodeName"`
-	NodeID   string `json:"ID"`
+	NodeID   string `json:"nodeId"`
 }
 
 type ActionCheckNodeStatus_Status string
@@ -167,10 +165,9 @@ const (
 
 type ActionCheckNodeStatus struct {
 	NodeName           string                       `json:"nodeName"`
-	NodeID             string                       `json:"ID"`
+	NodeID             string                       `json:"nodeId"`
 	NodeStatus         ActionCheckNodeStatus_Status `json:"nodeStatus,omitempty"`
 	WaitTimeoutSeconds *int32                       `json:"waitTimeoutSeconds,omitempty"`
-	NodeID             string                       `json:"ID"`
 }
 
 type ActionChartUpsert struct {
