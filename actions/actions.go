@@ -196,7 +196,7 @@ func (s *service) handleAction(ctx context.Context, action *castai.ClusterAction
 		}
 	}()
 
-	s.log.Infof("handling action, id=%s, type=%s, node_id=%s", action.ID, actionType, action.NodeID())
+	s.log.Infof("handling action, id=%s, type=%s", action.ID, actionType)
 	handler, ok := s.actionHandlers[actionType]
 	if !ok {
 		return fmt.Errorf("handler not found for agent action=%s", actionType)
@@ -210,7 +210,7 @@ func (s *service) handleAction(ctx context.Context, action *castai.ClusterAction
 
 func (s *service) ackAction(ctx context.Context, action *castai.ClusterAction, handleErr error) error {
 	actionType := reflect.TypeOf(action.Data())
-	s.log.Infof("ack action, id=%s, type=%s, node_id=%s", action.ID, actionType, action.NodeID())
+	s.log.Infof("ack action, id=%s, type=%s", action.ID, actionType)
 
 	return backoff.RetryNotify(func() error {
 		ctx, cancel := context.WithTimeout(ctx, s.cfg.AckTimeout)

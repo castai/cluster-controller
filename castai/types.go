@@ -75,28 +75,6 @@ func (c *ClusterAction) Data() interface{} {
 	return nil
 }
 
-func (c *ClusterAction) NodeID() string {
-	if c.ActionDeleteNode != nil {
-		return c.ActionDeleteNode.NodeID
-	}
-	if c.ActionDrainNode != nil {
-		return c.ActionDrainNode.NodeID
-	}
-	if c.ActionPatchNode != nil {
-		return c.ActionPatchNode.NodeID
-	}
-	if c.ActionApproveCSR != nil {
-		return c.ActionApproveCSR.NodeID
-	}
-	if c.ActionCheckNodeDeleted != nil {
-		return c.ActionCheckNodeDeleted.NodeID
-	}
-	if c.ActionCheckNodeStatus != nil {
-		return c.ActionCheckNodeStatus.NodeID
-	}
-	return "nil"
-}
-
 type LogEvent struct {
 	Level   string        `json:"level"`
 	Time    time.Time     `json:"time"`
