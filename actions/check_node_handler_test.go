@@ -29,36 +29,36 @@ func TestCheckNodeDeletedHandler(t *testing.T) {
 		}
 		clientset := fake.NewSimpleClientset(node)
 
-		actionID := uuid.New().String()
 		h := checkNodeDeletedHandler{
 			log:       log,
 			clientset: clientset,
 			cfg:       checkNodeDeletedConfig{},
 		}
 
-		req := &castai.ActionCheckNodeDeleted{
-			NodeName: "node1",
+		action := &castai.ClusterAction{
+			ID:                     uuid.New().String(),
+			ActionCheckNodeDeleted: &castai.ActionCheckNodeDeleted{NodeName: "node1"},
 		}
 
-		err := h.Handle(context.Background(), req, actionID)
+		err := h.Handle(context.Background(), action)
 		r.EqualError(err, "node is not deleted")
 	})
 
 	t.Run("handle check successfully when node is not found", func(t *testing.T) {
 		clientset := fake.NewSimpleClientset()
 
-		actionID := uuid.New().String()
 		h := checkNodeDeletedHandler{
 			log:       log,
 			clientset: clientset,
 			cfg:       checkNodeDeletedConfig{},
 		}
 
-		req := &castai.ActionCheckNodeDeleted{
-			NodeName: "node1",
+		action := &castai.ClusterAction{
+			ID:                     uuid.New().String(),
+			ActionCheckNodeDeleted: &castai.ActionCheckNodeDeleted{NodeName: "node1"},
 		}
 
-		err := h.Handle(context.Background(), req, actionID)
+		err := h.Handle(context.Background(), action)
 		r.NoError(err)
 	})
 }

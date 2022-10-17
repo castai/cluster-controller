@@ -31,16 +31,16 @@ type approveCSRHandler struct {
 	csrFetchInterval       time.Duration
 }
 
-func (h *approveCSRHandler) Handle(ctx context.Context, data interface{}, actionID string) error {
-	req, ok := data.(*castai.ActionApproveCSR)
+func (h *approveCSRHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+	req, ok := action.Data().(*castai.ActionApproveCSR)
 	if !ok {
-		return fmt.Errorf("unexpected type %T for approve csr handler", data)
+		return fmt.Errorf("unexpected type %T for approve csr handler", action.Data())
 	}
 	log := h.log.WithFields(logrus.Fields{
 		"node_name": req.NodeName,
 		"node_id":   req.NodeID,
-		"type":      reflect.TypeOf(data.(*castai.ActionApproveCSR)).String(),
-		"id":        actionID,
+		"type":      reflect.TypeOf(action.Data().(*castai.ActionApproveCSR)).String(),
+		"id":        action.ID,
 	})
 
 	cert, err := h.getInitialNodeCSR(ctx, log, req.NodeName)

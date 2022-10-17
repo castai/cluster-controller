@@ -49,17 +49,17 @@ type drainNodeHandler struct {
 	cfg       drainNodeConfig
 }
 
-func (h *drainNodeHandler) Handle(ctx context.Context, data interface{}, actionID string) error {
-	req, ok := data.(*castai.ActionDrainNode)
+func (h *drainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+	req, ok := action.Data().(*castai.ActionDrainNode)
 	if !ok {
-		return fmt.Errorf("unexpected type %T for drain handler", data)
+		return fmt.Errorf("unexpected type %T for drain handler", action.Data())
 	}
 
 	log := h.log.WithFields(logrus.Fields{
 		"node_name": req.NodeName,
 		"node_id":   req.NodeID,
-		"action":    reflect.TypeOf(data.(*castai.ActionDrainNode)).String(),
-		"id":        actionID,
+		"action":    reflect.TypeOf(action.Data().(*castai.ActionDrainNode)).String(),
+		"id":        action.ID,
 	})
 
 	node, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})

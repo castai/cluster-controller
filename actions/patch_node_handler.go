@@ -27,10 +27,10 @@ type patchNodeHandler struct {
 	clientset kubernetes.Interface
 }
 
-func (h *patchNodeHandler) Handle(ctx context.Context, data interface{}, actionID string) error {
-	req, ok := data.(*castai.ActionPatchNode)
+func (h *patchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+	req, ok := action.Data().(*castai.ActionPatchNode)
 	if !ok {
-		return fmt.Errorf("unexpected type %T for delete patch handler", data)
+		return fmt.Errorf("unexpected type %T for delete patch handler", action.Data())
 	}
 	for k := range req.Labels {
 		if k == "" {
@@ -51,8 +51,8 @@ func (h *patchNodeHandler) Handle(ctx context.Context, data interface{}, actionI
 	log := h.log.WithFields(logrus.Fields{
 		"node_name": req.NodeName,
 		"node_id":   req.NodeID,
-		"action":    reflect.TypeOf(data.(*castai.ActionPatchNode)).String(),
-		"id":        actionID,
+		"action":    reflect.TypeOf(action.Data().(*castai.ActionPatchNode)).String(),
+		"id":        action.ID,
 	})
 
 	node, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})

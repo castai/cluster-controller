@@ -49,37 +49,39 @@ func TestPatchNodeHandler(t *testing.T) {
 		}
 		clientset := fake.NewSimpleClientset(node)
 
-		actionID := uuid.New().String()
 		h := patchNodeHandler{
 			log:       log,
 			clientset: clientset,
 		}
 
-		req := &castai.ActionPatchNode{
-			NodeName: "node1",
-			Labels: map[string]string{
-				"-l1": "",
-				"l2":  "v2",
-			},
-			Annotations: map[string]string{
-				"-a1": "",
-				"a2":  "",
-			},
-			Taints: []castai.NodeTaint{
-				{
-					Key:    "t3",
-					Value:  "t3",
-					Effect: string(v1.TaintEffectNoSchedule),
+		action := &castai.ClusterAction{
+			ID: uuid.New().String(),
+			ActionPatchNode: &castai.ActionPatchNode{
+				NodeName: "node1",
+				Labels: map[string]string{
+					"-l1": "",
+					"l2":  "v2",
 				},
-				{
-					Key:    "-t2",
-					Value:  "",
-					Effect: string(v1.TaintEffectNoSchedule),
+				Annotations: map[string]string{
+					"-a1": "",
+					"a2":  "",
+				},
+				Taints: []castai.NodeTaint{
+					{
+						Key:    "t3",
+						Value:  "t3",
+						Effect: string(v1.TaintEffectNoSchedule),
+					},
+					{
+						Key:    "-t2",
+						Value:  "",
+						Effect: string(v1.TaintEffectNoSchedule),
+					},
 				},
 			},
 		}
 
-		err := h.Handle(context.Background(), req, actionID)
+		err := h.Handle(context.Background(), action)
 		r.NoError(err)
 
 		n, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
@@ -111,17 +113,18 @@ func TestPatchNodeHandler(t *testing.T) {
 		}
 		clientset := fake.NewSimpleClientset(node)
 
-		actionID := uuid.New().String()
+		action := &castai.ClusterAction{
+			ID: uuid.New().String(),
+			ActionPatchNode: &castai.ActionPatchNode{
+				NodeName: "already-deleted-node",
+			},
+		}
 		h := patchNodeHandler{
 			log:       log,
 			clientset: clientset,
 		}
 
-		req := &castai.ActionPatchNode{
-			NodeName: "already-deleted-node",
-		}
-
-		err := h.Handle(context.Background(), req, actionID)
+		err := h.Handle(context.Background(), action)
 		r.NoError(err)
 
 		_, err = clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})

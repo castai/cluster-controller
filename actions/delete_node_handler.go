@@ -37,17 +37,17 @@ type deleteNodeHandler struct {
 	cfg       deleteNodeConfig
 }
 
-func (h *deleteNodeHandler) Handle(ctx context.Context, data interface{}, actionID string) error {
-	req, ok := data.(*castai.ActionDeleteNode)
+func (h *deleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+	req, ok := action.Data().(*castai.ActionDeleteNode)
 	if !ok {
-		return fmt.Errorf("unexpected type %T for delete node handler", data)
+		return fmt.Errorf("unexpected type %T for delete node handler", action.Data())
 	}
 
 	log := h.log.WithFields(logrus.Fields{
 		"node_name": req.NodeName,
 		"node_id":   req.NodeID,
-		"type":      reflect.TypeOf(data.(*castai.ActionDeleteNode)).String(),
-		"id":        actionID,
+		"type":      reflect.TypeOf(action.Data().(*castai.ActionDeleteNode)).String(),
+		"id":        action.ID,
 	})
 	log.Info("deleting kubernetes node")
 

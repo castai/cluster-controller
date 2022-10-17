@@ -24,7 +24,7 @@ type disconnectClusterHandler struct {
 	client kubernetes.Interface
 }
 
-func (c *disconnectClusterHandler) Handle(ctx context.Context, data interface{}, actionID string) error {
+func (c *disconnectClusterHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
 	ns := "castai-agent"
 	_, err := c.client.CoreV1().Namespaces().Get(ctx, ns, metav1.GetOptions{})
 	if err != nil {
@@ -40,8 +40,8 @@ func (c *disconnectClusterHandler) Handle(ctx context.Context, data interface{},
 		return err
 	}
 	log := c.log.WithFields(logrus.Fields{
-		"type": reflect.TypeOf(data.(*castai.ActionDisconnectCluster)).String(),
-		"id":   actionID,
+		"type": reflect.TypeOf(action.Data().(*castai.ActionDisconnectCluster)).String(),
+		"id":   action.ID,
 	})
 
 	log.Infof("deleting namespace %q", ns)

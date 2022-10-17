@@ -30,18 +30,20 @@ func TestDeleteNodeHandler(t *testing.T) {
 		}
 		clientset := fake.NewSimpleClientset(node)
 
-		actionID, _ := uuid.NewUUID()
+		action := &castai.ClusterAction{
+			ID: uuid.New().String(),
+			ActionDeleteNode: &castai.ActionDeleteNode{
+				NodeName: "node1",
+			},
+		}
+
 		h := deleteNodeHandler{
 			log:       log,
 			clientset: clientset,
 			cfg:       deleteNodeConfig{},
 		}
 
-		req := &castai.ActionDeleteNode{
-			NodeName: "node1",
-		}
-
-		err := h.Handle(context.Background(), req, actionID.String())
+		err := h.Handle(context.Background(), action)
 		r.NoError(err)
 
 		_, err = clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
@@ -58,17 +60,20 @@ func TestDeleteNodeHandler(t *testing.T) {
 		}
 		clientset := fake.NewSimpleClientset(node)
 
-		actionID := uuid.New().String()
+		action := &castai.ClusterAction{
+			ID: uuid.New().String(),
+			ActionDeleteNode: &castai.ActionDeleteNode{
+				NodeName: "already-deleted-node",
+			},
+		}
+
 		h := deleteNodeHandler{
 			log:       log,
 			clientset: clientset,
 			cfg:       deleteNodeConfig{},
 		}
 
-		req := &castai.ActionDeleteNode{
-			NodeName: "already-deleted-node",
-		}
-		err := h.Handle(context.Background(), req, actionID)
+		err := h.Handle(context.Background(), action)
 		r.NoError(err)
 
 		_, err = clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})

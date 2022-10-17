@@ -56,7 +56,13 @@ func TestApproveCSRHandler(t *testing.T) {
 			}
 			return true, approved, nil
 		})
-		actionID := uuid.New().String()
+
+		actionApproveCSR := &castai.ClusterAction{
+			ID:               uuid.New().String(),
+			ActionApproveCSR: &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"},
+			CreatedAt:        time.Time{},
+		}
+
 		h := &approveCSRHandler{
 			log:                    log,
 			clientset:              client,
@@ -65,7 +71,7 @@ func TestApproveCSRHandler(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		err := h.Handle(ctx, &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"}, actionID)
+		err := h.Handle(ctx, actionApproveCSR)
 		r.NoError(err)
 	})
 
@@ -84,7 +90,11 @@ func TestApproveCSRHandler(t *testing.T) {
 		}
 		client := fake.NewSimpleClientset(csrRes)
 
-		actionID := uuid.New().String()
+		actionApproveCSR := &castai.ClusterAction{
+			ID:               uuid.New().String(),
+			ActionApproveCSR: &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"},
+			CreatedAt:        time.Time{},
+		}
 		h := &approveCSRHandler{
 			log:                    log,
 			clientset:              client,
@@ -93,7 +103,7 @@ func TestApproveCSRHandler(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		err := h.Handle(ctx, &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"}, actionID)
+		err := h.Handle(ctx, actionApproveCSR)
 		r.NoError(err)
 	})
 
@@ -113,7 +123,11 @@ func TestApproveCSRHandler(t *testing.T) {
 		client := fake.NewSimpleClientset(csrRes)
 		client.PrependReactor("list", "certificatesigningrequests", fn)
 
-		actionID := uuid.New().String()
+		actionApproveCSR := &castai.ClusterAction{
+			ID:               uuid.New().String(),
+			ActionApproveCSR: &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"},
+			CreatedAt:        time.Time{},
+		}
 		h := &approveCSRHandler{
 			log:                    log,
 			clientset:              client,
@@ -122,7 +136,7 @@ func TestApproveCSRHandler(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		err := h.Handle(ctx, &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"}, actionID)
+		err := h.Handle(ctx, actionApproveCSR)
 		r.NoError(err)
 	})
 
@@ -168,7 +182,11 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 			return true, approved, nil
 		})
 
-		actionID := uuid.New().String()
+		actionApproveCSR := &castai.ClusterAction{
+			ID:               uuid.New().String(),
+			ActionApproveCSR: &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"},
+			CreatedAt:        time.Time{},
+		}
 		h := &approveCSRHandler{
 			log:                    log,
 			clientset:              client,
@@ -177,7 +195,7 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 		}
 
 		ctx := context.Background()
-		err := h.Handle(ctx, &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"}, actionID)
+		err := h.Handle(ctx, actionApproveCSR)
 		r.NoError(err)
 	})
 
@@ -196,9 +214,14 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 		watcher.Stop()
 		client.PrependWatchReactor("certificatesigningrequests", ktest.DefaultWatchReactor(watcher, nil))
 
-		actionID := uuid.New().String()
+		actionApproveCSR := &castai.ClusterAction{
+			ID:               uuid.New().String(),
+			ActionApproveCSR: &castai.ActionApproveCSR{NodeName: "node"},
+			CreatedAt:        time.Time{},
+		}
+
 		ctx := context.Background()
-		err := h.Handle(ctx, &castai.ActionApproveCSR{NodeName: "node"}, actionID)
+		err := h.Handle(ctx, actionApproveCSR)
 		r.EqualError(err, "getting initial csr: context deadline exceeded")
 	})
 }

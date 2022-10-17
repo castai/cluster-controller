@@ -18,7 +18,6 @@ func TestAKSInitDataHandler(t *testing.T) {
 	log.SetLevel(logrus.DebugLevel)
 
 	client := mock.NewMockAPIClient(nil)
-	actionID := uuid.New().String()
 	h := sendAKSInitDataHandler{
 		log:             log,
 		client:          client,
@@ -26,9 +25,12 @@ func TestAKSInitDataHandler(t *testing.T) {
 		baseDir:         "../testdata/aks",
 	}
 
-	req := castai.ActionSendAKSInitData{}
+	action := &castai.ClusterAction{
+		ID:                    uuid.New().String(),
+		ActionSendAKSInitData: &castai.ActionSendAKSInitData{},
+	}
 	ctx := context.Background()
-	err := h.Handle(ctx, req, actionID)
+	err := h.Handle(ctx, action)
 
 	r.NoError(err)
 	r.NotEmpty(client.AKSInitDataReq.CloudConfigBase64)

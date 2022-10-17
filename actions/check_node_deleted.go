@@ -38,17 +38,17 @@ type checkNodeDeletedHandler struct {
 	cfg       checkNodeDeletedConfig
 }
 
-func (h *checkNodeDeletedHandler) Handle(ctx context.Context, data interface{}, actionID string) error {
-	req, ok := data.(*castai.ActionCheckNodeDeleted)
+func (h *checkNodeDeletedHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+	req, ok := action.Data().(*castai.ActionCheckNodeDeleted)
 	if !ok {
-		return fmt.Errorf("unexpected type %T for check node deleted handler", data)
+		return fmt.Errorf("unexpected type %T for check node deleted handler", action.Data())
 	}
 
 	log := h.log.WithFields(logrus.Fields{
 		"node_name": req.NodeName,
 		"node_id":   req.NodeID,
-		"type":      reflect.TypeOf(data.(*castai.ActionCheckNodeDeleted)).String(),
-		"id":        actionID,
+		"type":      reflect.TypeOf(action.Data().(*castai.ActionCheckNodeDeleted)).String(),
+		"id":        action.ID,
 	})
 	log.Info("checking if node is deleted")
 

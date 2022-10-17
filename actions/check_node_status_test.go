@@ -32,18 +32,20 @@ func TestCheckStatus_Deleted(t *testing.T) {
 		}
 		clientset := fake.NewSimpleClientset(node)
 
-		actionID := uuid.New().String()
 		h := checkNodeStatusHandler{
 			log:       log,
 			clientset: clientset,
 		}
 
-		req := &castai.ActionCheckNodeStatus{
-			NodeName:   "node1",
-			NodeStatus: castai.ActionCheckNodeStatus_DELETED,
+		action := &castai.ClusterAction{
+			ID: uuid.New().String(),
+			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
+				NodeName:   "node1",
+				NodeStatus: castai.ActionCheckNodeStatus_DELETED,
+			},
 		}
 
-		err := h.Handle(context.Background(), req, actionID)
+		err := h.Handle(context.Background(), action)
 		r.EqualError(err, "node is not deleted")
 	})
 
@@ -51,18 +53,20 @@ func TestCheckStatus_Deleted(t *testing.T) {
 		r := require.New(t)
 		clientset := fake.NewSimpleClientset()
 
-		actionID := uuid.New().String()
 		h := checkNodeStatusHandler{
 			log:       log,
 			clientset: clientset,
 		}
 
-		req := &castai.ActionCheckNodeStatus{
-			NodeName:   "node1",
-			NodeStatus: castai.ActionCheckNodeStatus_DELETED,
+		action := &castai.ClusterAction{
+			ID: uuid.New().String(),
+			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
+				NodeName:   "node1",
+				NodeStatus: castai.ActionCheckNodeStatus_DELETED,
+			},
 		}
 
-		err := h.Handle(context.Background(), req, actionID)
+		err := h.Handle(context.Background(), action)
 		r.NoError(err)
 	})
 }
@@ -75,7 +79,6 @@ func TestCheckStatus_Ready(t *testing.T) {
 		r := require.New(t)
 		clientset := fake.NewSimpleClientset()
 
-		actionID := uuid.New().String()
 		h := checkNodeStatusHandler{
 			log:       log,
 			clientset: clientset,
@@ -90,13 +93,16 @@ func TestCheckStatus_Ready(t *testing.T) {
 		}()
 
 		timeout := int32(1)
-		req := &castai.ActionCheckNodeStatus{
-			NodeName:           "node1",
-			NodeStatus:         castai.ActionCheckNodeStatus_READY,
-			WaitTimeoutSeconds: &timeout,
+		action := &castai.ClusterAction{
+			ID: uuid.New().String(),
+			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
+				NodeName:           "node1",
+				NodeStatus:         castai.ActionCheckNodeStatus_READY,
+				WaitTimeoutSeconds: &timeout,
+			},
 		}
 
-		err := h.Handle(context.Background(), req, actionID)
+		err := h.Handle(context.Background(), action)
 		r.EqualError(err, "timeout waiting for node node1 to become ready")
 	})
 
@@ -118,24 +124,26 @@ func TestCheckStatus_Ready(t *testing.T) {
 		}
 		clientset := fake.NewSimpleClientset(node)
 
-		actionID := uuid.New().String()
 		h := checkNodeStatusHandler{
 			log:       log,
 			clientset: clientset,
 		}
 
 		timeout := int32(60)
-		req := &castai.ActionCheckNodeStatus{
-			NodeName:           "node1",
-			NodeStatus:         castai.ActionCheckNodeStatus_READY,
-			WaitTimeoutSeconds: &timeout,
+		action := &castai.ClusterAction{
+			ID: uuid.New().String(),
+			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
+				NodeName:           "node1",
+				NodeStatus:         castai.ActionCheckNodeStatus_READY,
+				WaitTimeoutSeconds: &timeout,
+			},
 		}
 
 		var wg sync.WaitGroup
 		wg.Add(2)
 		var err error
 		go func() {
-			err = h.Handle(context.Background(), req, actionID)
+			err = h.Handle(context.Background(), action)
 			wg.Done()
 		}()
 
@@ -170,18 +178,20 @@ func TestCheckStatus_Ready(t *testing.T) {
 			watcher.Stop()
 		}()
 
-		actionID := uuid.New().String()
 		h := checkNodeStatusHandler{
 			log:       log,
 			clientset: clientset,
 		}
 
-		req := &castai.ActionCheckNodeStatus{
-			NodeName:   "node1",
-			NodeStatus: castai.ActionCheckNodeStatus_READY,
+		action := &castai.ClusterAction{
+			ID: uuid.New().String(),
+			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
+				NodeName:   "node1",
+				NodeStatus: castai.ActionCheckNodeStatus_READY,
+			},
 		}
 
-		err := h.Handle(context.Background(), req, actionID)
+		err := h.Handle(context.Background(), action)
 		r.Error(err)
 		r.EqualError(err, "timeout waiting for node node1 to become ready")
 	})
