@@ -25,10 +25,10 @@ type chartUpsertHandler struct {
 	helm helm.Client
 }
 
-func (c *chartUpsertHandler) Handle(ctx context.Context, data interface{}) error {
-	req, ok := data.(*castai.ActionChartUpsert)
+func (c *chartUpsertHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+	req, ok := action.Data().(*castai.ActionChartUpsert)
 	if !ok {
-		return fmt.Errorf("unexpected type %T for upsert chart handler", data)
+		return fmt.Errorf("unexpected type %T for upsert chart handler", action.Data())
 	}
 
 	if err := c.validateRequest(req); err != nil {

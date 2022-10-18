@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"testing"
 
 	"github.com/sirupsen/logrus"
@@ -34,11 +35,12 @@ func TestCheckNodeDeletedHandler(t *testing.T) {
 			cfg:       checkNodeDeletedConfig{},
 		}
 
-		req := &castai.ActionCheckNodeDeleted{
-			NodeName: "node1",
+		action := &castai.ClusterAction{
+			ID:                     uuid.New().String(),
+			ActionCheckNodeDeleted: &castai.ActionCheckNodeDeleted{NodeName: "node1"},
 		}
 
-		err := h.Handle(context.Background(), req)
+		err := h.Handle(context.Background(), action)
 		r.EqualError(err, "node is not deleted")
 	})
 
@@ -51,11 +53,12 @@ func TestCheckNodeDeletedHandler(t *testing.T) {
 			cfg:       checkNodeDeletedConfig{},
 		}
 
-		req := &castai.ActionCheckNodeDeleted{
-			NodeName: "node1",
+		action := &castai.ClusterAction{
+			ID:                     uuid.New().String(),
+			ActionCheckNodeDeleted: &castai.ActionCheckNodeDeleted{NodeName: "node1"},
 		}
 
-		err := h.Handle(context.Background(), req)
+		err := h.Handle(context.Background(), action)
 		r.NoError(err)
 	})
 }

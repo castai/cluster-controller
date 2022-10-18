@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"testing"
 
 	"github.com/sirupsen/logrus"
@@ -26,9 +27,13 @@ func TestDisconnectClusterHandler(t *testing.T) {
 	}
 	clientset := fake.NewSimpleClientset(node)
 
+	action := &castai.ClusterAction{
+		ID:                      uuid.New().String(),
+		ActionDisconnectCluster: &castai.ActionDisconnectCluster{},
+	}
 	handler := newDisconnectClusterHandler(logrus.New(), clientset)
 
-	err := handler.Handle(ctx, &castai.ActionDisconnectCluster{})
+	err := handler.Handle(ctx, action)
 	r.NoError(err)
 
 	_, err = clientset.CoreV1().Namespaces().Get(ctx, ns, metav1.GetOptions{})

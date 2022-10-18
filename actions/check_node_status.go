@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -29,15 +30,18 @@ type checkNodeStatusHandler struct {
 	clientset kubernetes.Interface
 }
 
-func (h *checkNodeStatusHandler) Handle(ctx context.Context, data interface{}) error {
-	req, ok := data.(*castai.ActionCheckNodeStatus)
+func (h *checkNodeStatusHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+	req, ok := action.Data().(*castai.ActionCheckNodeStatus)
 	if !ok {
-		return fmt.Errorf("unexpected type %T for check node status handler", data)
+		return fmt.Errorf("unexpected type %T for check node status handler", action.Data())
 	}
 
 	log := h.log.WithFields(logrus.Fields{
 		"node_name":   req.NodeName,
+		"node_id":     req.NodeID,
 		"node_status": req.NodeStatus,
+		"type":        reflect.TypeOf(action.Data().(*castai.ActionCheckNodeStatus)).String(),
+		"id":          action.ID,
 	})
 
 	switch req.NodeStatus {

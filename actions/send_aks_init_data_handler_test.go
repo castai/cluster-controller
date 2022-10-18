@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"testing"
 
 	"github.com/sirupsen/logrus"
@@ -24,9 +25,12 @@ func TestAKSInitDataHandler(t *testing.T) {
 		baseDir:         "../testdata/aks",
 	}
 
-	req := castai.ActionSendAKSInitData{}
+	action := &castai.ClusterAction{
+		ID:                    uuid.New().String(),
+		ActionSendAKSInitData: &castai.ActionSendAKSInitData{},
+	}
 	ctx := context.Background()
-	err := h.Handle(ctx, req)
+	err := h.Handle(ctx, action)
 
 	r.NoError(err)
 	r.NotEmpty(client.AKSInitDataReq.CloudConfigBase64)

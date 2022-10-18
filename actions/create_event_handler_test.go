@@ -24,21 +24,24 @@ func TestCreateEvent(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		action        *castai.ActionCreateEvent
+		action        *castai.ClusterAction
 		actionCount   int
 		object        runtime.Object
 		expectedEvent *corev1.Event
 	}{
 		{
 			name: "create single pod event",
-			action: &castai.ActionCreateEvent{
-				Reporter:  "autoscaler.cast.ai",
-				ObjectRef: podObjReference(testPod(id)),
-				EventTime: time.Now(),
-				EventType: "Normal",
-				Reason:    "Just because!",
-				Action:    "During node creation.",
-				Message:   "Oh common, you can do better.",
+			action: &castai.ClusterAction{
+				ID: uuid.New().String(),
+				ActionCreateEvent: &castai.ActionCreateEvent{
+					Reporter:  "autoscaler.cast.ai",
+					ObjectRef: podObjReference(testPod(id)),
+					EventTime: time.Now(),
+					EventType: "Normal",
+					Reason:    "Just because!",
+					Action:    "During node creation.",
+					Message:   "Oh common, you can do better.",
+				},
 			},
 			actionCount: 1,
 			object:      testPod(id),
@@ -54,14 +57,17 @@ func TestCreateEvent(t *testing.T) {
 		},
 		{
 			name: "create several pod events",
-			action: &castai.ActionCreateEvent{
-				Reporter:  "provisioning.cast.ai",
-				ObjectRef: podObjReference(testPod(id)),
-				EventTime: time.Now(),
-				EventType: "Warning",
-				Reason:    "Just because!",
-				Action:    "During node creation.",
-				Message:   "Oh common, you can do better.",
+			action: &castai.ClusterAction{
+				ID: "",
+				ActionCreateEvent: &castai.ActionCreateEvent{
+					Reporter:  "provisioning.cast.ai",
+					ObjectRef: podObjReference(testPod(id)),
+					EventTime: time.Now(),
+					EventType: "Warning",
+					Reason:    "Just because!",
+					Action:    "During node creation.",
+					Message:   "Oh common, you can do better.",
+				},
 			},
 			actionCount: 6,
 			object:      testPod(id),
@@ -90,8 +96,8 @@ func TestCreateEvent(t *testing.T) {
 				r.NoError(err)
 			}
 
-			eventTime := test.action.EventTime
-			testEventName := fmt.Sprintf("%v.%x", test.action.ObjectRef.Name, eventTime.Unix())
+			eventTime := test.action.ActionCreateEvent.EventTime
+			testEventName := fmt.Sprintf("%v.%x", test.action.ActionCreateEvent.ObjectRef.Name, eventTime.Unix())
 
 			testEvent, err := clientSet.CoreV1().
 				Events(test.expectedEvent.Namespace).

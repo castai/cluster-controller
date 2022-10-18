@@ -3,6 +3,7 @@ package actions
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -36,13 +37,18 @@ type deleteNodeHandler struct {
 	cfg       deleteNodeConfig
 }
 
-func (h *deleteNodeHandler) Handle(ctx context.Context, data interface{}) error {
-	req, ok := data.(*castai.ActionDeleteNode)
+func (h *deleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+	req, ok := action.Data().(*castai.ActionDeleteNode)
 	if !ok {
-		return fmt.Errorf("unexpected type %T for delete node handler", data)
+		return fmt.Errorf("unexpected type %T for delete node handler", action.Data())
 	}
 
-	log := h.log.WithField("node_name", req.NodeName)
+	log := h.log.WithFields(logrus.Fields{
+		"node_name": req.NodeName,
+		"node_id":   req.NodeID,
+		"type":      reflect.TypeOf(action.Data().(*castai.ActionDeleteNode)).String(),
+		"id":        action.ID,
+	})
 	log.Info("deleting kubernetes node")
 
 	b := backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(h.cfg.deleteRetryWait), h.cfg.deleteRetries), ctx)

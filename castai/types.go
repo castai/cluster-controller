@@ -84,20 +84,24 @@ type LogEvent struct {
 
 type ActionDeleteNode struct {
 	NodeName string `json:"nodeName"`
+	NodeID   string `json:"nodeId"`
 }
 
 type ActionDrainNode struct {
 	NodeName            string `json:"nodeName"`
+	NodeID              string `json:"nodeId"`
 	DrainTimeoutSeconds int    `json:"drainTimeoutSeconds"`
 	Force               bool   `json:"force"`
 }
 
 type ActionApproveCSR struct {
 	NodeName string `json:"nodeName"`
+	NodeID   string `json:"nodeId"`
 }
 
 type ActionPatchNode struct {
 	NodeName    string            `json:"nodeName"`
+	NodeID      string            `json:"nodeId"`
 	Labels      map[string]string `json:"labels"`
 	Taints      []NodeTaint       `json:"taints"`
 	Annotations map[string]string `json:"annotations"`
@@ -127,6 +131,7 @@ type ActionSendAKSInitData struct {
 
 type ActionCheckNodeDeleted struct {
 	NodeName string `json:"nodeName"`
+	NodeID   string `json:"nodeId"`
 }
 
 type ActionCheckNodeStatus_Status string
@@ -138,6 +143,7 @@ const (
 
 type ActionCheckNodeStatus struct {
 	NodeName           string                       `json:"nodeName"`
+	NodeID             string                       `json:"nodeId"`
 	NodeStatus         ActionCheckNodeStatus_Status `json:"nodeStatus,omitempty"`
 	WaitTimeoutSeconds *int32                       `json:"waitTimeoutSeconds,omitempty"`
 }

@@ -3,6 +3,7 @@ package actions
 import (
 	"context"
 	"fmt"
+	"github.com/google/uuid"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -23,45 +24,58 @@ func TestChartRollbackHandler(t *testing.T) {
 	handler := newChartRollbackHandler(logrus.New(), helmMock, "v0.20.0")
 
 	t.Run("successfully rollback chart", func(t *testing.T) {
-		action := newRollbackAction()
+		action := &castai.ClusterAction{
+			ID:                  uuid.New().String(),
+			ActionChartRollback: newRollbackAction(),
+		}
 
 		helmMock.EXPECT().Rollback(helm.RollbackOptions{
-			Namespace:   action.Namespace,
-			ReleaseName: action.ReleaseName,
+			Namespace:   action.ActionChartRollback.Namespace,
+			ReleaseName: action.ActionChartRollback.ReleaseName,
 		}).Return(nil)
 
 		r.NoError(handler.Handle(ctx, action))
 	})
 
 	t.Run("skip rollback if version mismatch", func(t *testing.T) {
-		action := newRollbackAction()
-		action.Version = "v0.21.0"
-
+		action := &castai.ClusterAction{
+			ID:                  uuid.New().String(),
+			ActionChartRollback: newRollbackAction(),
+		}
+		action.ActionChartRollback.Version = "v0.21.0"
 		r.NoError(handler.Handle(ctx, action))
 	})
 
 	t.Run("error when rolling back chart", func(t *testing.T) {
-		action := newRollbackAction()
+		action := &castai.ClusterAction{
+			ID:                  uuid.New().String(),
+			ActionChartRollback: newRollbackAction(),
+		}
 		someError := fmt.Errorf("some error")
-
 		helmMock.EXPECT().Rollback(helm.RollbackOptions{
-			Namespace:   action.Namespace,
-			ReleaseName: action.ReleaseName,
+			Namespace:   action.ActionChartRollback.Namespace,
+			ReleaseName: action.ActionChartRollback.ReleaseName,
 		}).Return(someError)
 
 		r.Error(handler.Handle(ctx, action), someError)
 	})
 
 	t.Run("namespace is missing in rollback action", func(t *testing.T) {
-		action := newRollbackAction()
-		action.Namespace = ""
+		action := &castai.ClusterAction{
+			ID:                  uuid.New().String(),
+			ActionChartRollback: newRollbackAction(),
+		}
+		action.ActionChartRollback.Namespace = ""
 
 		r.Error(handler.Handle(ctx, action))
 	})
 
 	t.Run("helm release is missing in rollback action", func(t *testing.T) {
-		action := newRollbackAction()
-		action.ReleaseName = ""
+		action := &castai.ClusterAction{
+			ID:                  uuid.New().String(),
+			ActionChartRollback: newRollbackAction(),
+		}
+		action.ActionChartRollback.ReleaseName = ""
 
 		r.Error(handler.Handle(ctx, action))
 	})

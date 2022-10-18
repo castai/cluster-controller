@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"testing"
 	"time"
 
@@ -30,19 +31,21 @@ func TestDrainNodeHandler(t *testing.T) {
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 		prependEvictionReaction(t, clientset, true)
 
+		action := &castai.ClusterAction{
+			ID: uuid.New().String(),
+			ActionDrainNode: &castai.ActionDrainNode{
+				NodeName:            "node1",
+				DrainTimeoutSeconds: 1,
+				Force:               true,
+			},
+		}
 		h := drainNodeHandler{
 			log:       log,
 			clientset: clientset,
 			cfg:       drainNodeConfig{},
 		}
 
-		req := &castai.ActionDrainNode{
-			NodeName:            "node1",
-			DrainTimeoutSeconds: 1,
-			Force:               true,
-		}
-
-		err := h.Handle(context.Background(), req)
+		err := h.Handle(context.Background(), action)
 		r.NoError(err)
 
 		n, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
@@ -66,19 +69,22 @@ func TestDrainNodeHandler(t *testing.T) {
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 		prependEvictionReaction(t, clientset, true)
 
+		action := &castai.ClusterAction{
+			ID: uuid.New().String(),
+			ActionDrainNode: &castai.ActionDrainNode{
+				NodeName:            "already-deleted-node",
+				DrainTimeoutSeconds: 1,
+				Force:               true,
+			},
+		}
+
 		h := drainNodeHandler{
 			log:       log,
 			clientset: clientset,
 			cfg:       drainNodeConfig{},
 		}
 
-		req := &castai.ActionDrainNode{
-			NodeName:            "already-deleted-node",
-			DrainTimeoutSeconds: 1,
-			Force:               true,
-		}
-
-		err := h.Handle(context.Background(), req)
+		err := h.Handle(context.Background(), action)
 		r.NoError(err)
 
 		_, err = clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
@@ -91,19 +97,22 @@ func TestDrainNodeHandler(t *testing.T) {
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 		prependEvictionReaction(t, clientset, false)
 
+		action := &castai.ClusterAction{
+			ID: uuid.New().String(),
+			ActionDrainNode: &castai.ActionDrainNode{
+				NodeName:            "node1",
+				DrainTimeoutSeconds: 1,
+				Force:               true,
+			},
+		}
+
 		h := drainNodeHandler{
 			log:       log,
 			clientset: clientset,
 			cfg:       drainNodeConfig{},
 		}
 
-		req := &castai.ActionDrainNode{
-			NodeName:            "node1",
-			DrainTimeoutSeconds: 1,
-			Force:               true,
-		}
-
-		err := h.Handle(context.Background(), req)
+		err := h.Handle(context.Background(), action)
 		r.EqualError(err, "eviciting node pods: sending evict pods requests: evicting pod pod1 in namespace default: internal")
 
 		n, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
@@ -120,6 +129,15 @@ func TestDrainNodeHandler(t *testing.T) {
 		podName := "pod1"
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 
+		action := &castai.ClusterAction{
+			ID: uuid.New().String(),
+			ActionDrainNode: &castai.ActionDrainNode{
+				NodeName:            "node1",
+				DrainTimeoutSeconds: 1,
+				Force:               true,
+			},
+		}
+
 		h := drainNodeHandler{
 			log:       log,
 			clientset: clientset,
@@ -130,12 +148,6 @@ func TestDrainNodeHandler(t *testing.T) {
 				podEvictRetryDelay:            5 * time.Second,
 				podsTerminationWaitRetryDelay: 10 * time.Second,
 			}}
-
-		req := &castai.ActionDrainNode{
-			NodeName:            "node1",
-			DrainTimeoutSeconds: 1,
-			Force:               true,
-		}
 
 		clientset.PrependReactor("delete", "pods", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
 			deleteAction := action.(ktest.DeleteActionImpl)
@@ -148,7 +160,7 @@ func TestDrainNodeHandler(t *testing.T) {
 			return false, nil, nil
 		})
 
-		err := h.Handle(context.Background(), req)
+		err := h.Handle(context.Background(), action)
 		r.NoError(err)
 
 		n, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
@@ -165,6 +177,15 @@ func TestDrainNodeHandler(t *testing.T) {
 		podName := "pod1"
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 
+		action := &castai.ClusterAction{
+			ID: uuid.New().String(),
+			ActionDrainNode: &castai.ActionDrainNode{
+				NodeName:            "node1",
+				DrainTimeoutSeconds: 1,
+				Force:               true,
+			},
+		}
+
 		h := drainNodeHandler{
 			log:       log,
 			clientset: clientset,
@@ -176,12 +197,6 @@ func TestDrainNodeHandler(t *testing.T) {
 				podsTerminationWaitRetryDelay: 10 * time.Second,
 			}}
 
-		req := &castai.ActionDrainNode{
-			NodeName:            "node1",
-			DrainTimeoutSeconds: 1,
-			Force:               true,
-		}
-
 		clientset.PrependReactor("delete", "pods", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
 			deleteAction := action.(ktest.DeleteActionImpl)
 			if deleteAction.Name == podName {
@@ -190,7 +205,7 @@ func TestDrainNodeHandler(t *testing.T) {
 			return false, nil, nil
 		})
 
-		err := h.Handle(context.Background(), req)
+		err := h.Handle(context.Background(), action)
 		r.EqualError(err, "forcefully deleting pods: sending delete pods requests: deleting pod pod1 in namespace default: internal")
 
 		_, err = clientset.CoreV1().Pods("default").Get(context.Background(), podName, metav1.GetOptions{})
@@ -203,6 +218,15 @@ func TestDrainNodeHandler(t *testing.T) {
 		podName := "pod1"
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 
+		action := &castai.ClusterAction{
+			ID: uuid.New().String(),
+			ActionDrainNode: &castai.ActionDrainNode{
+				NodeName:            "node1",
+				DrainTimeoutSeconds: 1,
+				Force:               true,
+			},
+		}
+
 		h := drainNodeHandler{
 			log:       log,
 			clientset: clientset,
@@ -213,12 +237,6 @@ func TestDrainNodeHandler(t *testing.T) {
 				podEvictRetryDelay:            5 * time.Second,
 				podsTerminationWaitRetryDelay: 10 * time.Second,
 			}}
-
-		req := &castai.ActionDrainNode{
-			NodeName:            "node1",
-			DrainTimeoutSeconds: 1,
-			Force:               true,
-		}
 
 		clientset.PrependReactor("delete", "pods", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
 			deleteAction := action.(ktest.DeleteActionImpl)
@@ -231,7 +249,7 @@ func TestDrainNodeHandler(t *testing.T) {
 			return false, nil, nil
 		})
 
-		err := h.Handle(context.Background(), req)
+		err := h.Handle(context.Background(), action)
 		r.EqualError(err, "forcefully deleting pods: sending delete pods requests: deleting pod pod1 in namespace default: internal")
 
 		_, err = clientset.CoreV1().Pods("default").Get(context.Background(), podName, metav1.GetOptions{})

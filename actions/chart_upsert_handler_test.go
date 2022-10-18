@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -24,25 +25,31 @@ func TestChartUpsertHandler(t *testing.T) {
 	handler := newChartUpsertHandler(logrus.New(), helmMock)
 
 	t.Run("install chart given release is not found", func(t *testing.T) {
-		action := chartUpsertAction()
+		action := &castai.ClusterAction{
+			ID:                uuid.New().String(),
+			ActionChartUpsert: chartUpsertAction(),
+		}
 
 		helmMock.EXPECT().GetRelease(helm.GetReleaseOptions{
-			Namespace:   action.Namespace,
-			ReleaseName: action.ReleaseName,
+			Namespace:   action.ActionChartUpsert.Namespace,
+			ReleaseName: action.ActionChartUpsert.ReleaseName,
 		}).Return(nil, helmdriver.ErrReleaseNotFound)
 
 		helmMock.EXPECT().Install(ctx, helm.InstallOptions{
-			ChartSource:     &action.ChartSource,
-			Namespace:       action.Namespace,
-			ReleaseName:     action.ReleaseName,
-			ValuesOverrides: action.ValuesOverrides,
+			ChartSource:     &action.ActionChartUpsert.ChartSource,
+			Namespace:       action.ActionChartUpsert.Namespace,
+			ReleaseName:     action.ActionChartUpsert.ReleaseName,
+			ValuesOverrides: action.ActionChartUpsert.ValuesOverrides,
 		}).Return(nil, nil)
 
 		r.NoError(handler.Handle(ctx, action))
 	})
 
 	t.Run("upgrade chart given release is found", func(t *testing.T) {
-		action := chartUpsertAction()
+		action := &castai.ClusterAction{
+			ID:                uuid.New().String(),
+			ActionChartUpsert: chartUpsertAction(),
+		}
 
 		rel := &release.Release{
 			Name:      "new-release",
@@ -54,14 +61,14 @@ func TestChartUpsertHandler(t *testing.T) {
 		}
 
 		helmMock.EXPECT().GetRelease(helm.GetReleaseOptions{
-			Namespace:   action.Namespace,
-			ReleaseName: action.ReleaseName,
+			Namespace:   action.ActionChartUpsert.Namespace,
+			ReleaseName: action.ActionChartUpsert.ReleaseName,
 		}).Return(rel, nil)
 
 		helmMock.EXPECT().Upgrade(ctx, helm.UpgradeOptions{
-			ChartSource:     &action.ChartSource,
+			ChartSource:     &action.ActionChartUpsert.ChartSource,
 			Release:         rel,
-			ValuesOverrides: action.ValuesOverrides,
+			ValuesOverrides: action.ActionChartUpsert.ValuesOverrides,
 			MaxHistory:      3,
 		}).Return(nil, nil)
 
@@ -69,7 +76,10 @@ func TestChartUpsertHandler(t *testing.T) {
 	})
 
 	t.Run("rollback previous release before upgrade", func(t *testing.T) {
-		action := chartUpsertAction()
+		action := &castai.ClusterAction{
+			ID:                uuid.New().String(),
+			ActionChartUpsert: chartUpsertAction(),
+		}
 
 		rel := &release.Release{
 			Name:      "new-release",
@@ -83,8 +93,8 @@ func TestChartUpsertHandler(t *testing.T) {
 		helmMock.EXPECT().GetRelease(gomock.Any()).Return(rel, nil)
 
 		helmMock.EXPECT().Rollback(helm.RollbackOptions{
-			Namespace:   action.Namespace,
-			ReleaseName: action.ReleaseName,
+			Namespace:   action.ActionChartUpsert.Namespace,
+			ReleaseName: action.ActionChartUpsert.ReleaseName,
 		}).Return(nil)
 
 		helmMock.EXPECT().Upgrade(ctx, gomock.Any()).Return(nil, nil)

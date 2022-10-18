@@ -204,7 +204,7 @@ type mockAgentActionHandler struct {
 	handleDelay time.Duration
 }
 
-func (m *mockAgentActionHandler) Handle(ctx context.Context, data interface{}) error {
+func (m *mockAgentActionHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
 	time.Sleep(m.handleDelay)
 	if m.panicErr != nil {
 		panic(m.panicErr)

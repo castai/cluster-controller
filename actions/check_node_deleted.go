@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -37,13 +38,18 @@ type checkNodeDeletedHandler struct {
 	cfg       checkNodeDeletedConfig
 }
 
-func (h *checkNodeDeletedHandler) Handle(ctx context.Context, data interface{}) error {
-	req, ok := data.(*castai.ActionCheckNodeDeleted)
+func (h *checkNodeDeletedHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+	req, ok := action.Data().(*castai.ActionCheckNodeDeleted)
 	if !ok {
-		return fmt.Errorf("unexpected type %T for check node deleted handler", data)
+		return fmt.Errorf("unexpected type %T for check node deleted handler", action.Data())
 	}
 
-	log := h.log.WithField("node_name", req.NodeName)
+	log := h.log.WithFields(logrus.Fields{
+		"node_name": req.NodeName,
+		"node_id":   req.NodeID,
+		"type":      reflect.TypeOf(action.Data().(*castai.ActionCheckNodeDeleted)).String(),
+		"id":        action.ID,
+	})
 	log.Info("checking if node is deleted")
 
 	b := backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(h.cfg.retryWait), h.cfg.retries), ctx)

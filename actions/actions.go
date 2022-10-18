@@ -33,7 +33,7 @@ type Service interface {
 }
 
 type ActionHandler interface {
-	Handle(ctx context.Context, data interface{}) error
+	Handle(ctx context.Context, action *castai.ClusterAction) error
 }
 
 func NewService(
@@ -187,8 +187,7 @@ func (s *service) startProcessing(actionID string) bool {
 }
 
 func (s *service) handleAction(ctx context.Context, action *castai.ClusterAction) (err error) {
-	data := action.Data()
-	actionType := reflect.TypeOf(data)
+	actionType := reflect.TypeOf(action.Data())
 
 	defer func() {
 		if rerr := recover(); rerr != nil {
@@ -202,7 +201,7 @@ func (s *service) handleAction(ctx context.Context, action *castai.ClusterAction
 		return fmt.Errorf("handler not found for agent action=%s", actionType)
 	}
 
-	if err := handler.Handle(ctx, data); err != nil {
+	if err := handler.Handle(ctx, action); err != nil {
 		return fmt.Errorf("handling action %v: %w", actionType, err)
 	}
 	return nil

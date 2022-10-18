@@ -39,7 +39,7 @@ type sendAKSInitDataHandler struct {
 	cloudConfigPath string
 }
 
-func (s *sendAKSInitDataHandler) Handle(ctx context.Context, _ interface{}) error {
+func (s *sendAKSInitDataHandler) Handle(ctx context.Context, _ *castai.ClusterAction) error {
 	cloudConfig, err := s.readCloudConfigBase64(s.cloudConfigPath)
 	if err != nil {
 		return fmt.Errorf("reading cloud config: %w", err)

@@ -29,10 +29,10 @@ type createEventHandler struct {
 	clientset kubernetes.Interface
 }
 
-func (h *createEventHandler) Handle(ctx context.Context, data interface{}) error {
-	req, ok := data.(*castai.ActionCreateEvent)
+func (h *createEventHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+	req, ok := action.Data().(*castai.ActionCreateEvent)
 	if !ok {
-		return fmt.Errorf("unexpected type %T for create event handler", data)
+		return fmt.Errorf("unexpected type %T for create event handler", action.Data())
 	}
 
 	namespace := req.ObjectRef.Namespace
