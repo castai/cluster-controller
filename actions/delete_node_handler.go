@@ -71,34 +71,47 @@ func (h *deleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 	}, b)
 
 	if err != nil {
-		return err
+		return fmt.Errorf("error removing node %w", err)
 	}
 
-	pods, err := h.clientset.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
-		FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": req.NodeName}).String(),
-	})
+	podsListing := backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(h.cfg.podsTerminationWait), h.cfg.deleteRetries), ctx)
+	var pods []v1.Pod
+	err = backoff.Retry(func() error {
+		podList, err := h.clientset.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
+			FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": req.NodeName}).String(),
+		})
+		if err != nil {
+			return err
+		}
+		pods = podList.Items
+		return nil
+
+	}, podsListing)
+
 	if err != nil {
 		return fmt.Errorf("listing node pods %w", err)
 	}
 
-	log.Infof("node has %d pods - removing", len(pods.Items))
+	log.Infof("node has %d pods - removing", len(pods))
 
+	// Create delete options with grace period 0 - force delete.
 	deleteOptions := metav1.NewDeleteOptions(0)
 	deletePod := func(ctx context.Context, pod v1.Pod) error {
 		return h.deletePod(ctx, *deleteOptions, pod)
 	}
 
-	if err := h.sendPodsRequests(ctx, pods.Items, deletePod); err != nil {
+	if err := h.sendPodsRequests(ctx, pods, deletePod); err != nil {
 		return fmt.Errorf("sending delete pods requests: %w", err)
 	}
 
+	// Cleanup of pods for which node has been removed. It should take a few seconds but added retry in case of network errors.
 	podsWait := backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(h.cfg.podsTerminationWait), h.cfg.deleteRetries), ctx)
 	return backoff.Retry(func() error {
 		pods, err := h.clientset.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
 			FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": req.NodeName}).String(),
 		})
 		if err != nil {
-			return fmt.Errorf("waiting for node %q pods to be terminated: %w", req.NodeName, err)
+			return fmt.Errorf("unable to list pods for node %q err: %w", req.NodeName, err)
 		}
 		if len(pods.Items) > 0 {
 			return fmt.Errorf("waiting for %d pods to be terminated on node %v", len(pods.Items), req.NodeName)
