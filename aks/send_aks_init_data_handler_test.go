@@ -29,5 +29,5 @@ func TestAKSInitDataHandler(t *testing.T) {
 	r.NoError(err)
 	r.NotEmpty(client.AKSInitDataReq.CloudConfigBase64)
 	r.NotEmpty(client.AKSInitDataReq.ProtectedSettingsBase64)
-	r.NotNil(client.AKSInitDataReq.Architecture)
+	r.NotEmpty(client.AKSInitDataReq.Architecture)
 }
