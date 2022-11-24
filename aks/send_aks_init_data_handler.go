@@ -14,6 +14,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -59,6 +60,7 @@ func (s *InitDataHandler) Handle(ctx context.Context) error {
 	return s.client.SendAKSInitData(ctx, &castai.AKSInitDataRequest{
 		CloudConfigBase64:       string(cloudConfig),
 		ProtectedSettingsBase64: base64.StdEncoding.EncodeToString(protectedSettings),
+		Architecture:            runtime.GOARCH,
 	})
 }
 
