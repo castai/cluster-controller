@@ -57,11 +57,10 @@ func (s *InitDataHandler) Handle(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("protected settings decrypt failed: %w", err)
 	}
-	nodeArch := runtime.GOARCH
 	return s.client.SendAKSInitData(ctx, &castai.AKSInitDataRequest{
 		CloudConfigBase64:       string(cloudConfig),
 		ProtectedSettingsBase64: base64.StdEncoding.EncodeToString(protectedSettings),
-		Architecture:            &nodeArch,
+		Architecture:            runtime.GOARCH,
 	})
 }
 

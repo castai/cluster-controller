@@ -187,7 +187,7 @@ func (c *ChartSource) Validate() error {
 }
 
 type AKSInitDataRequest struct {
-	CloudConfigBase64       string  `json:"cloudConfigBase64"`
-	ProtectedSettingsBase64 string  `json:"protectedSettingsBase64"`
-	Architecture            *string `json:"architecture,omitempty"`
+	CloudConfigBase64       string `json:"cloudConfigBase64"`
+	ProtectedSettingsBase64 string `json:"protectedSettingsBase64"`
+	Architecture            string `json:"architecture"`
 }
