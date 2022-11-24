@@ -57,12 +57,7 @@ func (s *InitDataHandler) Handle(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("protected settings decrypt failed: %w", err)
 	}
-	var nodeArch castai.NodeArchitecture
-	if runtime.GOARCH == "arm64" {
-		nodeArch = castai.NodeArchitectureArm64
-	} else {
-		nodeArch = castai.NodeArchitectureAmd64
-	}
+	nodeArch := runtime.GOARCH
 	return s.client.SendAKSInitData(ctx, &castai.AKSInitDataRequest{
 		CloudConfigBase64:       string(cloudConfig),
 		ProtectedSettingsBase64: base64.StdEncoding.EncodeToString(protectedSettings),

@@ -186,15 +186,8 @@ func (c *ChartSource) Validate() error {
 	return nil
 }
 
-type NodeArchitecture int32
-
-const (
-	NodeArchitectureAmd64 NodeArchitecture = 0
-	NodeArchitectureArm64 NodeArchitecture = 1
-)
-
 type AKSInitDataRequest struct {
-	CloudConfigBase64       string            `json:"cloudConfigBase64"`
-	ProtectedSettingsBase64 string            `json:"protectedSettingsBase64"`
-	Architecture            *NodeArchitecture `json:"architecture,omitempty"`
+	CloudConfigBase64       string  `json:"cloudConfigBase64"`
+	ProtectedSettingsBase64 string  `json:"protectedSettingsBase64"`
+	Architecture            *string `json:"architecture,omitempty"`
 }
