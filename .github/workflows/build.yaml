@@ -35,6 +35,14 @@ jobs:
       - name: Get release tag
         if: github.event_name == 'release'
         run: echo "RELEASE_TAG=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+        
+      - name: Run golangci-lint
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: golangci/golangci-lint-action@v3
+        with:
+          args: --timeout=5m
+          skip-pkg-cache: true
+          skip-build-cache: true
 
       - name: Build Go binary amd64
         run: go build -ldflags "-s -w -X main.GitCommit=$GITHUB_SHA -X main.GitRef=$GITHUB_REF -X main.Version=${RELEASE_TAG:-commit-$GITHUB_SHA}" -o bin/castai-cluster-controller-amd64 .
