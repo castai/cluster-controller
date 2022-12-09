@@ -2,10 +2,11 @@ package actions
 
 import (
 	"context"
-	"github.com/google/uuid"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -150,7 +151,7 @@ func TestCheckStatus_Ready(t *testing.T) {
 		go func() {
 			time.Sleep(1 * time.Second)
 			node.Status.Conditions[0].Status = v1.ConditionTrue
-			clientset.CoreV1().Nodes().Update(context.Background(), node, metav1.UpdateOptions{})
+			_, _ = clientset.CoreV1().Nodes().Update(context.Background(), node, metav1.UpdateOptions{})
 			wg.Done()
 		}()
 		wg.Wait()
