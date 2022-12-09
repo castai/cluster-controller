@@ -3,7 +3,6 @@ package castai
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -38,8 +37,8 @@ func NewDefaultClient(url, key string, level logrus.Level, binVersion *config.Cl
 	client := resty.New()
 	client.SetHostURL(url)
 	client.SetTimeout(5 * time.Minute) // Hard timeout for any request.
-	client.Header.Set(http.CanonicalHeaderKey(headerAPIKey), key)
-	client.Header.Set(http.CanonicalHeaderKey(headerUserAgent), "castai-cluster-controller/"+binVersion.Version)
+	client.Header.Set(headerAPIKey, key)
+	client.Header.Set(headerUserAgent, "castai-cluster-controller/"+binVersion.Version)
 	if level == logrus.TraceLevel {
 		client.SetDebug(true)
 	}
