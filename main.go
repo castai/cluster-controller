@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -255,7 +254,7 @@ func kubeConfigFromEnv() (*rest.Config, error) {
 		return nil, nil
 	}
 
-	data, err := ioutil.ReadFile(kubepath)
+	data, err := os.ReadFile(kubepath)
 	if err != nil {
 		return nil, fmt.Errorf("reading kubeconfig at %s: %w", kubepath, err)
 	}

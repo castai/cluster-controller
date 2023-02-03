@@ -2,7 +2,7 @@ package helm
 
 import (
 	"context"
-	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/sirupsen/logrus"
@@ -103,7 +103,7 @@ type testConfigurationGetter struct {
 func (c *testConfigurationGetter) Get(_ string) (*action.Configuration, error) {
 	cfg := &action.Configuration{
 		Releases:     storage.Init(driver.NewMemory()),
-		KubeClient:   &fake.PrintingKubeClient{Out: ioutil.Discard},
+		KubeClient:   &fake.PrintingKubeClient{Out: os.Discard},
 		Capabilities: chartutil.DefaultCapabilities,
 		Log: func(format string, v ...interface{}) {
 			c.t.Helper()

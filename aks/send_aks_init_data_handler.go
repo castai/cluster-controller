@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
+	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
@@ -66,7 +66,7 @@ func (s *InitDataHandler) Handle(ctx context.Context) error {
 
 // readCloudConfigBase64 extracts base64 encoded cloud config content from XML file.
 func (s *InitDataHandler) readCloudConfigBase64(cloudConfigPath string) ([]byte, error) {
-	xmlContent, err := ioutil.ReadFile(cloudConfigPath)
+	xmlContent, err := os.ReadFile(cloudConfigPath)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +102,7 @@ func (s *InitDataHandler) findSettingsPath(baseDir string) (string, error) {
 
 func (s *InitDataHandler) readSettings(settingsFilePath string) (*settings, error) {
 	var res settings
-	settingsContent, err := ioutil.ReadFile(settingsFilePath)
+	settingsContent, err := os.ReadFile(settingsFilePath)
 	if err != nil {
 		return nil, err
 	}
