@@ -4,8 +4,8 @@ on:
   push:
     branches:
       - main
-    schedule:
-      - cron: "0 */6 * * *"
+  schedule:
+    - cron: "0 */12 * * *"
 jobs:
   fossa-scan:
     runs-on: ubuntu-latest
@@ -14,3 +14,4 @@ jobs:
       - uses: fossas/fossa-action@v1
         with:
           api-key: ${{ secrets.FOSSA_API_KEY }}
+          container: us-docker.pkg.dev/castai-hub/library/cluster-controller:${{ env.RELEASE_TAG }}
