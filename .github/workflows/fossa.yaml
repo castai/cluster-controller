@@ -4,7 +4,8 @@ on:
   push:
     branches:
       - main
-
+  schedule:
+    - cron: "0 */12 * * *"
 jobs:
   fossa-scan:
     runs-on: ubuntu-latest

@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
+	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
@@ -64,7 +64,7 @@ func (s *sendAKSInitDataHandler) Handle(ctx context.Context, _ *castai.ClusterAc
 
 // readCloudConfigBase64 extracts base64 encoded cloud config content from XML file.
 func (s *sendAKSInitDataHandler) readCloudConfigBase64(cloudConfigPath string) ([]byte, error) {
-	xmlContent, err := ioutil.ReadFile(cloudConfigPath)
+	xmlContent, err := os.ReadFile(cloudConfigPath)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +100,7 @@ func (s *sendAKSInitDataHandler) findSettingsPath(baseDir string) (string, error
 
 func (s *sendAKSInitDataHandler) readSettings(settingsFilePath string) (*settings, error) {
 	var res settings
-	settingsContent, err := ioutil.ReadFile(settingsFilePath)
+	settingsContent, err := os.ReadFile(settingsFilePath)
 	if err != nil {
 		return nil, err
 	}
