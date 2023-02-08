@@ -19,6 +19,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/config"
 )
 
 type drainNodeConfig struct {
@@ -27,9 +28,11 @@ type drainNodeConfig struct {
 	podDeleteRetryDelay           time.Duration
 	podEvictRetryDelay            time.Duration
 	podsTerminationWaitRetryDelay time.Duration
+	castNamespace                 string
 }
 
 func newDrainNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface) ActionHandler {
+	cfg := config.Get()
 	return &drainNodeHandler{
 		log:       log,
 		clientset: clientset,
@@ -39,8 +42,20 @@ func newDrainNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface)
 			podDeleteRetryDelay:           5 * time.Second,
 			podEvictRetryDelay:            5 * time.Second,
 			podsTerminationWaitRetryDelay: 10 * time.Second,
+			castNamespace:                 cfg.LeaderElection.Namespace,
 		},
 	}
+}
+
+func (h *drainNodeHandler) getTimeouts(req *castai.ActionDrainNode, createdAt time.Time) (time.Duration, time.Duration) {
+	timeSinceCreated := createdAt.Sub(time.Now().UTC())
+	drainTimeout := time.Duration(req.DrainTimeoutSeconds) * time.Second
+	if timeSinceCreated < 2*time.Minute {
+		return drainTimeout, h.cfg.podsDeleteTimeout
+	}
+
+	timeSinceCreated = timeSinceCreated + 100*time.Second
+	return drainTimeout - timeSinceCreated, h.cfg.podsDeleteTimeout - timeSinceCreated
 }
 
 type drainNodeHandler struct {
@@ -54,7 +69,8 @@ func (h *drainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	if !ok {
 		return fmt.Errorf("unexpected type %T for drain handler", action.Data())
 	}
-
+	createdAt := action.CreatedAt
+	drainTimeout, podsDeleteTimeout := h.getTimeouts(req, createdAt)
 	log := h.log.WithFields(logrus.Fields{
 		"node_name": req.NodeName,
 		"node_id":   req.NodeID,
@@ -78,7 +94,7 @@ func (h *drainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	}
 
 	// First try to evict pods gracefully.
-	evictCtx, evictCancel := context.WithTimeout(ctx, time.Duration(req.DrainTimeoutSeconds)*time.Second)
+	evictCtx, evictCancel := context.WithTimeout(ctx, drainTimeout)
 	defer evictCancel()
 	err = h.evictNodePods(evictCtx, log, node)
 	if err != nil && !errors.Is(err, context.DeadlineExceeded) {
@@ -97,7 +113,7 @@ func (h *drainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 
 		var err error
 		for _, o := range options {
-			deleteCtx, deleteCancel := context.WithTimeout(ctx, h.cfg.podsDeleteTimeout)
+			deleteCtx, deleteCancel := context.WithTimeout(ctx, podsDeleteTimeout)
 			defer deleteCancel()
 
 			err = h.deleteNodePods(deleteCtx, log, node, o)
@@ -139,6 +155,9 @@ func (h *drainNodeHandler) evictNodePods(ctx context.Context, log logrus.FieldLo
 	}
 
 	log.Infof("evicting %d pods", len(pods))
+	if len(pods) == 0 {
+		return nil
+	}
 
 	if err := h.sendPodsRequests(ctx, pods, h.evictPod); err != nil {
 		return fmt.Errorf("sending evict pods requests: %w", err)
@@ -157,6 +176,10 @@ func (h *drainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldL
 		log.Infof("forcefully deleting %d pods with gracePeriod %d", len(pods), *options.GracePeriodSeconds)
 	} else {
 		log.Infof("forcefully deleting %d pods", len(pods))
+	}
+
+	if len(pods) == 0 {
+		return nil
 	}
 
 	deletePod := func(ctx context.Context, pod v1.Pod) error {
@@ -202,10 +225,19 @@ func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, node *v1.Nod
 		return nil, fmt.Errorf("listing node %v pods: %w", node.Name, err)
 	}
 
-	podsToEvict := lo.Filter(pods.Items, func(pod v1.Pod, _ int) bool {
-		return !isDaemonSetPod(&pod) && !isStaticPod(&pod)
-	})
+	podsToEvict := make([]v1.Pod, 0)
+	castPods := make([]v1.Pod, 0)
+	// Evict CAST PODs as last ones
+	for _, p := range pods.Items {
+		if p.Namespace == h.cfg.castNamespace {
+			castPods = append(castPods, p)
+		}
+		if !isDaemonSetPod(&p) && !isStaticPod(&p) {
+			podsToEvict = append(podsToEvict, p)
+		}
+	}
 
+	podsToEvict = append(podsToEvict, castPods...)
 	return podsToEvict, nil
 }
 

@@ -123,9 +123,14 @@ func run(
 		return fmt.Errorf("getting kubernetes version: %w", err)
 	}
 
+	nodeName := os.Getenv("KUBERNETES_NODE_NAME")
+	podName := os.Getenv("KUBERNETES_POD")
+
 	log := logger.WithFields(logrus.Fields{
-		"version":     binVersion.Version,
-		"k8s_version": k8sVersion.Full(),
+		"version":       binVersion.Version,
+		"k8s_version":   k8sVersion.Full(),
+		"running_on":    nodeName,
+		"ctrl_pod_name": podName,
 	})
 	log.Infof("running castai-cluster-controller version %v", binVersion)
 

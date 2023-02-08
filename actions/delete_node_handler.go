@@ -29,8 +29,8 @@ func newDeleteNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface
 		clientset: clientset,
 		cfg: deleteNodeConfig{
 			deleteRetries:       5,
-			deleteRetryWait:     1 * time.Second,
-			podsTerminationWait: 5 * time.Second,
+			deleteRetryWait:     2 * time.Second,
+			podsTerminationWait: 10 * time.Second,
 		},
 		drainNodeHandler: drainNodeHandler{
 			log:       log,
