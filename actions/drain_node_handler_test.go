@@ -2,9 +2,11 @@ package actions
 
 import (
 	"context"
-	"github.com/google/uuid"
+	"math"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -257,6 +259,71 @@ func TestDrainNodeHandler(t *testing.T) {
 	})
 }
 
+func TestGetDrainTimeout(t *testing.T) {
+	log := logrus.New()
+	log.SetLevel(logrus.DebugLevel)
+
+	t.Run("drain timeout for new action should be the same like in request", func(t *testing.T) {
+		r := require.New(t)
+		action := &castai.ClusterAction{
+			ID: uuid.New().String(),
+			ActionDrainNode: &castai.ActionDrainNode{
+				NodeName:            "node1",
+				DrainTimeoutSeconds: 100,
+				Force:               true,
+			},
+			CreatedAt: time.Now().UTC(),
+		}
+		h := drainNodeHandler{
+			log: log,
+			cfg: drainNodeConfig{},
+		}
+
+		timeout := h.getDrainTimeout(action)
+		r.Equal(100*time.Second, timeout)
+	})
+
+	t.Run("drain timeout for older action should be decreased by time sinxe action creation", func(t *testing.T) {
+		r := require.New(t)
+		action := &castai.ClusterAction{
+			ID: uuid.New().String(),
+			ActionDrainNode: &castai.ActionDrainNode{
+				NodeName:            "node1",
+				DrainTimeoutSeconds: 600,
+				Force:               true,
+			},
+			CreatedAt: time.Now().UTC().Add(-3 * time.Minute),
+		}
+		h := drainNodeHandler{
+			log: log,
+			cfg: drainNodeConfig{},
+		}
+
+		timeout := h.getDrainTimeout(action)
+		r.Equal(520, int(math.Floor(timeout.Seconds())))
+	})
+
+	t.Run("drain timeout min wait timeout should be 60s", func(t *testing.T) {
+		r := require.New(t)
+		action := &castai.ClusterAction{
+			ID: uuid.New().String(),
+			ActionDrainNode: &castai.ActionDrainNode{
+				NodeName:            "node1",
+				DrainTimeoutSeconds: 600,
+				Force:               true,
+			},
+			CreatedAt: time.Now().UTC().Add(-60 * time.Minute),
+		}
+		h := drainNodeHandler{
+			log: log,
+			cfg: drainNodeConfig{},
+		}
+
+		timeout := h.getDrainTimeout(action)
+		r.Equal(60, int(timeout.Seconds()))
+	})
+}
+
 func prependEvictionReaction(t *testing.T, c *fake.Clientset, success bool) {
 	c.PrependReactor("create", "pods", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
 		if action.GetSubresource() != "eviction" {
@@ -324,8 +391,26 @@ func setupFakeClientWithNodePodEviction(nodeName, podName string) *fake.Clientse
 			NodeName: nodeName,
 		},
 	}
+	jobPod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "job-pod",
+			Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					Kind:       "CronJob",
+					Controller: &controller,
+				},
+			},
+		},
+		Spec: v1.PodSpec{
+			NodeName: nodeName,
+		},
+		Status: v1.PodStatus{
+			Phase: v1.PodSucceeded,
+		},
+	}
 
-	clientset := fake.NewSimpleClientset(node, pod, daemonSetPod, staticPod)
+	clientset := fake.NewSimpleClientset(node, pod, daemonSetPod, staticPod, jobPod)
 
 	addEvictionSupport(clientset)
 

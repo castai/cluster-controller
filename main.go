@@ -142,6 +142,7 @@ func run(
 		AckRetryWait:     1 * time.Second,
 		ClusterID:        cfg.ClusterID,
 		Version:          binVersion.Version,
+		Namespace:        cfg.LeaderElection.Namespace,
 	}
 	healthzAction := health.NewHealthzProvider(health.HealthzCfg{HealthyPollIntervalLimit: (actionsConfig.PollWaitInterval + actionsConfig.PollTimeout) * 2}, log)
 
