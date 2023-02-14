@@ -13,7 +13,7 @@ require (
 	github.com/stretchr/testify v1.8.1
 	go.uber.org/goleak v1.2.0
 	golang.org/x/sync v0.1.0
-	helm.sh/helm/v3 v3.11.0
+	helm.sh/helm/v3 v3.11.1
 	k8s.io/api v0.26.0
 	k8s.io/apimachinery v0.26.0
 	k8s.io/apiserver v0.26.0
