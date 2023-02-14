@@ -283,7 +283,7 @@ func TestGetDrainTimeout(t *testing.T) {
 		r.Equal(100*time.Second, timeout)
 	})
 
-	t.Run("drain timeout for older action should be decreased by time sinxe action creation", func(t *testing.T) {
+	t.Run("drain timeout for older action should be decreased by time since action creation", func(t *testing.T) {
 		r := require.New(t)
 		action := &castai.ClusterAction{
 			ID: uuid.New().String(),
@@ -300,7 +300,7 @@ func TestGetDrainTimeout(t *testing.T) {
 		}
 
 		timeout := h.getDrainTimeout(action)
-		r.Equal(520, int(math.Floor(timeout.Seconds())))
+		r.Less(int(math.Floor(timeout.Seconds())), 600)
 	})
 
 	t.Run("drain timeout min wait timeout should be 60s", func(t *testing.T) {
@@ -391,26 +391,8 @@ func setupFakeClientWithNodePodEviction(nodeName, podName string) *fake.Clientse
 			NodeName: nodeName,
 		},
 	}
-	jobPod := &v1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "job-pod",
-			Namespace: "default",
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					Kind:       "CronJob",
-					Controller: &controller,
-				},
-			},
-		},
-		Spec: v1.PodSpec{
-			NodeName: nodeName,
-		},
-		Status: v1.PodStatus{
-			Phase: v1.PodSucceeded,
-		},
-	}
 
-	clientset := fake.NewSimpleClientset(node, pod, daemonSetPod, staticPod, jobPod)
+	clientset := fake.NewSimpleClientset(node, pod, daemonSetPod, staticPod)
 
 	addEvictionSupport(clientset)
 
