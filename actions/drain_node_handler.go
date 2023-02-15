@@ -31,6 +31,7 @@ type drainNodeConfig struct {
 	podEvictRetryDelay            time.Duration
 	podsTerminationWaitRetryDelay time.Duration
 	castNamespace                 string
+	skipDeletedTimeoutSeconds     int
 }
 
 func newDrainNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface, castNamespace string) ActionHandler {
@@ -44,6 +45,7 @@ func newDrainNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface,
 			podEvictRetryDelay:            5 * time.Second,
 			podsTerminationWaitRetryDelay: 10 * time.Second,
 			castNamespace:                 castNamespace,
+			skipDeletedTimeoutSeconds:     60,
 		},
 	}
 }
@@ -52,7 +54,7 @@ func newDrainNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface,
 // After 2 minutes grace period action timeout is adjusted using the time passed between action creation and now
 // the result is clamped between 60s and the requested timeout.
 func (h *drainNodeHandler) getDrainTimeout(action *castai.ClusterAction) time.Duration {
-	timeSinceCreated := time.Now().UTC().Sub(action.CreatedAt)
+	timeSinceCreated := time.Since(action.CreatedAt)
 	drainTimeout := time.Duration(action.ActionDrainNode.DrainTimeoutSeconds) * time.Second
 	// Allow to have 2 minutes grace period for newer actions.
 	if timeSinceCreated < 2*time.Minute {
@@ -207,7 +209,7 @@ func (h *drainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldL
 }
 
 func (h *drainNodeHandler) sendPodsRequests(ctx context.Context, pods []v1.Pod, f func(context.Context, v1.Pod) error) error {
-	batchSize := lo.Clamp(0.2*float64(len(pods)), 5, 50)
+	batchSize := lo.Clamp(0.2*float64(len(pods)), 5, 20)
 	for _, batch := range lo.Chunk(pods, int(batchSize)) {
 		g, ctx := errgroup.WithContext(ctx)
 		for _, pod := range batch {
@@ -241,6 +243,12 @@ func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, node *v1.Nod
 	castPods := make([]v1.Pod, 0)
 	// Evict CAST PODs as last ones
 	for _, p := range pods.Items {
+		// Skip pods that have been recently removed.
+		if !p.ObjectMeta.DeletionTimestamp.IsZero() &&
+			int(time.Since(p.ObjectMeta.GetDeletionTimestamp().Time).Seconds()) > h.cfg.skipDeletedTimeoutSeconds {
+			continue
+		}
+
 		if p.Namespace == h.cfg.castNamespace && !isDaemonSetPod(&p) && !isStaticPod(&p) {
 			castPods = append(castPods, p)
 		}

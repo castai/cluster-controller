@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
@@ -391,8 +390,24 @@ func setupFakeClientWithNodePodEviction(nodeName, podName string) *fake.Clientse
 			NodeName: nodeName,
 		},
 	}
+	terminatedPod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "removed-pod",
+			Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					Kind:       "Node",
+					Controller: &controller,
+				},
+			},
+			DeletionTimestamp: &metav1.Time{Time: time.Now().UTC()},
+		},
+		Spec: v1.PodSpec{
+			NodeName: nodeName,
+		},
+	}
 
-	clientset := fake.NewSimpleClientset(node, pod, daemonSetPod, staticPod)
+	clientset := fake.NewSimpleClientset(node, pod, daemonSetPod, staticPod, terminatedPod)
 
 	addEvictionSupport(clientset)
 
