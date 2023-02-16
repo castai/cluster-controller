@@ -24,6 +24,12 @@ import (
 	"github.com/castai/cluster-controller/castai"
 )
 
+const (
+	minDrainTimeout   = 60               // Minimal pod drain timeout
+	actionGracePeriod = 2 * time.Minute  // Arbitrary chosen timeout after which action creation time will be taken into account when calculating drain timeeout
+	roundTripTime     = 10 * time.Second // 2xPollInterval for action
+)
+
 type drainNodeConfig struct {
 	podsDeleteTimeout             time.Duration
 	podDeleteRetries              uint64
@@ -57,14 +63,14 @@ func (h *drainNodeHandler) getDrainTimeout(action *castai.ClusterAction) time.Du
 	timeSinceCreated := time.Since(action.CreatedAt)
 	drainTimeout := time.Duration(action.ActionDrainNode.DrainTimeoutSeconds) * time.Second
 	// Allow to have 2 minutes grace period for newer actions.
-	if timeSinceCreated < 2*time.Minute {
+	if timeSinceCreated < actionGracePeriod {
 		return drainTimeout
 	}
 
-	// Remove time required for polling the action.
-	timeSinceCreated = timeSinceCreated - 100*time.Second
+	// Remove 2 poll interval required for polling the action.
+	timeSinceCreated = timeSinceCreated - roundTripTime
 
-	return lo.Clamp(drainTimeout-timeSinceCreated, 60*time.Second, time.Duration(action.ActionDrainNode.DrainTimeoutSeconds)*time.Second)
+	return lo.Clamp(drainTimeout-timeSinceCreated, minDrainTimeout*time.Second, time.Duration(action.ActionDrainNode.DrainTimeoutSeconds)*time.Second)
 }
 
 type drainNodeHandler struct {
@@ -246,6 +252,11 @@ func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, node *v1.Nod
 		// Skip pods that have been recently removed.
 		if !p.ObjectMeta.DeletionTimestamp.IsZero() &&
 			int(time.Since(p.ObjectMeta.GetDeletionTimestamp().Time).Seconds()) > h.cfg.skipDeletedTimeoutSeconds {
+			continue
+		}
+
+		// Skip completed pods. Will be removed during node removal.
+		if p.Status.Phase == v1.PodSucceeded {
 			continue
 		}
 
