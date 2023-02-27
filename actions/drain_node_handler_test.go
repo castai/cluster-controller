@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -39,6 +40,7 @@ func TestDrainNodeHandler(t *testing.T) {
 				DrainTimeoutSeconds: 1,
 				Force:               true,
 			},
+			CreatedAt: time.Now().UTC(),
 		}
 		h := drainNodeHandler{
 			log:       log,
@@ -77,6 +79,7 @@ func TestDrainNodeHandler(t *testing.T) {
 				DrainTimeoutSeconds: 1,
 				Force:               true,
 			},
+			CreatedAt: time.Now().UTC(),
 		}
 
 		h := drainNodeHandler{
@@ -105,6 +108,7 @@ func TestDrainNodeHandler(t *testing.T) {
 				DrainTimeoutSeconds: 1,
 				Force:               true,
 			},
+			CreatedAt: time.Now().UTC(),
 		}
 
 		h := drainNodeHandler{
@@ -137,6 +141,7 @@ func TestDrainNodeHandler(t *testing.T) {
 				DrainTimeoutSeconds: 1,
 				Force:               true,
 			},
+			CreatedAt: time.Now().UTC(),
 		}
 
 		h := drainNodeHandler{
@@ -185,6 +190,7 @@ func TestDrainNodeHandler(t *testing.T) {
 				DrainTimeoutSeconds: 1,
 				Force:               true,
 			},
+			CreatedAt: time.Now().UTC(),
 		}
 
 		h := drainNodeHandler{
@@ -226,6 +232,7 @@ func TestDrainNodeHandler(t *testing.T) {
 				DrainTimeoutSeconds: 1,
 				Force:               true,
 			},
+			CreatedAt: time.Now().UTC(),
 		}
 
 		h := drainNodeHandler{
@@ -302,7 +309,7 @@ func TestGetDrainTimeout(t *testing.T) {
 		r.Less(int(math.Floor(timeout.Seconds())), 600)
 	})
 
-	t.Run("drain timeout min wait timeout should be 60s", func(t *testing.T) {
+	t.Run("drain timeout min wait timeout should be 0s", func(t *testing.T) {
 		r := require.New(t)
 		action := &castai.ClusterAction{
 			ID: uuid.New().String(),
@@ -319,7 +326,7 @@ func TestGetDrainTimeout(t *testing.T) {
 		}
 
 		timeout := h.getDrainTimeout(action)
-		r.Equal(60, int(timeout.Seconds()))
+		r.Equal(0, int(timeout.Seconds()))
 	})
 }
 
@@ -334,6 +341,7 @@ func prependEvictionReaction(t *testing.T, c *fake.Clientset, success bool) {
 
 			go func() {
 				err := c.CoreV1().Pods(eviction.Namespace).Delete(context.Background(), eviction.Name, metav1.DeleteOptions{})
+				fmt.Println("EEEERRR", err)
 				require.NoError(t, err)
 			}()
 

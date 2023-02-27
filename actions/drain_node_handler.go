@@ -25,9 +25,8 @@ import (
 )
 
 const (
-	minDrainTimeout   = 60               // Minimal pod drain timeout
-	actionGracePeriod = 2 * time.Minute  // Arbitrary chosen timeout after which action creation time will be taken into account when calculating drain timeeout
-	roundTripTime     = 10 * time.Second // 2xPollInterval for action
+	minDrainTimeout = 0                // Minimal pod drain timeout
+	roundTripTime   = 10 * time.Second // 2xPollInterval for action
 )
 
 type drainNodeConfig struct {
@@ -57,15 +56,10 @@ func newDrainNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface,
 }
 
 // getDrainTimeout returns drain timeout adjusted to action creation time.
-// After 2 minutes grace period action timeout is adjusted using the time passed between action creation and now
-// the result is clamped between 60s and the requested timeout.
+// the result is clamped between 0s and the requested timeout.
 func (h *drainNodeHandler) getDrainTimeout(action *castai.ClusterAction) time.Duration {
 	timeSinceCreated := time.Since(action.CreatedAt)
 	drainTimeout := time.Duration(action.ActionDrainNode.DrainTimeoutSeconds) * time.Second
-	// Allow to have 2 minutes grace period for newer actions.
-	if timeSinceCreated < actionGracePeriod {
-		return drainTimeout
-	}
 
 	// Remove 2 poll interval required for polling the action.
 	timeSinceCreated = timeSinceCreated - roundTripTime
