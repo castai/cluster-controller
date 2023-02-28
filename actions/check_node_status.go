@@ -94,7 +94,7 @@ func (h *checkNodeStatusHandler) checkNodeReady(ctx context.Context, req *castai
 	defer watch.Stop()
 	for r := range watch.ResultChan() {
 		if node, ok := r.Object.(*corev1.Node); ok {
-			if isNodeReady(node.Status.Conditions) {
+			if isNodeReady(node) {
 				return nil
 			}
 		}
@@ -103,12 +103,27 @@ func (h *checkNodeStatusHandler) checkNodeReady(ctx context.Context, req *castai
 	return fmt.Errorf("timeout waiting for node %s to become ready", req.NodeName)
 }
 
-func isNodeReady(conditions []corev1.NodeCondition) bool {
-	for _, cond := range conditions {
-		if cond.Type == corev1.NodeReady && cond.Status == corev1.ConditionTrue {
+func isNodeReady(node *corev1.Node) bool {
+	for _, cond := range node.Status.Conditions {
+		if cond.Type == corev1.NodeReady && cond.Status == corev1.ConditionTrue && !containsUninitializedNodeTaint(node.Spec.Taints) {
 			return true
 		}
 	}
 
 	return false
+}
+
+func containsUninitializedNodeTaint(taints []corev1.Taint) bool {
+	for _, taint := range taints {
+		// Some providers like AKS provider adds this taint even if node contains ready condition.
+		if taint == taintCloudProviderUninitialized {
+			return true
+		}
+	}
+	return false
+}
+
+var taintCloudProviderUninitialized = corev1.Taint{
+	Key:    "node.cloudprovider.kubernetes.io/uninitialized",
+	Effect: corev1.TaintEffectNoSchedule,
 }
