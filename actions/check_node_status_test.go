@@ -159,6 +159,61 @@ func TestCheckStatus_Ready(t *testing.T) {
 		r.NoError(err)
 	})
 
+	t.Run("handle check successfully when node become ready - removed taint", func(t *testing.T) {
+		r := require.New(t)
+		nodeName := "node1"
+		node := &v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: nodeName,
+			},
+			Status: v1.NodeStatus{
+				Conditions: []v1.NodeCondition{
+					{
+						Type:   v1.NodeReady,
+						Status: v1.ConditionTrue,
+					},
+				},
+			},
+			Spec: v1.NodeSpec{
+				Taints: []v1.Taint{taintCloudProviderUninitialized},
+			},
+		}
+		clientset := fake.NewSimpleClientset(node)
+
+		h := checkNodeStatusHandler{
+			log:       log,
+			clientset: clientset,
+		}
+
+		timeout := int32(60)
+		action := &castai.ClusterAction{
+			ID: uuid.New().String(),
+			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
+				NodeName:           "node1",
+				NodeStatus:         castai.ActionCheckNodeStatus_READY,
+				WaitTimeoutSeconds: &timeout,
+			},
+		}
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+		var err error
+		go func() {
+			err = h.Handle(context.Background(), action)
+			wg.Done()
+		}()
+
+		go func() {
+			time.Sleep(1 * time.Second)
+			node.Spec.Taints = []v1.Taint{}
+			_, _ = clientset.CoreV1().Nodes().Update(context.Background(), node, metav1.UpdateOptions{})
+			wg.Done()
+		}()
+		wg.Wait()
+
+		r.NoError(err)
+	})
+
 	t.Run("handle error when node is not ready", func(t *testing.T) {
 		r := require.New(t)
 		nodeName := "node1"
