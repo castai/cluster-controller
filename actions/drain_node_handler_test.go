@@ -2,10 +2,11 @@ package actions
 
 import (
 	"context"
-	"github.com/google/uuid"
+	"math"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
@@ -38,6 +39,7 @@ func TestDrainNodeHandler(t *testing.T) {
 				DrainTimeoutSeconds: 1,
 				Force:               true,
 			},
+			CreatedAt: time.Now().UTC(),
 		}
 		h := drainNodeHandler{
 			log:       log,
@@ -56,10 +58,12 @@ func TestDrainNodeHandler(t *testing.T) {
 		r.Error(err)
 		r.True(apierrors.IsNotFound(err))
 
-		// Daemon set and static pods should not be drained.
+		// Daemon set and static pods and job should not be drained.
 		_, err = clientset.CoreV1().Pods("default").Get(context.Background(), "ds-pod", metav1.GetOptions{})
 		r.NoError(err)
 		_, err = clientset.CoreV1().Pods("default").Get(context.Background(), "static-pod", metav1.GetOptions{})
+		r.NoError(err)
+		_, err = clientset.CoreV1().Pods("default").Get(context.Background(), "job-pod", metav1.GetOptions{})
 		r.NoError(err)
 	})
 
@@ -76,6 +80,7 @@ func TestDrainNodeHandler(t *testing.T) {
 				DrainTimeoutSeconds: 1,
 				Force:               true,
 			},
+			CreatedAt: time.Now().UTC(),
 		}
 
 		h := drainNodeHandler{
@@ -104,6 +109,7 @@ func TestDrainNodeHandler(t *testing.T) {
 				DrainTimeoutSeconds: 1,
 				Force:               true,
 			},
+			CreatedAt: time.Now().UTC(),
 		}
 
 		h := drainNodeHandler{
@@ -136,6 +142,7 @@ func TestDrainNodeHandler(t *testing.T) {
 				DrainTimeoutSeconds: 1,
 				Force:               true,
 			},
+			CreatedAt: time.Now().UTC(),
 		}
 
 		h := drainNodeHandler{
@@ -184,6 +191,7 @@ func TestDrainNodeHandler(t *testing.T) {
 				DrainTimeoutSeconds: 1,
 				Force:               true,
 			},
+			CreatedAt: time.Now().UTC(),
 		}
 
 		h := drainNodeHandler{
@@ -225,6 +233,7 @@ func TestDrainNodeHandler(t *testing.T) {
 				DrainTimeoutSeconds: 1,
 				Force:               true,
 			},
+			CreatedAt: time.Now().UTC(),
 		}
 
 		h := drainNodeHandler{
@@ -254,6 +263,71 @@ func TestDrainNodeHandler(t *testing.T) {
 
 		_, err = clientset.CoreV1().Pods("default").Get(context.Background(), podName, metav1.GetOptions{})
 		r.NoError(err)
+	})
+}
+
+func TestGetDrainTimeout(t *testing.T) {
+	log := logrus.New()
+	log.SetLevel(logrus.DebugLevel)
+
+	t.Run("drain timeout for new action should be the same like in request", func(t *testing.T) {
+		r := require.New(t)
+		action := &castai.ClusterAction{
+			ID: uuid.New().String(),
+			ActionDrainNode: &castai.ActionDrainNode{
+				NodeName:            "node1",
+				DrainTimeoutSeconds: 100,
+				Force:               true,
+			},
+			CreatedAt: time.Now().UTC(),
+		}
+		h := drainNodeHandler{
+			log: log,
+			cfg: drainNodeConfig{},
+		}
+
+		timeout := h.getDrainTimeout(action)
+		r.Equal(100*time.Second, timeout)
+	})
+
+	t.Run("drain timeout for older action should be decreased by time since action creation", func(t *testing.T) {
+		r := require.New(t)
+		action := &castai.ClusterAction{
+			ID: uuid.New().String(),
+			ActionDrainNode: &castai.ActionDrainNode{
+				NodeName:            "node1",
+				DrainTimeoutSeconds: 600,
+				Force:               true,
+			},
+			CreatedAt: time.Now().UTC().Add(-3 * time.Minute),
+		}
+		h := drainNodeHandler{
+			log: log,
+			cfg: drainNodeConfig{},
+		}
+
+		timeout := h.getDrainTimeout(action)
+		r.Less(int(math.Floor(timeout.Seconds())), 600)
+	})
+
+	t.Run("drain timeout min wait timeout should be 0s", func(t *testing.T) {
+		r := require.New(t)
+		action := &castai.ClusterAction{
+			ID: uuid.New().String(),
+			ActionDrainNode: &castai.ActionDrainNode{
+				NodeName:            "node1",
+				DrainTimeoutSeconds: 600,
+				Force:               true,
+			},
+			CreatedAt: time.Now().UTC().Add(-60 * time.Minute),
+		}
+		h := drainNodeHandler{
+			log: log,
+			cfg: drainNodeConfig{},
+		}
+
+		timeout := h.getDrainTimeout(action)
+		r.Equal(0, int(timeout.Seconds()))
 	})
 }
 
@@ -324,8 +398,42 @@ func setupFakeClientWithNodePodEviction(nodeName, podName string) *fake.Clientse
 			NodeName: nodeName,
 		},
 	}
+	terminatedPod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "removed-pod",
+			Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					Kind:       "Node",
+					Controller: &controller,
+				},
+			},
+			DeletionTimestamp: &metav1.Time{Time: time.Now().UTC()},
+		},
+		Spec: v1.PodSpec{
+			NodeName: nodeName,
+		},
+	}
+	jobCompleted := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "job-pod",
+			Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					Kind:       "Node",
+					Controller: &controller,
+				},
+			},
+		},
+		Spec: v1.PodSpec{
+			NodeName: nodeName,
+		},
+		Status: v1.PodStatus{
+			Phase: v1.PodSucceeded,
+		},
+	}
 
-	clientset := fake.NewSimpleClientset(node, pod, daemonSetPod, staticPod)
+	clientset := fake.NewSimpleClientset(node, pod, daemonSetPod, staticPod, terminatedPod, jobCompleted)
 
 	addEvictionSupport(clientset)
 

@@ -26,6 +26,7 @@ type Config struct {
 	AckRetryWait     time.Duration // How long to wait before next ack retry request.
 	ClusterID        string
 	Version          string
+	Namespace        string
 }
 
 type Service interface {
@@ -53,7 +54,7 @@ func NewService(
 		startedActions: map[string]struct{}{},
 		actionHandlers: map[reflect.Type]ActionHandler{
 			reflect.TypeOf(&castai.ActionDeleteNode{}):        newDeleteNodeHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionDrainNode{}):         newDrainNodeHandler(log, clientset),
+			reflect.TypeOf(&castai.ActionDrainNode{}):         newDrainNodeHandler(log, clientset, cfg.Namespace),
 			reflect.TypeOf(&castai.ActionPatchNode{}):         newPatchNodeHandler(log, clientset),
 			reflect.TypeOf(&castai.ActionCreateEvent{}):       newCreateEventHandler(log, clientset),
 			reflect.TypeOf(&castai.ActionApproveCSR{}):        newApproveCSRHandler(log, clientset),

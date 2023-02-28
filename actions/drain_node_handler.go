@@ -12,13 +12,21 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 	v1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/api/policy/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/kubectl/pkg/drain"
 
 	"github.com/castai/cluster-controller/castai"
+)
+
+const (
+	minDrainTimeout = 0                // Minimal pod drain timeout
+	roundTripTime   = 10 * time.Second // 2xPollInterval for action
 )
 
 type drainNodeConfig struct {
@@ -27,9 +35,11 @@ type drainNodeConfig struct {
 	podDeleteRetryDelay           time.Duration
 	podEvictRetryDelay            time.Duration
 	podsTerminationWaitRetryDelay time.Duration
+	castNamespace                 string
+	skipDeletedTimeoutSeconds     int
 }
 
-func newDrainNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface) ActionHandler {
+func newDrainNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface, castNamespace string) ActionHandler {
 	return &drainNodeHandler{
 		log:       log,
 		clientset: clientset,
@@ -39,8 +49,22 @@ func newDrainNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface)
 			podDeleteRetryDelay:           5 * time.Second,
 			podEvictRetryDelay:            5 * time.Second,
 			podsTerminationWaitRetryDelay: 10 * time.Second,
+			castNamespace:                 castNamespace,
+			skipDeletedTimeoutSeconds:     60,
 		},
 	}
+}
+
+// getDrainTimeout returns drain timeout adjusted to action creation time.
+// the result is clamped between 0s and the requested timeout.
+func (h *drainNodeHandler) getDrainTimeout(action *castai.ClusterAction) time.Duration {
+	timeSinceCreated := time.Since(action.CreatedAt)
+	drainTimeout := time.Duration(action.ActionDrainNode.DrainTimeoutSeconds) * time.Second
+
+	// Remove 2 poll interval required for polling the action.
+	timeSinceCreated = timeSinceCreated - roundTripTime
+
+	return lo.Clamp(drainTimeout-timeSinceCreated, minDrainTimeout*time.Second, time.Duration(action.ActionDrainNode.DrainTimeoutSeconds)*time.Second)
 }
 
 type drainNodeHandler struct {
@@ -54,7 +78,7 @@ func (h *drainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	if !ok {
 		return fmt.Errorf("unexpected type %T for drain handler", action.Data())
 	}
-
+	drainTimeout := h.getDrainTimeout(action)
 	log := h.log.WithFields(logrus.Fields{
 		"node_name": req.NodeName,
 		"node_id":   req.NodeID,
@@ -71,14 +95,14 @@ func (h *drainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 		return err
 	}
 
-	log.Infof("draining node, drain_timeout_seconds=%d, force=%v", req.DrainTimeoutSeconds, req.Force)
+	log.Infof("draining node, drain_timeout_seconds=%f, force=%v created_at=%s", drainTimeout.Seconds(), req.Force, action.CreatedAt)
 
 	if err := h.taintNode(ctx, node); err != nil {
 		return fmt.Errorf("tainting node %q: %w", req.NodeName, err)
 	}
 
 	// First try to evict pods gracefully.
-	evictCtx, evictCancel := context.WithTimeout(ctx, time.Duration(req.DrainTimeoutSeconds)*time.Second)
+	evictCtx, evictCancel := context.WithTimeout(ctx, drainTimeout)
 	defer evictCancel()
 	err = h.evictNodePods(evictCtx, log, node)
 	if err != nil && !errors.Is(err, context.DeadlineExceeded) {
@@ -139,8 +163,18 @@ func (h *drainNodeHandler) evictNodePods(ctx context.Context, log logrus.FieldLo
 	}
 
 	log.Infof("evicting %d pods", len(pods))
+	if len(pods) == 0 {
+		return nil
+	}
+	groupVersion, err := drain.CheckEvictionSupport(h.clientset)
+	if err != nil {
+		return err
+	}
+	evictPod := func(ctx context.Context, pod v1.Pod) error {
+		return h.evictPod(ctx, pod, groupVersion)
+	}
 
-	if err := h.sendPodsRequests(ctx, pods, h.evictPod); err != nil {
+	if err := h.sendPodsRequests(ctx, pods, evictPod); err != nil {
 		return fmt.Errorf("sending evict pods requests: %w", err)
 	}
 
@@ -159,6 +193,10 @@ func (h *drainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldL
 		log.Infof("forcefully deleting %d pods", len(pods))
 	}
 
+	if len(pods) == 0 {
+		return nil
+	}
+
 	deletePod := func(ctx context.Context, pod v1.Pod) error {
 		return h.deletePod(ctx, options, pod)
 	}
@@ -171,9 +209,8 @@ func (h *drainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldL
 }
 
 func (h *drainNodeHandler) sendPodsRequests(ctx context.Context, pods []v1.Pod, f func(context.Context, v1.Pod) error) error {
-	const batchSize = 5
-
-	for _, batch := range lo.Chunk(pods, batchSize) {
+	batchSize := lo.Clamp(0.2*float64(len(pods)), 5, 20)
+	for _, batch := range lo.Chunk(pods, int(batchSize)) {
 		g, ctx := errgroup.WithContext(ctx)
 		for _, pod := range batch {
 			pod := pod
@@ -202,10 +239,31 @@ func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, node *v1.Nod
 		return nil, fmt.Errorf("listing node %v pods: %w", node.Name, err)
 	}
 
-	podsToEvict := lo.Filter(pods.Items, func(pod v1.Pod, _ int) bool {
-		return !isDaemonSetPod(&pod) && !isStaticPod(&pod)
-	})
+	podsToEvict := make([]v1.Pod, 0)
+	castPods := make([]v1.Pod, 0)
+	// Evict CAST PODs as last ones
+	for _, p := range pods.Items {
+		// Skip pods that have been recently removed.
+		if !p.ObjectMeta.DeletionTimestamp.IsZero() &&
+			int(time.Since(p.ObjectMeta.GetDeletionTimestamp().Time).Seconds()) > h.cfg.skipDeletedTimeoutSeconds {
+			continue
+		}
 
+		// Skip completed pods. Will be removed during node removal.
+		if p.Status.Phase == v1.PodSucceeded {
+			continue
+		}
+
+		if p.Namespace == h.cfg.castNamespace && !isDaemonSetPod(&p) && !isStaticPod(&p) {
+			castPods = append(castPods, p)
+		}
+
+		if !isDaemonSetPod(&p) && !isStaticPod(&p) {
+			podsToEvict = append(podsToEvict, p)
+		}
+	}
+
+	podsToEvict = append(podsToEvict, castPods...)
 	return podsToEvict, nil
 }
 
@@ -224,19 +282,29 @@ func (h *drainNodeHandler) waitNodePodsTerminated(ctx context.Context, node *v1.
 
 // evictPod from the k8s node. Error handling is based on eviction api documentation:
 // https://kubernetes.io/docs/tasks/administer-cluster/safely-drain-node/#the-eviction-api
-func (h *drainNodeHandler) evictPod(ctx context.Context, pod v1.Pod) error {
+func (h *drainNodeHandler) evictPod(ctx context.Context, pod v1.Pod, groupVersion schema.GroupVersion) error {
 	b := backoff.WithContext(backoff.NewConstantBackOff(h.cfg.podEvictRetryDelay), ctx) // nolint:gomnd
 	action := func() error {
-		err := h.clientset.CoreV1().Pods(pod.Namespace).Evict(ctx, &v1beta1.Eviction{
-			TypeMeta: metav1.TypeMeta{
-				APIVersion: "policy/v1beta1",
-				Kind:       "Eviction",
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      pod.Name,
-				Namespace: pod.Namespace,
-			},
-		})
+		var err error
+		if groupVersion == policyv1.SchemeGroupVersion {
+			err = h.clientset.PolicyV1().Evictions(pod.Namespace).Evict(ctx, &policyv1.Eviction{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      pod.Name,
+					Namespace: pod.Namespace,
+				},
+			})
+		} else {
+			err = h.clientset.CoreV1().Pods(pod.Namespace).EvictV1beta1(ctx, &v1beta1.Eviction{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "policy/v1beta1",
+					Kind:       "Eviction",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      pod.Name,
+					Namespace: pod.Namespace,
+				},
+			})
+		}
 
 		if err != nil {
 			// Pod is not found - ignore.
