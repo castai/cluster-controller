@@ -2,7 +2,6 @@ package actions
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -59,10 +58,12 @@ func TestDrainNodeHandler(t *testing.T) {
 		r.Error(err)
 		r.True(apierrors.IsNotFound(err))
 
-		// Daemon set and static pods should not be drained.
+		// Daemon set and static pods and job should not be drained.
 		_, err = clientset.CoreV1().Pods("default").Get(context.Background(), "ds-pod", metav1.GetOptions{})
 		r.NoError(err)
 		_, err = clientset.CoreV1().Pods("default").Get(context.Background(), "static-pod", metav1.GetOptions{})
+		r.NoError(err)
+		_, err = clientset.CoreV1().Pods("default").Get(context.Background(), "job-pod", metav1.GetOptions{})
 		r.NoError(err)
 	})
 
@@ -341,7 +342,6 @@ func prependEvictionReaction(t *testing.T, c *fake.Clientset, success bool) {
 
 			go func() {
 				err := c.CoreV1().Pods(eviction.Namespace).Delete(context.Background(), eviction.Name, metav1.DeleteOptions{})
-				fmt.Println("EEEERRR", err)
 				require.NoError(t, err)
 			}()
 
@@ -414,8 +414,26 @@ func setupFakeClientWithNodePodEviction(nodeName, podName string) *fake.Clientse
 			NodeName: nodeName,
 		},
 	}
+	jobCompleted := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "job-pod",
+			Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					Kind:       "Node",
+					Controller: &controller,
+				},
+			},
+		},
+		Spec: v1.PodSpec{
+			NodeName: nodeName,
+		},
+		Status: v1.PodStatus{
+			Phase: v1.PodSucceeded,
+		},
+	}
 
-	clientset := fake.NewSimpleClientset(node, pod, daemonSetPod, staticPod, terminatedPod)
+	clientset := fake.NewSimpleClientset(node, pod, daemonSetPod, staticPod, terminatedPod, jobCompleted)
 
 	addEvictionSupport(clientset)
 
