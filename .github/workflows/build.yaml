@@ -66,6 +66,23 @@ jobs:
           username: _json_key
           password: ${{ secrets.ARTIFACT_BUILDER_JSON_KEY }}
 
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        if: ${{ github.event_name == 'pull_request' }}
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push pr
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          platforms: linux/arm64,linux/amd64
+          push: ${{ github.event_name == 'pull_request' }}
+          tags: ghcr.io/castai/cluster-controller:${{ github.sha }}
+
       - name: Build and push main
         if: github.event_name != 'release'
         uses: docker/build-push-action@v2
