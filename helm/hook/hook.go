@@ -15,6 +15,12 @@ import (
 var labelIgnoreResources = map[string]struct{}{
 	"rbac.authorization.k8s.io/v1/ClusterRole//castai-evictor":        {},
 	"rbac.authorization.k8s.io/v1/ClusterRoleBinding//castai-evictor": {},
+
+	"rbac.authorization.k8s.io/v1/ClusterRole//castai-kvisor":        {},
+	"rbac.authorization.k8s.io/v1/ClusterRoleBinding//castai-kvisor": {},
+
+	"rbac.authorization.k8s.io/v1/ClusterRole//castai-kvisor-runtime":        {},
+	"rbac.authorization.k8s.io/v1/ClusterRoleBinding//castai-kvisor-runtime": {},
 }
 
 const (
