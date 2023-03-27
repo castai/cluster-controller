@@ -15,6 +15,12 @@ import (
 var labelIgnoreResources = map[string]struct{}{
 	"rbac.authorization.k8s.io/v1/ClusterRole//castai-evictor":        {},
 	"rbac.authorization.k8s.io/v1/ClusterRoleBinding//castai-evictor": {},
+
+	"rbac.authorization.k8s.io/v1/ClusterRole//castai-kvisor":        {},
+	"rbac.authorization.k8s.io/v1/ClusterRoleBinding//castai-kvisor": {},
+
+	"rbac.authorization.k8s.io/v1/ClusterRole//castai-kvisor-runtime":        {},
+	"rbac.authorization.k8s.io/v1/ClusterRoleBinding//castai-kvisor-runtime": {},
 }
 
 const (
@@ -31,6 +37,7 @@ func NewLabelIgnoreHook(kubeClient kube.Interface, oldRelease *release.Release) 
 
 // LabelIgnoreHook prevents certain resource getting updated, if only their version labels have changed.
 // This is needed in order to update components like evictor with it's own cluster scoped resources like clusterrole.
+// Cluster controller can't update these rbac resource since it lacks permissions (unless user configures cluster-admin role).
 type LabelIgnoreHook struct {
 	kubeClient kube.Interface
 	oldRelease *release.Release
@@ -61,9 +68,13 @@ func (l *LabelIgnoreHook) Run(renderedManifests *bytes.Buffer) (*bytes.Buffer, e
 				return nil, fmt.Errorf("updating a previously non-existant chart %s", gvk)
 			}
 			labelCopy := u.GetLabels()
-			// Reset version to previous release
-			labelCopy[k8sVersionLabel] = oldLabels[k8sVersionLabel]
-			labelCopy[helmVersionLabel] = oldLabels[helmVersionLabel]
+			// Reset version labels to previous release.
+			if v, found := oldLabels[k8sVersionLabel]; found {
+				labelCopy[k8sVersionLabel] = v
+			}
+			if v, found := oldLabels[helmVersionLabel]; found {
+				labelCopy[helmVersionLabel] = v
+			}
 			u.SetLabels(labelCopy)
 		}
 
