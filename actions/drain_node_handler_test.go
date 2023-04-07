@@ -331,6 +331,24 @@ func TestGetDrainTimeout(t *testing.T) {
 	})
 }
 
+func TestLogCastPodsToEvict(t *testing.T) {
+	t.Run("should log pods to evict", func(t *testing.T) {
+		pods := []v1.Pod{
+			{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "ns1"}},
+			{ObjectMeta: metav1.ObjectMeta{Name: "pod2", Namespace: "ns2"}},
+		}
+		sut := drainNodeHandler{log: logrus.New()}
+		sut.logCastPodsToEvict(pods)
+	})
+
+	t.Run("should skip logs when no pods to evict", func(t *testing.T) {
+		var pods []v1.Pod
+		sut := drainNodeHandler{log: logrus.New()}
+		sut.logCastPodsToEvict(pods)
+	})
+
+}
+
 func prependEvictionReaction(t *testing.T, c *fake.Clientset, success bool) {
 	c.PrependReactor("create", "pods", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
 		if action.GetSubresource() != "eviction" {

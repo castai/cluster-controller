@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -263,6 +264,7 @@ func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, node *v1.Nod
 		}
 	}
 
+	h.logCastPodsToEvict(castPods)
 	podsToEvict = append(podsToEvict, castPods...)
 	return podsToEvict, nil
 }
@@ -350,6 +352,20 @@ func (h *drainNodeHandler) deletePod(ctx context.Context, options metav1.DeleteO
 		return fmt.Errorf("deleting pod %s in namespace %s: %w", pod.Name, pod.Namespace, err)
 	}
 	return nil
+}
+
+func (h *drainNodeHandler) logCastPodsToEvict(castPods []v1.Pod) {
+	if len(castPods) == 0 {
+		return
+	}
+
+	castPodsNames := make([]string, 0, len(castPods))
+	for _, p := range castPods {
+		castPodsNames = append(castPodsNames, p.Name)
+	}
+	joinedPodNames := strings.Join(castPodsNames, ", ")
+
+	logrus.Warnf("evicting CAST AI pods: %s", joinedPodNames)
 }
 
 func isDaemonSetPod(p *v1.Pod) bool {
