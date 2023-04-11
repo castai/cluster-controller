@@ -158,7 +158,7 @@ func (h *drainNodeHandler) taintNode(ctx context.Context, node *v1.Node) error {
 }
 
 func (h *drainNodeHandler) evictNodePods(ctx context.Context, log logrus.FieldLogger, node *v1.Node) error {
-	pods, err := h.listNodePodsToEvict(ctx, nil, node)
+	pods, err := h.listNodePodsToEvict(ctx, log, node)
 	if err != nil {
 		return err
 	}
