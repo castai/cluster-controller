@@ -158,7 +158,7 @@ func (h *drainNodeHandler) taintNode(ctx context.Context, node *v1.Node) error {
 }
 
 func (h *drainNodeHandler) evictNodePods(ctx context.Context, log logrus.FieldLogger, node *v1.Node) error {
-	pods, err := h.listNodePodsToEvict(ctx, node)
+	pods, err := h.listNodePodsToEvict(ctx, nil, node)
 	if err != nil {
 		return err
 	}
@@ -183,7 +183,7 @@ func (h *drainNodeHandler) evictNodePods(ctx context.Context, log logrus.FieldLo
 }
 
 func (h *drainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldLogger, node *v1.Node, options metav1.DeleteOptions) error {
-	pods, err := h.listNodePodsToEvict(ctx, node)
+	pods, err := h.listNodePodsToEvict(ctx, log, node)
 	if err != nil {
 		return err
 	}
@@ -225,7 +225,7 @@ func (h *drainNodeHandler) sendPodsRequests(ctx context.Context, pods []v1.Pod, 
 	return nil
 }
 
-func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, node *v1.Node) ([]v1.Pod, error) {
+func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.FieldLogger, node *v1.Node) ([]v1.Pod, error) {
 	var pods *v1.PodList
 	if err := backoff.Retry(func() error {
 		p, err := h.clientset.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
@@ -264,14 +264,14 @@ func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, node *v1.Nod
 		}
 	}
 
-	h.logCastPodsToEvict(castPods)
+	logCastPodsToEvict(log, castPods)
 	podsToEvict = append(podsToEvict, castPods...)
 	return podsToEvict, nil
 }
 
 func (h *drainNodeHandler) waitNodePodsTerminated(ctx context.Context, node *v1.Node) error {
 	return backoff.Retry(func() error {
-		pods, err := h.listNodePodsToEvict(ctx, node)
+		pods, err := h.listNodePodsToEvict(ctx, nil, node)
 		if err != nil {
 			return fmt.Errorf("waiting for node %q pods to be terminated: %w", node.Name, err)
 		}
@@ -354,7 +354,7 @@ func (h *drainNodeHandler) deletePod(ctx context.Context, options metav1.DeleteO
 	return nil
 }
 
-func (h *drainNodeHandler) logCastPodsToEvict(castPods []v1.Pod) {
+func logCastPodsToEvict(log logrus.FieldLogger, castPods []v1.Pod) {
 	if len(castPods) == 0 {
 		return
 	}
@@ -365,7 +365,7 @@ func (h *drainNodeHandler) logCastPodsToEvict(castPods []v1.Pod) {
 	}
 	joinedPodNames := strings.Join(castPodsNames, ", ")
 
-	logrus.Warnf("evicting CAST AI pods: %s", joinedPodNames)
+	log.Warnf("evicting CAST AI pods: %s", joinedPodNames)
 }
 
 func isDaemonSetPod(p *v1.Pod) bool {
