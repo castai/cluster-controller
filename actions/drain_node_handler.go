@@ -179,7 +179,7 @@ func (h *drainNodeHandler) evictNodePods(ctx context.Context, log logrus.FieldLo
 		return fmt.Errorf("sending evict pods requests: %w", err)
 	}
 
-	return h.waitNodePodsTerminated(ctx, node)
+	return h.waitNodePodsTerminated(ctx, log, node)
 }
 
 func (h *drainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldLogger, node *v1.Node, options metav1.DeleteOptions) error {
@@ -206,7 +206,7 @@ func (h *drainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldL
 		return fmt.Errorf("sending delete pods requests: %w", err)
 	}
 
-	return h.waitNodePodsTerminated(ctx, node)
+	return h.waitNodePodsTerminated(ctx, log, node)
 }
 
 func (h *drainNodeHandler) sendPodsRequests(ctx context.Context, pods []v1.Pod, f func(context.Context, v1.Pod) error) error {
@@ -269,9 +269,9 @@ func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.F
 	return podsToEvict, nil
 }
 
-func (h *drainNodeHandler) waitNodePodsTerminated(ctx context.Context, node *v1.Node) error {
+func (h *drainNodeHandler) waitNodePodsTerminated(ctx context.Context, log logrus.FieldLogger, node *v1.Node) error {
 	return backoff.Retry(func() error {
-		pods, err := h.listNodePodsToEvict(ctx, nil, node)
+		pods, err := h.listNodePodsToEvict(ctx, log, node)
 		if err != nil {
 			return fmt.Errorf("waiting for node %q pods to be terminated: %w", node.Name, err)
 		}
