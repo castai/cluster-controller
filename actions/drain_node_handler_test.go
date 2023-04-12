@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/api/policy/v1beta1"
@@ -329,6 +330,32 @@ func TestGetDrainTimeout(t *testing.T) {
 		timeout := h.getDrainTimeout(action)
 		r.Equal(0, int(timeout.Seconds()))
 	})
+}
+
+func TestLogCastPodsToEvict(t *testing.T) {
+	t.Run("should log pods to evict", func(t *testing.T) {
+		r := require.New(t)
+		log, hook := test.NewNullLogger()
+		pods := []v1.Pod{
+			{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "ns1"}},
+			{ObjectMeta: metav1.ObjectMeta{Name: "pod2", Namespace: "ns2"}},
+		}
+
+		logCastPodsToEvict(log, pods)
+
+		r.Len(hook.Entries, 1)
+	})
+
+	t.Run("should skip logs when no pods to evict", func(t *testing.T) {
+		r := require.New(t)
+		log, hook := test.NewNullLogger()
+
+		var pods []v1.Pod
+		logCastPodsToEvict(log, pods)
+
+		r.Len(hook.Entries, 0)
+	})
+
 }
 
 func prependEvictionReaction(t *testing.T, c *fake.Clientset, success bool) {

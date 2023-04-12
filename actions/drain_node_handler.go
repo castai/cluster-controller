@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -157,7 +158,7 @@ func (h *drainNodeHandler) taintNode(ctx context.Context, node *v1.Node) error {
 }
 
 func (h *drainNodeHandler) evictNodePods(ctx context.Context, log logrus.FieldLogger, node *v1.Node) error {
-	pods, err := h.listNodePodsToEvict(ctx, node)
+	pods, err := h.listNodePodsToEvict(ctx, log, node)
 	if err != nil {
 		return err
 	}
@@ -178,11 +179,11 @@ func (h *drainNodeHandler) evictNodePods(ctx context.Context, log logrus.FieldLo
 		return fmt.Errorf("sending evict pods requests: %w", err)
 	}
 
-	return h.waitNodePodsTerminated(ctx, node)
+	return h.waitNodePodsTerminated(ctx, log, node)
 }
 
 func (h *drainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldLogger, node *v1.Node, options metav1.DeleteOptions) error {
-	pods, err := h.listNodePodsToEvict(ctx, node)
+	pods, err := h.listNodePodsToEvict(ctx, log, node)
 	if err != nil {
 		return err
 	}
@@ -205,7 +206,7 @@ func (h *drainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldL
 		return fmt.Errorf("sending delete pods requests: %w", err)
 	}
 
-	return h.waitNodePodsTerminated(ctx, node)
+	return h.waitNodePodsTerminated(ctx, log, node)
 }
 
 func (h *drainNodeHandler) sendPodsRequests(ctx context.Context, pods []v1.Pod, f func(context.Context, v1.Pod) error) error {
@@ -224,7 +225,7 @@ func (h *drainNodeHandler) sendPodsRequests(ctx context.Context, pods []v1.Pod, 
 	return nil
 }
 
-func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, node *v1.Node) ([]v1.Pod, error) {
+func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.FieldLogger, node *v1.Node) ([]v1.Pod, error) {
 	var pods *v1.PodList
 	if err := backoff.Retry(func() error {
 		p, err := h.clientset.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
@@ -263,13 +264,14 @@ func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, node *v1.Nod
 		}
 	}
 
+	logCastPodsToEvict(log, castPods)
 	podsToEvict = append(podsToEvict, castPods...)
 	return podsToEvict, nil
 }
 
-func (h *drainNodeHandler) waitNodePodsTerminated(ctx context.Context, node *v1.Node) error {
+func (h *drainNodeHandler) waitNodePodsTerminated(ctx context.Context, log logrus.FieldLogger, node *v1.Node) error {
 	return backoff.Retry(func() error {
-		pods, err := h.listNodePodsToEvict(ctx, node)
+		pods, err := h.listNodePodsToEvict(ctx, log, node)
 		if err != nil {
 			return fmt.Errorf("waiting for node %q pods to be terminated: %w", node.Name, err)
 		}
@@ -350,6 +352,20 @@ func (h *drainNodeHandler) deletePod(ctx context.Context, options metav1.DeleteO
 		return fmt.Errorf("deleting pod %s in namespace %s: %w", pod.Name, pod.Namespace, err)
 	}
 	return nil
+}
+
+func logCastPodsToEvict(log logrus.FieldLogger, castPods []v1.Pod) {
+	if len(castPods) == 0 {
+		return
+	}
+
+	castPodsNames := make([]string, 0, len(castPods))
+	for _, p := range castPods {
+		castPodsNames = append(castPodsNames, p.Name)
+	}
+	joinedPodNames := strings.Join(castPodsNames, ", ")
+
+	log.Warnf("evicting CAST AI pods: %s", joinedPodNames)
 }
 
 func isDaemonSetPod(p *v1.Pod) bool {
