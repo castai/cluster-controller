@@ -15,7 +15,6 @@ type Config struct {
 	ClusterID      string
 	PprofPort      int
 	LeaderElection LeaderElection
-	AksInitData    bool
 }
 
 type Log struct {

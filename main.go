@@ -24,7 +24,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
 	"github.com/castai/cluster-controller/actions"
-	"github.com/castai/cluster-controller/aks"
 	"github.com/castai/cluster-controller/castai"
 	"github.com/castai/cluster-controller/config"
 	"github.com/castai/cluster-controller/health"
@@ -62,19 +61,6 @@ func main() {
 	e := ctrlog.NewExporter(logger, client)
 	logger.AddHook(e)
 	logrus.RegisterExitHandler(e.Wait)
-
-	// Send aks init data and exit if run from temporary provisioned node.
-	if cfg.AksInitData {
-		h := aks.NewInitDataHandler(log, client)
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		defer cancel()
-		if err := h.Handle(ctx); err != nil {
-			log.Fatalf("sending aks init data: %v", err)
-		}
-		log.Info("aks init data sent, waiting for init data node shutdown")
-		time.Sleep(time.Hour)
-		return
-	}
 
 	ctx := signals.SetupSignalHandler()
 	if err := run(ctx, client, logger, cfg, binVersion); err != nil {
