@@ -102,3 +102,15 @@ jobs:
           tags: |
             us-docker.pkg.dev/castai-hub/library/cluster-controller:${{ env.RELEASE_TAG }}
             us-docker.pkg.dev/castai-hub/library/cluster-controller:latest
+
+      - name: Docker pull for fossa main
+        if: github.event_name == 'release'
+        run: docker pull us-docker.pkg.dev/castai-hub/library/cluster-controller:${{ env.RELEASE_TAG }}
+
+      - name: FOSSA scan docker image
+        if: github.event_name == 'release'
+        continue-on-error: true
+        uses: fossas/fossa-action@v1
+        with:
+          api-key: ${{ secrets.FOSSA_API_KEY }}
+          container: us-docker.pkg.dev/castai-hub/library/cluster-controller:${{ env.RELEASE_TAG }}
