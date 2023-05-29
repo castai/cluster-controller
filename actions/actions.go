@@ -110,7 +110,18 @@ func (s *service) Run(ctx context.Context) {
 func (s *service) doWork(ctx context.Context) error {
 	s.log.Info("polling actions")
 	start := time.Now()
-	actions, err := s.pollActions(ctx)
+	var (
+		actions []*castai.ClusterAction
+		err     error
+	)
+	b := backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), 3), ctx)
+	err = backoff.Retry(func() error {
+		actions, err = s.pollActions(ctx)
+		if err != nil {
+			return err
+		}
+		return nil
+	}, b)
 	if err != nil {
 		return fmt.Errorf("polling actions: %w", err)
 	}
