@@ -150,11 +150,11 @@ func TestDrainNodeHandler(t *testing.T) {
 			log:       log,
 			clientset: clientset,
 			cfg: drainNodeConfig{
-				podsDeleteTimeout:             7 * time.Second,
+				podsDeleteTimeout:             700 * time.Millisecond,
 				podDeleteRetries:              5,
-				podDeleteRetryDelay:           5 * time.Second,
-				podEvictRetryDelay:            5 * time.Second,
-				podsTerminationWaitRetryDelay: 10 * time.Second,
+				podDeleteRetryDelay:           500 * time.Millisecond,
+				podEvictRetryDelay:            500 * time.Millisecond,
+				podsTerminationWaitRetryDelay: 1000 * time.Millisecond,
 			}}
 
 		clientset.PrependReactor("delete", "pods", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
@@ -241,11 +241,11 @@ func TestDrainNodeHandler(t *testing.T) {
 			log:       log,
 			clientset: clientset,
 			cfg: drainNodeConfig{
-				podsDeleteTimeout:             7 * time.Second,
+				podsDeleteTimeout:             700 * time.Millisecond,
 				podDeleteRetries:              5,
-				podDeleteRetryDelay:           5 * time.Second,
-				podEvictRetryDelay:            5 * time.Second,
-				podsTerminationWaitRetryDelay: 10 * time.Second,
+				podDeleteRetryDelay:           500 * time.Millisecond,
+				podEvictRetryDelay:            500 * time.Millisecond,
+				podsTerminationWaitRetryDelay: 1000 * time.Millisecond,
 			}}
 
 		clientset.PrependReactor("delete", "pods", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
