@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
 
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
@@ -64,12 +65,17 @@ func (h *patchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 		return err
 	}
 
-	log.Infof("patching node, labels=%v, taints=%v, annotations=%v", req.Labels, req.Taints, req.Annotations)
+	unschedulable := "<nil>"
+	if req.Unschedulable != nil {
+		unschedulable = strconv.FormatBool(*req.Unschedulable)
+	}
+	log.Infof("patching node, labels=%v, taints=%v, annotations=%v, unschedulable=%v", req.Labels, req.Taints, req.Annotations, unschedulable)
 
 	return patchNode(ctx, h.clientset, node, func(n *v1.Node) error {
 		node.Labels = patchNodeMapField(node.Labels, req.Labels)
 		node.Annotations = patchNodeMapField(node.Annotations, req.Annotations)
 		node.Spec.Taints = patchTaints(node.Spec.Taints, req.Taints)
+		node.Spec.Unschedulable = patchUnschedulable(node.Spec.Unschedulable, req.Unschedulable)
 		return nil
 	})
 }
@@ -100,6 +106,13 @@ func patchTaints(taints []v1.Taint, patch []castai.NodeTaint) []v1.Taint {
 		}
 	}
 	return taints
+}
+
+func patchUnschedulable(unschedulable bool, patch *bool) bool {
+	if patch != nil {
+		return *patch
+	}
+	return unschedulable
 }
 
 func findTaint(taints []v1.Taint, t *v1.Taint) (v1.Taint, bool) {

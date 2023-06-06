@@ -100,11 +100,12 @@ type ActionApproveCSR struct {
 }
 
 type ActionPatchNode struct {
-	NodeName    string            `json:"nodeName"`
-	NodeID      string            `json:"nodeId"`
-	Labels      map[string]string `json:"labels"`
-	Taints      []NodeTaint       `json:"taints"`
-	Annotations map[string]string `json:"annotations"`
+	NodeName      string            `json:"nodeName"`
+	NodeID        string            `json:"nodeId"`
+	Labels        map[string]string `json:"labels"`
+	Taints        []NodeTaint       `json:"taints"`
+	Annotations   map[string]string `json:"annotations"`
+	Unschedulable *bool             `json:"unschedulable"`
 }
 
 type NodeTaint struct {
