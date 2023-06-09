@@ -2,9 +2,10 @@ package actions
 
 import (
 	"context"
-	"github.com/google/uuid"
+	"github.com/samber/lo"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
@@ -129,5 +130,38 @@ func TestPatchNodeHandler(t *testing.T) {
 
 		_, err = clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
 		r.NoError(err)
+	})
+
+	t.Run("cordoning node", func(t *testing.T) {
+		nodeName := "node1"
+		node := &v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: nodeName,
+			},
+			Spec: v1.NodeSpec{
+				Unschedulable: false,
+			},
+		}
+		clientset := fake.NewSimpleClientset(node)
+
+		h := patchNodeHandler{
+			log:       log,
+			clientset: clientset,
+		}
+
+		action := &castai.ClusterAction{
+			ID: uuid.New().String(),
+			ActionPatchNode: &castai.ActionPatchNode{
+				NodeName:      "node1",
+				Unschedulable: lo.ToPtr(true),
+			},
+		}
+
+		err := h.Handle(context.Background(), action)
+		r.NoError(err)
+
+		n, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
+		r.NoError(err)
+		r.True(n.Spec.Unschedulable)
 	})
 }
