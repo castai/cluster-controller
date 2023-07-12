@@ -8,6 +8,10 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
+const (
+	LabelProvisionerCastAINodeID = "provisioner.cast.ai/node-id:"
+)
+
 type GetClusterActionsResponse struct {
 	Items []*ClusterAction `json:"items"`
 }
