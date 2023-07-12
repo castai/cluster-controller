@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	LabelProvisionerCastAINodeID = "provisioner.cast.ai/node-id:"
+	LabelProvisionerCastAINodeID = "provisioner.cast.ai/node-id"
 )
 
 type GetClusterActionsResponse struct {
