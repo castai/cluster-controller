@@ -82,6 +82,41 @@ func TestDeleteNodeHandler(t *testing.T) {
 		r.NoError(err)
 	})
 
+	t.Run("skip delete when node id do not match", func(t *testing.T) {
+		r := require.New(t)
+		nodeName := "node1"
+		node := &v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: nodeName,
+				Labels: map[string]string{
+					castai.LabelNodeID: "node-id",
+				},
+			},
+		}
+		clientset := fake.NewSimpleClientset(node)
+
+		action := &castai.ClusterAction{
+			ID: uuid.New().String(),
+			ActionDeleteNode: &castai.ActionDeleteNode{
+				NodeName: "node1",
+				NodeID:   "another-node-id",
+			},
+		}
+
+		h := deleteNodeHandler{
+			log:       log,
+			clientset: clientset,
+			cfg:       deleteNodeConfig{},
+		}
+
+		err := h.Handle(context.Background(), action)
+		r.NoError(err)
+
+		existing, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
+		r.NoError(err)
+		existing.Labels[castai.LabelNodeID] = "node-id"
+	})
+
 	t.Run("delete node with pods", func(t *testing.T) {
 		r := require.New(t)
 		nodeName := "node1"

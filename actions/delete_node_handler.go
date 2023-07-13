@@ -62,7 +62,23 @@ func (h *deleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 
 	b := backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(h.cfg.deleteRetryWait), h.cfg.deleteRetries), ctx)
 	err := backoff.Retry(func() error {
-		err := h.clientset.CoreV1().Nodes().Delete(ctx, req.NodeName, metav1.DeleteOptions{})
+		current, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				log.Info("node not found, skipping delete")
+				return nil
+			}
+			return fmt.Errorf("error getting node: %w", err)
+		}
+
+		if val, ok := current.Labels[castai.LabelNodeID]; ok {
+			if val != "" && val != req.NodeID {
+				log.Infof("node id mismatch, expected %q got %q. Skipping delete.", req.NodeID, val)
+				return nil
+			}
+		}
+
+		err = h.clientset.CoreV1().Nodes().Delete(ctx, current.Name, metav1.DeleteOptions{})
 		if apierrors.IsNotFound(err) {
 			log.Info("node not found, skipping delete")
 			return nil
