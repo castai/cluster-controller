@@ -30,7 +30,7 @@ func TestCheckStatus_Deleted(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: nodeName,
 				Labels: map[string]string{
-					castai.LabelProvisionerCastAINodeID: "old-node-id",
+					castai.LabelNodeID: "old-node-id",
 				},
 			},
 		}
@@ -110,7 +110,7 @@ func TestCheckStatus_Deleted(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "node1",
 				Labels: map[string]string{
-					castai.LabelProvisionerCastAINodeID: "old-node-id",
+					castai.LabelNodeID: "old-node-id",
 				},
 			},
 		}
@@ -322,7 +322,7 @@ func TestCheckStatus_Ready(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: nodeName,
 				Labels: map[string]string{
-					castai.LabelProvisionerCastAINodeID: "old-node-id",
+					castai.LabelNodeID: "old-node-id",
 				},
 			},
 			Status: v1.NodeStatus{
@@ -371,7 +371,7 @@ func TestCheckStatus_Ready(t *testing.T) {
 
 			time.Sleep(1 * time.Second)
 			newNode := node.DeepCopy()
-			newNode.Labels[castai.LabelProvisionerCastAINodeID] = "new-node-id"
+			newNode.Labels[castai.LabelNodeID] = "new-node-id"
 
 			_, _ = clientset.CoreV1().Nodes().Create(context.Background(), newNode, metav1.CreateOptions{})
 

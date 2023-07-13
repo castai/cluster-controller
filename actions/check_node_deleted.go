@@ -58,9 +58,29 @@ func (h *checkNodeDeletedHandler) Handle(ctx context.Context, action *castai.Clu
 		if apierrors.IsNotFound(err) {
 			return nil
 		}
+
+		if n == nil {
+			return nil
+		}
+
+		currentNodeID, ok := n.Labels[castai.LabelNodeID]
+		if !ok {
+			log.Info("node doesn't have castai node id label")
+		}
+		if currentNodeID != "" {
+			if currentNodeID != req.NodeID {
+				log.Info("node name was reused. Original node is deleted")
+				return nil
+			}
+			if currentNodeID == req.NodeID {
+				return backoff.Permanent(errors.New("node is not deleted"))
+			}
+		}
+
 		if n != nil {
 			return backoff.Permanent(errors.New("node is not deleted"))
 		}
+
 		return err
 	}, b)
 }

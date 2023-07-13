@@ -80,7 +80,7 @@ func (h *checkNodeStatusHandler) checkNodeDeleted(ctx context.Context, log *logr
 			return nil
 		}
 
-		currentNodeID, ok := n.Labels[castai.LabelProvisionerCastAINodeID]
+		currentNodeID, ok := n.Labels[castai.LabelNodeID]
 		if !ok {
 			log.Info("node doesn't have castai node id label")
 		}
@@ -131,7 +131,7 @@ func (h *checkNodeStatusHandler) checkNodeReady(ctx context.Context, log *logrus
 func isNodeReady(node *corev1.Node, castNodeID string) bool {
 	// if node has castai node id label, check if it matches the one we are waiting for
 	// if it doesn't match, we can skip this node
-	if val, ok := node.Labels[castai.LabelProvisionerCastAINodeID]; ok {
+	if val, ok := node.Labels[castai.LabelNodeID]; ok {
 		if val != "" && val != castNodeID {
 			return false
 		}
