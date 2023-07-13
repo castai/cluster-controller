@@ -89,7 +89,7 @@ func TestDeleteNodeHandler(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: nodeName,
 				Labels: map[string]string{
-					castai.LabelProvisionerCastAINodeID: "node-id",
+					castai.LabelNodeID: "node-id",
 				},
 			},
 		}
@@ -114,7 +114,7 @@ func TestDeleteNodeHandler(t *testing.T) {
 
 		existing, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
 		r.NoError(err)
-		existing.Labels[castai.LabelProvisionerCastAINodeID] = "node-id"
+		existing.Labels[castai.LabelNodeID] = "node-id"
 	})
 
 	t.Run("delete node with pods", func(t *testing.T) {
