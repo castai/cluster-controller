@@ -47,17 +47,17 @@ func (h *checkNodeStatusHandler) Handle(ctx context.Context, action *castai.Clus
 	switch req.NodeStatus {
 	case castai.ActionCheckNodeStatus_READY:
 		log.Info("checking node ready")
-		return h.checkNodeReady(ctx, req)
+		return h.checkNodeReady(ctx, log, req)
 	case castai.ActionCheckNodeStatus_DELETED:
 		log.Info("checking node deleted")
-		return h.checkNodeDeleted(ctx, req)
+		return h.checkNodeDeleted(ctx, log, req)
 
 	}
 
 	return fmt.Errorf("unknown status to check provided node=%s status=%s", req.NodeName, req.NodeStatus)
 }
 
-func (h *checkNodeStatusHandler) checkNodeDeleted(ctx context.Context, req *castai.ActionCheckNodeStatus) error {
+func (h *checkNodeStatusHandler) checkNodeDeleted(ctx context.Context, log *logrus.Entry, req *castai.ActionCheckNodeStatus) error {
 	timeout := 10
 	if req.WaitTimeoutSeconds != nil {
 		timeout = int(*req.WaitTimeoutSeconds)
@@ -70,14 +70,39 @@ func (h *checkNodeStatusHandler) checkNodeDeleted(ctx context.Context, req *cast
 		if apierrors.IsNotFound(err) {
 			return nil
 		}
+
+		// If node is nil - deleted
+		// If label is present and doesn't match - node was reused - deleted
+		// If label is present and matches - node is not deleted
+		// If label is not present and node is not nil - node is not deleted (potentially corrupted state)
+
+		if n == nil {
+			return nil
+		}
+
+		currentNodeID, ok := n.Labels[castai.LabelNodeID]
+		if !ok {
+			log.Info("node doesn't have castai node id label")
+		}
+		if currentNodeID != "" {
+			if currentNodeID != req.NodeID {
+				log.Info("node name was reused. Original node is deleted")
+				return nil
+			}
+			if currentNodeID == req.NodeID {
+				return backoff.Permanent(errors.New("node is not deleted"))
+			}
+		}
+
 		if n != nil {
 			return backoff.Permanent(errors.New("node is not deleted"))
 		}
+
 		return err
 	}, b)
 }
 
-func (h *checkNodeStatusHandler) checkNodeReady(ctx context.Context, req *castai.ActionCheckNodeStatus) error {
+func (h *checkNodeStatusHandler) checkNodeReady(ctx context.Context, log *logrus.Entry, req *castai.ActionCheckNodeStatus) error {
 	timeout := 9 * time.Minute
 	watchObject := metav1.SingleObject(metav1.ObjectMeta{Name: req.NodeName})
 	if req.WaitTimeoutSeconds != nil {
@@ -94,7 +119,7 @@ func (h *checkNodeStatusHandler) checkNodeReady(ctx context.Context, req *castai
 	defer watch.Stop()
 	for r := range watch.ResultChan() {
 		if node, ok := r.Object.(*corev1.Node); ok {
-			if isNodeReady(node) {
+			if isNodeReady(node, req.NodeID) {
 				return nil
 			}
 		}
@@ -103,7 +128,14 @@ func (h *checkNodeStatusHandler) checkNodeReady(ctx context.Context, req *castai
 	return fmt.Errorf("timeout waiting for node %s to become ready", req.NodeName)
 }
 
-func isNodeReady(node *corev1.Node) bool {
+func isNodeReady(node *corev1.Node, castNodeID string) bool {
+	// if node has castai node id label, check if it matches the one we are waiting for
+	// if it doesn't match, we can skip this node
+	if val, ok := node.Labels[castai.LabelNodeID]; ok {
+		if val != "" && val != castNodeID {
+			return false
+		}
+	}
 	for _, cond := range node.Status.Conditions {
 		if cond.Type == corev1.NodeReady && cond.Status == corev1.ConditionTrue && !containsUninitializedNodeTaint(node.Spec.Taints) {
 			return true
