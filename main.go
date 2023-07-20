@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"net/http"
 	"net/http/pprof"
@@ -70,6 +71,10 @@ func main() {
 	defer klog.Flush()
 	defer kubeOutput.Close()
 	klog.SetOutput(kubeOutput)
+	flags := &flag.FlagSet{}
+	flags.Set("logtostderr", "false")
+	flags.Set("alsologtostderr", "true")
+	klog.InitFlags(flags)
 	klog.Info("test DEBUG")
 
 	ctx := signals.SetupSignalHandler()
