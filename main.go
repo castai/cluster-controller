@@ -65,6 +65,7 @@ func main() {
 	logger.AddHook(e)
 	logrus.RegisterExitHandler(e.Wait)
 
+	// Send kubernetes related logs to CAST AI
 	kLog := log.Writer()
 	defer kLog.Close()
 	klog.SetOutput(kLog)
