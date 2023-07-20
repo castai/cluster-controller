@@ -72,9 +72,15 @@ func main() {
 	defer kubeOutput.Close()
 	klog.SetOutput(kubeOutput)
 	flags := &flag.FlagSet{}
-	flags.Set("logtostderr", "false")
-	flags.Set("alsologtostderr", "true")
 	klog.InitFlags(flags)
+	err := flags.Set("logtostderr", "false")
+	if err != nil {
+		log.Fatalf("cluster-controller failed: %v", err)
+	}
+	err = flags.Set("alsologtostderr", "true")
+	if err != nil {
+		log.Fatalf("cluster-controller failed: %v", err)
+	}
 	klog.Info("test DEBUG")
 
 	ctx := signals.SetupSignalHandler()
