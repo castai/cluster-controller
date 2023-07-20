@@ -70,6 +70,7 @@ func main() {
 	defer klog.Flush()
 	defer kubeOutput.Close()
 	klog.SetOutput(kubeOutput)
+	klog.Info("test DEBUG")
 
 	ctx := signals.SetupSignalHandler()
 	if err := run(ctx, client, logger, cfg, binVersion); err != nil {
