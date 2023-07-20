@@ -21,6 +21,7 @@ import (
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"k8s.io/client-go/util/flowcontrol"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
 	"github.com/castai/cluster-controller/actions"
@@ -38,6 +39,8 @@ var (
 	GitRef    = "no-ref"
 	Version   = "local"
 )
+
+const leaderLeaseDuration = time.Second * 15
 
 func main() {
 	cfg := config.Get()
@@ -61,6 +64,10 @@ func main() {
 	e := ctrlog.NewExporter(logger, client)
 	logger.AddHook(e)
 	logrus.RegisterExitHandler(e.Wait)
+
+	kLog := log.Writer()
+	defer kLog.Close()
+	klog.SetOutput(kLog)
 
 	ctx := signals.SetupSignalHandler()
 	if err := run(ctx, client, logger, cfg, binVersion); err != nil {
@@ -130,7 +137,7 @@ func run(
 		Version:          binVersion.Version,
 		Namespace:        cfg.LeaderElection.Namespace,
 	}
-	healthzAction := health.NewHealthzProvider(health.HealthzCfg{HealthyPollIntervalLimit: (actionsConfig.PollWaitInterval + actionsConfig.PollTimeout) * 2}, log)
+	healthzAction := health.NewHealthzProvider(health.HealthzCfg{HealthyPollIntervalLimit: (actionsConfig.PollWaitInterval + actionsConfig.PollTimeout) * 2, StartTimeLimit: time.Minute}, log)
 
 	svc := actions.NewService(
 		log,
@@ -147,7 +154,7 @@ func run(
 	checks = append(checks, healthzAction)
 	var leaderHealthCheck *leaderelection.HealthzAdaptor
 	if cfg.LeaderElection.Enabled {
-		leaderHealthCheck = leaderelection.NewLeaderHealthzAdaptor(time.Minute * 2)
+		leaderHealthCheck = leaderelection.NewLeaderHealthzAdaptor(time.Minute)
 		checks = append(checks, leaderHealthCheck)
 	}
 	healthz.InstallHandler(httpMux, checks...)
@@ -206,9 +213,9 @@ func runWithLeaderElection(
 		// get elected before your background loop finished, violating
 		// the stated goal of the lease.
 		ReleaseOnCancel: true,
-		LeaseDuration:   60 * time.Second,
-		RenewDeadline:   15 * time.Second,
-		RetryPeriod:     5 * time.Second,
+		LeaseDuration:   leaderLeaseDuration,
+		RenewDeadline:   10 * time.Second,
+		RetryPeriod:     3 * time.Second,
 		WatchDog:        watchDog,
 		Callbacks: leaderelection.LeaderCallbacks{
 			OnStartedLeading: func(ctx context.Context) {
@@ -217,7 +224,8 @@ func runWithLeaderElection(
 			},
 			OnStoppedLeading: func() {
 				log.Infof("leader lost: %s", id)
-				os.Exit(0)
+				// We don't need to exit here.
+				// Leader "on started leading" receive a context that gets cancelled when you're no longer the leader.
 			},
 			OnNewLeader: func(identity string) {
 				// We're notified when new leader elected.

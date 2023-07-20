@@ -11,6 +11,8 @@ import (
 type HealthzCfg struct {
 	// Max time between successful poll actions to consider cluster-controller alive
 	HealthyPollIntervalLimit time.Duration
+	// Max wait time for application to start
+	StartTimeLimit time.Duration
 }
 
 func NewHealthzProvider(cfg HealthzCfg, log logrus.FieldLogger) *HealthzProvider {
@@ -43,8 +45,8 @@ func (h *HealthzProvider) Check(_ *http.Request) (err error) {
 	}
 
 	if h.initStartedAt != nil {
-		if time.Since(*h.initStartedAt) > h.cfg.HealthyPollIntervalLimit {
-			return fmt.Errorf("there was no sucessful poll action since start of application %s", h.cfg.HealthyPollIntervalLimit)
+		if time.Since(*h.initStartedAt) > h.cfg.StartTimeLimit {
+			return fmt.Errorf("there was no sucessful poll action since start of application %s", h.cfg.StartTimeLimit)
 		}
 		return nil
 	}
