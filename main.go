@@ -66,9 +66,10 @@ func main() {
 	logrus.RegisterExitHandler(e.Wait)
 
 	// Send kubernetes related logs to CAST AI
-	kLog := log.Writer()
-	defer kLog.Close()
-	klog.SetOutput(kLog)
+	kubeOutput := log.Writer()
+	defer klog.Flush()
+	defer kubeOutput.Close()
+	klog.SetOutput(kubeOutput)
 
 	ctx := signals.SetupSignalHandler()
 	if err := run(ctx, client, logger, cfg, binVersion); err != nil {
@@ -138,7 +139,7 @@ func run(
 		Version:          binVersion.Version,
 		Namespace:        cfg.LeaderElection.Namespace,
 	}
-	healthzAction := health.NewHealthzProvider(health.HealthzCfg{HealthyPollIntervalLimit: (actionsConfig.PollWaitInterval + actionsConfig.PollTimeout) * 2, StartTimeLimit: time.Minute}, log)
+	healthzAction := health.NewHealthzProvider(health.HealthzCfg{HealthyPollIntervalLimit: (actionsConfig.PollWaitInterval + actionsConfig.PollTimeout) * 2, StartTimeLimit: 2 * time.Minute}, log)
 
 	svc := actions.NewService(
 		log,
