@@ -25,6 +25,8 @@ import (
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
+	stdLog "log"
+
 	"github.com/castai/cluster-controller/actions"
 	"github.com/castai/cluster-controller/castai"
 	"github.com/castai/cluster-controller/config"
@@ -42,6 +44,19 @@ var (
 )
 
 const leaderLeaseDuration = time.Second * 15
+
+func init() {
+	flags := &flag.FlagSet{}
+	klog.InitFlags(flags)
+	err := flags.Set("logtostderr", "false")
+	if err != nil {
+		stdLog.Fatalf("cluster-controller failed: %v", err)
+	}
+	err = flags.Set("alsologtostderr", "true")
+	if err != nil {
+		stdLog.Fatalf("cluster-controller failed: %v", err)
+	}
+}
 
 func main() {
 	cfg := config.Get()
@@ -71,16 +86,6 @@ func main() {
 	defer klog.Flush()
 	defer kubeOutput.Close()
 	klog.SetOutput(kubeOutput)
-	flags := &flag.FlagSet{}
-	klog.InitFlags(flags)
-	err := flags.Set("logtostderr", "false")
-	if err != nil {
-		log.Fatalf("cluster-controller failed: %v", err)
-	}
-	err = flags.Set("alsologtostderr", "true")
-	if err != nil {
-		log.Fatalf("cluster-controller failed: %v", err)
-	}
 	klog.Info("test DEBUG")
 
 	ctx := signals.SetupSignalHandler()
