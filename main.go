@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"net/http"
 	"net/http/pprof"
@@ -22,10 +21,7 @@ import (
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"k8s.io/client-go/util/flowcontrol"
-	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
-
-	stdLog "log"
 
 	"github.com/castai/cluster-controller/actions"
 	"github.com/castai/cluster-controller/castai"
@@ -44,19 +40,6 @@ var (
 )
 
 const leaderLeaseDuration = time.Second * 15
-
-func init() {
-	flags := &flag.FlagSet{}
-	klog.InitFlags(flags)
-	err := flags.Set("logtostderr", "false")
-	if err != nil {
-		stdLog.Fatalf("cluster-controller failed: %v", err)
-	}
-	err = flags.Set("alsologtostderr", "false")
-	if err != nil {
-		stdLog.Fatalf("cluster-controller failed: %v", err)
-	}
-}
 
 func main() {
 	cfg := config.Get()
@@ -80,13 +63,6 @@ func main() {
 	e := ctrlog.NewExporter(logger, client)
 	logger.AddHook(e)
 	logrus.RegisterExitHandler(e.Wait)
-
-	// Send kubernetes related logs to CAST AI
-	kubeOutput := log.Writer()
-	defer klog.Flush()
-	defer kubeOutput.Close()
-	klog.SetOutput(kubeOutput)
-	klog.Info("test DEBUG")
 
 	ctx := signals.SetupSignalHandler()
 	if err := run(ctx, client, logger, cfg, binVersion); err != nil {
