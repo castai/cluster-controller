@@ -52,7 +52,7 @@ func init() {
 	if err != nil {
 		stdLog.Fatalf("cluster-controller failed: %v", err)
 	}
-	err = flags.Set("alsologtostderr", "true")
+	err = flags.Set("alsologtostderr", "false")
 	if err != nil {
 		stdLog.Fatalf("cluster-controller failed: %v", err)
 	}
