@@ -21,22 +21,23 @@ type AckClusterActionRequest struct {
 }
 
 type ClusterAction struct {
-	ID                      string                   `json:"id"`
-	ActionDeleteNode        *ActionDeleteNode        `json:"actionDeleteNode,omitempty"`
-	ActionDrainNode         *ActionDrainNode         `json:"actionDrainNode,omitempty"`
-	ActionPatchNode         *ActionPatchNode         `json:"actionPatchNode,omitempty"`
-	ActionCreateEvent       *ActionCreateEvent       `json:"actionCreateEvent,omitempty"`
-	ActionApproveCSR        *ActionApproveCSR        `json:"actionApproveCsr,omitempty"`
-	ActionChartUpsert       *ActionChartUpsert       `json:"actionChartUpsert,omitempty"`
-	ActionChartUninstall    *ActionChartUninstall    `json:"actionChartUninstall,omitempty"`
-	ActionChartRollback     *ActionChartRollback     `json:"actionChartRollback,omitempty"`
-	ActionDisconnectCluster *ActionDisconnectCluster `json:"actionDisconnectCluster,omitempty"`
-	ActionSendAKSInitData   *ActionSendAKSInitData   `json:"actionSendAksInitData,omitempty"`
-	ActionCheckNodeDeleted  *ActionCheckNodeDeleted  `json:"actionCheckNodeDeleted,omitempty"`
-	ActionCheckNodeStatus   *ActionCheckNodeStatus   `json:"actionCheckNodeStatus,omitempty"`
-	CreatedAt               time.Time                `json:"createdAt"`
-	DoneAt                  *time.Time               `json:"doneAt,omitempty"`
-	Error                   *string                  `json:"error,omitempty"`
+	ID                       string                    `json:"id"`
+	ActionDeleteNode         *ActionDeleteNode         `json:"actionDeleteNode,omitempty"`
+	ActionDrainNode          *ActionDrainNode          `json:"actionDrainNode,omitempty"`
+	ActionPatchNode          *ActionPatchNode          `json:"actionPatchNode,omitempty"`
+	ActionCreateEvent        *ActionCreateEvent        `json:"actionCreateEvent,omitempty"`
+	ActionApproveCSR         *ActionApproveCSR         `json:"actionApproveCsr,omitempty"`
+	ActionChartUpsert        *ActionChartUpsert        `json:"actionChartUpsert,omitempty"`
+	ActionChartUninstall     *ActionChartUninstall     `json:"actionChartUninstall,omitempty"`
+	ActionChartRollback      *ActionChartRollback      `json:"actionChartRollback,omitempty"`
+	ActionDisconnectCluster  *ActionDisconnectCluster  `json:"actionDisconnectCluster,omitempty"`
+	ActionSendAKSInitData    *ActionSendAKSInitData    `json:"actionSendAksInitData,omitempty"`
+	ActionCheckNodeDeleted   *ActionCheckNodeDeleted   `json:"actionCheckNodeDeleted,omitempty"`
+	ActionCheckNodeStatus    *ActionCheckNodeStatus    `json:"actionCheckNodeStatus,omitempty"`
+	ActionPatchPodController *ActionPatchPodController `json:"actionPatchDeployment,omitempty"`
+	CreatedAt                time.Time                 `json:"createdAt"`
+	DoneAt                   *time.Time                `json:"doneAt,omitempty"`
+	Error                    *string                   `json:"error,omitempty"`
 }
 
 func (c *ClusterAction) Data() interface{} {
@@ -76,6 +77,10 @@ func (c *ClusterAction) Data() interface{} {
 	if c.ActionCheckNodeStatus != nil {
 		return c.ActionCheckNodeStatus
 	}
+	if c.ActionPatchPodController != nil {
+		return c.ActionPatchPodController
+	}
+
 	return nil
 }
 
@@ -96,6 +101,23 @@ type ActionDrainNode struct {
 	NodeID              string `json:"nodeId"`
 	DrainTimeoutSeconds int    `json:"drainTimeoutSeconds"`
 	Force               bool   `json:"force"`
+}
+
+type PodControllerID struct {
+	Type      string `json:"type"`
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+}
+
+type PodContainer struct {
+	Name     string            `json:"name"`
+	Requests map[string]string `json:"requests"`
+	Limits   map[string]string `json:"limits"`
+}
+
+type ActionPatchPodController struct {
+	PodControllerID PodControllerID `json:"controllerId"`
+	Containers      []PodContainer  `json:"containers"`
 }
 
 type ActionApproveCSR struct {
