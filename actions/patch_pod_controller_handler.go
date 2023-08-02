@@ -78,21 +78,20 @@ const (
 func mergeDiff(deployment *appsv1.Deployment, data *castai.ActionPatchPodController) error {
 	for _, container := range data.Containers {
 		container := container
-		requests, err := mapToResourceList(container.Requests)
-		if err != nil {
-			return fmt.Errorf("failed to map requests: %w", err)
-		}
-
-		limits, err := mapToResourceList(container.Limits)
-		if err != nil {
-			return fmt.Errorf("failed to map limits: %w", err)
-		}
-
-		for _, deployedContainer := range deployment.Spec.Template.Spec.Containers {
+		for i, deployedContainer := range deployment.Spec.Template.Spec.Containers {
 			deployedContainer := deployedContainer
 			if deployedContainer.Name == container.Name {
-				deployedContainer.Resources.Requests = mergeResourceLists(deployedContainer.Resources.Requests, requests)
-				deployedContainer.Resources.Limits = mergeResourceLists(deployedContainer.Resources.Limits, limits)
+				requests, err := mergeActionResourcesIntoResourceList(deployedContainer.Resources.Requests, container.Requests)
+				if err != nil {
+					return fmt.Errorf("failed to merge requests: %w", err)
+				}
+				limits, err := mergeActionResourcesIntoResourceList(deployedContainer.Resources.Limits, container.Limits)
+				if err != nil {
+					return fmt.Errorf("failed to merge limits: %w", err)
+				}
+				deployment.Spec.Template.Spec.Containers[i].Resources.Requests = requests
+				deployment.Spec.Template.Spec.Containers[i].Resources.Limits = limits
+				break
 			}
 		}
 	}
@@ -100,21 +99,18 @@ func mergeDiff(deployment *appsv1.Deployment, data *castai.ActionPatchPodControl
 	return nil
 }
 
-func mergeResourceLists(into v1.ResourceList, from v1.ResourceList) v1.ResourceList {
-	if into == nil {
-		return from
+func mergeActionResourcesIntoResourceList(original v1.ResourceList, new map[string]string) (v1.ResourceList, error) {
+	out := make(v1.ResourceList, len(original))
+	for k, v := range original {
+		out[k] = v
 	}
 
-	for k, v := range from {
-		into[k] = v
-	}
+	for k, v := range new {
+		if resourceName, isRemove := asRemoveAction(k); isRemove {
+			delete(out, v1.ResourceName(resourceName))
+			continue
+		}
 
-	return into
-}
-
-func mapToResourceList(in map[string]string) (v1.ResourceList, error) {
-	out := make(v1.ResourceList, len(in))
-	for k, v := range in {
 		value, err := resource.ParseQuantity(v)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse resource %s: %w", v, err)
@@ -124,6 +120,14 @@ func mapToResourceList(in map[string]string) (v1.ResourceList, error) {
 	}
 
 	return out, nil
+}
+
+func asRemoveAction(action string) (string, bool) {
+	if len(action) > 0 && action[0] == '-' {
+		return action[1:], true
+	}
+
+	return "", false
 }
 
 func isSupportedControllerType(controllerType string) bool {
