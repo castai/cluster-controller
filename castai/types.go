@@ -117,6 +117,7 @@ type PodContainer struct {
 
 type ActionPatchPodController struct {
 	PodControllerID PodControllerID `json:"controllerId"`
+	Replicas        *int32          `json:"replicas,omitempty"`
 	Containers      []PodContainer  `json:"containers"`
 }
 

@@ -79,6 +79,10 @@ const (
 )
 
 func mergeDiff(log logrus.FieldLogger, deployment *appsv1.Deployment, data *castai.ActionPatchPodController) error {
+	if data.Replicas != nil {
+		deployment.Spec.Replicas = data.Replicas
+	}
+
 	for _, container := range data.Containers {
 		found, err := mergeContainer(deployment, container)
 		if err != nil {

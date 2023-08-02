@@ -278,6 +278,90 @@ func TestPatchPodControllerHandler(t *testing.T) {
 				},
 			},
 		},
+		"should update the replicas when they're passed": {
+			action: &castai.ClusterAction{
+				ID: uuid.New().String(),
+				ActionPatchPodController: &castai.ActionPatchPodController{
+					PodControllerID: castai.PodControllerID{
+						Type:      ControllerTypeDeployment,
+						Namespace: "my-namespace",
+						Name:      "my-app",
+					},
+					Replicas: lo.ToPtr[int32](10),
+					Containers: []castai.PodContainer{
+						{
+							Name: "my-container",
+							Requests: map[string]string{
+								"cpu":    "100m",
+								"memory": "100Mi",
+							},
+							Limits: map[string]string{
+								"cpu":    "200m",
+								"memory": "200Mi",
+							},
+						},
+					},
+				},
+			},
+			deployments: []*appsv1.Deployment{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "my-app",
+						Namespace: "my-namespace",
+					},
+					Spec: appsv1.DeploymentSpec{
+						Replicas: lo.ToPtr[int32](5),
+						Template: v1.PodTemplateSpec{
+							Spec: v1.PodSpec{
+								Containers: []v1.Container{
+									{
+										Name: "my-container",
+										Resources: v1.ResourceRequirements{
+											Requests: map[v1.ResourceName]resource.Quantity{
+												v1.ResourceCPU:    resource.MustParse("50m"),
+												v1.ResourceMemory: resource.MustParse("50Mi"),
+											},
+											Limits: map[v1.ResourceName]resource.Quantity{
+												v1.ResourceCPU:    resource.MustParse("50m"),
+												v1.ResourceMemory: resource.MustParse("50Mi"),
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedDeployment: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-app",
+					Namespace: "my-namespace",
+				},
+				Spec: appsv1.DeploymentSpec{
+					Replicas: lo.ToPtr[int32](10),
+					Template: v1.PodTemplateSpec{
+						Spec: v1.PodSpec{
+							Containers: []v1.Container{
+								{
+									Name: "my-container",
+									Resources: v1.ResourceRequirements{
+										Requests: map[v1.ResourceName]resource.Quantity{
+											v1.ResourceCPU:    resource.MustParse("100m"),
+											v1.ResourceMemory: resource.MustParse("100Mi"),
+										},
+										Limits: map[v1.ResourceName]resource.Quantity{
+											v1.ResourceCPU:    resource.MustParse("200m"),
+											v1.ResourceMemory: resource.MustParse("200Mi"),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 		"should do nothing when action is for a non-existent deployment": {
 			action: &castai.ClusterAction{
 				ID: uuid.New().String(),
@@ -375,6 +459,8 @@ func TestPatchPodControllerHandler(t *testing.T) {
 				Get(ctx, test.expectedDeployment.Name, metav1.GetOptions{})
 			r.NoError(err)
 
+			r.Equal(fromPtr(test.expectedDeployment.Spec.Replicas), fromPtr(got.Spec.Replicas))
+
 			for i, gotContainer := range got.Spec.Template.Spec.Containers {
 				expected := test.expectedDeployment.Spec.Template.Spec.Containers[i]
 				r.Equal(expected, gotContainer)
@@ -382,4 +468,13 @@ func TestPatchPodControllerHandler(t *testing.T) {
 
 		})
 	}
+}
+
+func fromPtr[T any](ptr *T) T {
+	if ptr != nil {
+		return *ptr
+	}
+
+	var t T
+	return t
 }
