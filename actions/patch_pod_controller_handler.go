@@ -3,7 +3,8 @@ package actions
 import (
 	"context"
 	"fmt"
-	"github.com/castai/cluster-controller/castai"
+
+	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -12,6 +13,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apitypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/castai/cluster-controller/castai"
 )
 
 type patchPodControllerHandler struct {
@@ -58,7 +61,7 @@ func (h *patchPodControllerHandler) Handle(ctx context.Context, action *castai.C
 	}
 
 	if err := patchObject[appsv1.Deployment](ctx, deployment, func(deployment *appsv1.Deployment) error {
-		return mergeDiff(deployment, data)
+		return mergeDiff(log, deployment, data)
 	}, func(ctx context.Context, patchType apitypes.PatchType, bytes []byte, options metav1.PatchOptions) error {
 		_, err := h.clientset.AppsV1().
 			Deployments(data.PodControllerID.Namespace).
@@ -75,28 +78,42 @@ const (
 	ControllerTypeDeployment = "Deployment"
 )
 
-func mergeDiff(deployment *appsv1.Deployment, data *castai.ActionPatchPodController) error {
+func mergeDiff(log logrus.FieldLogger, deployment *appsv1.Deployment, data *castai.ActionPatchPodController) error {
 	for _, container := range data.Containers {
-		container := container
-		for i, deployedContainer := range deployment.Spec.Template.Spec.Containers {
-			deployedContainer := deployedContainer
-			if deployedContainer.Name == container.Name {
-				requests, err := mergeActionResourcesIntoResourceList(deployedContainer.Resources.Requests, container.Requests)
-				if err != nil {
-					return fmt.Errorf("failed to merge requests: %w", err)
-				}
-				limits, err := mergeActionResourcesIntoResourceList(deployedContainer.Resources.Limits, container.Limits)
-				if err != nil {
-					return fmt.Errorf("failed to merge limits: %w", err)
-				}
-				deployment.Spec.Template.Spec.Containers[i].Resources.Requests = requests
-				deployment.Spec.Template.Spec.Containers[i].Resources.Limits = limits
-				break
-			}
+		found, err := mergeContainer(deployment, container)
+		if err != nil {
+			return fmt.Errorf("failed to merge container %s: %w", container.Name, err)
+		}
+
+		if !found {
+			log.Infof("container %s not found, skipping", container.Name)
 		}
 	}
 
 	return nil
+}
+
+func mergeContainer(deployment *appsv1.Deployment, container castai.PodContainer) (bool, error) {
+	target, i, found := lo.FindIndexOf(deployment.Spec.Template.Spec.Containers, func(c v1.Container) bool {
+		return c.Name == container.Name
+	})
+	if !found {
+		return false, nil
+	}
+
+	requests, err := mergeActionResourcesIntoResourceList(target.Resources.Requests, container.Requests)
+	if err != nil {
+		return true, fmt.Errorf("failed to merge requests: %w", err)
+	}
+	limits, err := mergeActionResourcesIntoResourceList(target.Resources.Limits, container.Limits)
+	if err != nil {
+		return true, fmt.Errorf("failed to merge limits: %w", err)
+	}
+
+	deployment.Spec.Template.Spec.Containers[i].Resources.Requests = requests
+	deployment.Spec.Template.Spec.Containers[i].Resources.Limits = limits
+
+	return true, nil
 }
 
 func mergeActionResourcesIntoResourceList(original v1.ResourceList, new map[string]string) (v1.ResourceList, error) {
