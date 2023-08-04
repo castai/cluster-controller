@@ -39,6 +39,7 @@ func TestActions(t *testing.T) {
 			cfg,
 			"1.20.1",
 			nil,
+			nil,
 			client,
 			nil,
 			health.NewHealthzProvider(health.HealthzCfg{HealthyPollIntervalLimit: cfg.PollTimeout}, log),

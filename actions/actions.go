@@ -11,6 +11,7 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/sirupsen/logrus"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/castai"
@@ -42,6 +43,7 @@ func NewService(
 	cfg Config,
 	k8sVersion string,
 	clientset *kubernetes.Clientset,
+	dynamicClient dynamic.Interface,
 	castaiClient castai.Client,
 	helmClient helm.Client,
 	healthCheck *health.HealthzProvider,
@@ -65,6 +67,7 @@ func NewService(
 			reflect.TypeOf(&castai.ActionSendAKSInitData{}):   newSendAKSInitDataHandler(log, castaiClient),
 			reflect.TypeOf(&castai.ActionCheckNodeDeleted{}):  newCheckNodeDeletedHandler(log, clientset),
 			reflect.TypeOf(&castai.ActionCheckNodeStatus{}):   newCheckNodeStatusHandler(log, clientset),
+			reflect.TypeOf(&castai.ActionPatch{}):             newPatchHandler(log, dynamicClient),
 		},
 		healthCheck: healthCheck,
 	}

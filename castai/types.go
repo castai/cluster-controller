@@ -34,6 +34,7 @@ type ClusterAction struct {
 	ActionSendAKSInitData   *ActionSendAKSInitData   `json:"actionSendAksInitData,omitempty"`
 	ActionCheckNodeDeleted  *ActionCheckNodeDeleted  `json:"actionCheckNodeDeleted,omitempty"`
 	ActionCheckNodeStatus   *ActionCheckNodeStatus   `json:"actionCheckNodeStatus,omitempty"`
+	ActionPatch             *ActionPatch             `json:"actionGenericPatch,omitempty"`
 	CreatedAt               time.Time                `json:"createdAt"`
 	DoneAt                  *time.Time               `json:"doneAt,omitempty"`
 	Error                   *string                  `json:"error,omitempty"`
@@ -76,6 +77,9 @@ func (c *ClusterAction) Data() interface{} {
 	if c.ActionCheckNodeStatus != nil {
 		return c.ActionCheckNodeStatus
 	}
+	if c.ActionPatch != nil {
+		return c.ActionPatch
+	}
 	return nil
 }
 
@@ -84,6 +88,20 @@ type LogEvent struct {
 	Time    time.Time     `json:"time"`
 	Message string        `json:"message"`
 	Fields  logrus.Fields `json:"fields"`
+}
+
+type ObjectID struct {
+	Group     string  `json:"apiGroup"`
+	Version   string  `json:"version"`
+	Resource  string  `json:"resource"`
+	Namespace *string `json:"namespace"`
+	Name      string  `json:"name"`
+}
+
+type ActionPatch struct {
+	ID        ObjectID `json:"id"`
+	PatchType string   `json:"patchType"`
+	Patch     []byte   `json:"patch"`
 }
 
 type ActionDeleteNode struct {

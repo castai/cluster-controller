@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/net"
 	"k8s.io/apiserver/pkg/server/healthz"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -106,6 +107,11 @@ func run(
 		return err
 	}
 
+	dynamicClient, err := dynamic.NewForConfig(restconfig)
+	if err != nil {
+		return err
+	}
+
 	k8sVersion, err := version.Get(clientset)
 	if err != nil {
 		return fmt.Errorf("getting kubernetes version: %w", err)
@@ -139,6 +145,7 @@ func run(
 		actionsConfig,
 		k8sVersion.Full(),
 		clientset,
+		dynamicClient,
 		client,
 		helmClient,
 		healthzAction,
