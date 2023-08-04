@@ -19,6 +19,10 @@ import (
 	"github.com/castai/cluster-controller/helm"
 )
 
+func newUnexpectedTypeErr(value interface{}, expectedType interface{}) error {
+	return fmt.Errorf("unexpected type %T, expected %T", value, expectedType)
+}
+
 type Config struct {
 	PollWaitInterval time.Duration // How long to wait unit next long polling request.
 	PollTimeout      time.Duration // hard timeout. Normally server should return empty result before this timeout.
