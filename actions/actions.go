@@ -11,12 +11,17 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/sirupsen/logrus"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/castai"
 	"github.com/castai/cluster-controller/health"
 	"github.com/castai/cluster-controller/helm"
 )
+
+func newUnexpectedTypeErr(value interface{}, expectedType interface{}) error {
+	return fmt.Errorf("unexpected type %T, expected %T", value, expectedType)
+}
 
 type Config struct {
 	PollWaitInterval time.Duration // How long to wait unit next long polling request.
@@ -42,6 +47,7 @@ func NewService(
 	cfg Config,
 	k8sVersion string,
 	clientset *kubernetes.Clientset,
+	dynamicClient dynamic.Interface,
 	castaiClient castai.Client,
 	helmClient helm.Client,
 	healthCheck *health.HealthzProvider,
@@ -65,6 +71,7 @@ func NewService(
 			reflect.TypeOf(&castai.ActionSendAKSInitData{}):   newSendAKSInitDataHandler(log, castaiClient),
 			reflect.TypeOf(&castai.ActionCheckNodeDeleted{}):  newCheckNodeDeletedHandler(log, clientset),
 			reflect.TypeOf(&castai.ActionCheckNodeStatus{}):   newCheckNodeStatusHandler(log, clientset),
+			reflect.TypeOf(&castai.ActionPatch{}):             newPatchHandler(log, dynamicClient),
 		},
 		healthCheck: healthCheck,
 	}

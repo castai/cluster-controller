@@ -2,10 +2,10 @@ package actions
 
 import (
 	"context"
-	"github.com/samber/lo"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
