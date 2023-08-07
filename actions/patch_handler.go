@@ -62,7 +62,7 @@ func (h *patchHandler) Handle(ctx context.Context, action *castai.ClusterAction)
 		resource = gvkResource.Namespace(*req.ID.Namespace)
 	}
 
-	if _, err = resource.Patch(ctx, req.ID.Name, patchType, req.Patch, metav1.PatchOptions{}); err != nil {
+	if _, err = resource.Patch(ctx, req.ID.Name, patchType, []byte(req.Patch), metav1.PatchOptions{}); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Info("resource not found, skipping patch")
 			return nil

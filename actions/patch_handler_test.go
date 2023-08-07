@@ -60,7 +60,7 @@ func TestPatchHandler(t *testing.T) {
 						Name:      "existing-deployment",
 					},
 					PatchType: string(apitypes.StrategicMergePatchType),
-					Patch:     []byte(`{"spec":{"replicas":100}}`),
+					Patch:     `{"spec":{"replicas":100}}`,
 				},
 			},
 		},
@@ -103,7 +103,7 @@ func TestPatchHandler(t *testing.T) {
 			}
 			r.Equal(test.action.ActionPatch.ID.Name, action.GetName())
 			r.Equal(test.action.ActionPatch.PatchType, string(action.GetPatchType()))
-			r.Equal(test.action.ActionPatch.Patch, action.GetPatch())
+			r.Equal(test.action.ActionPatch.Patch, string(action.GetPatch()))
 		})
 	}
 }

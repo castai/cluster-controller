@@ -101,7 +101,7 @@ type ObjectID struct {
 type ActionPatch struct {
 	ID        ObjectID `json:"id"`
 	PatchType string   `json:"patchType"`
-	Patch     []byte   `json:"patch"`
+	Patch     string   `json:"patch"`
 }
 
 type ActionDeleteNode struct {
