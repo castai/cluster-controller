@@ -34,7 +34,7 @@ type ClusterAction struct {
 	ActionSendAKSInitData   *ActionSendAKSInitData   `json:"actionSendAksInitData,omitempty"`
 	ActionCheckNodeDeleted  *ActionCheckNodeDeleted  `json:"actionCheckNodeDeleted,omitempty"`
 	ActionCheckNodeStatus   *ActionCheckNodeStatus   `json:"actionCheckNodeStatus,omitempty"`
-	ActionPatch             *ActionPatch             `json:"actionGenericPatch,omitempty"`
+	ActionPatch             *ActionPatch             `json:"actionPatch,omitempty"`
 	CreatedAt               time.Time                `json:"createdAt"`
 	DoneAt                  *time.Time               `json:"doneAt,omitempty"`
 	Error                   *string                  `json:"error,omitempty"`
@@ -91,7 +91,7 @@ type LogEvent struct {
 }
 
 type ObjectID struct {
-	Group     string  `json:"apiGroup"`
+	Group     string  `json:"group"`
 	Version   string  `json:"version"`
 	Resource  string  `json:"resource"`
 	Namespace *string `json:"namespace"`
@@ -101,7 +101,7 @@ type ObjectID struct {
 type ActionPatch struct {
 	ID        ObjectID `json:"id"`
 	PatchType string   `json:"patchType"`
-	Patch     []byte   `json:"patch"`
+	Patch     string   `json:"patch"`
 }
 
 type ActionDeleteNode struct {
