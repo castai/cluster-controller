@@ -15,12 +15,38 @@ import (
 var labelIgnoreResources = map[string]struct{}{
 	"rbac.authorization.k8s.io/v1/ClusterRole//castai-evictor":        {},
 	"rbac.authorization.k8s.io/v1/ClusterRoleBinding//castai-evictor": {},
+	"rbac.authorization.k8s.io/v1/Role//castai-evictor":               {},
+	"rbac.authorization.k8s.io/v1/RoleBinding//castai-evictor":        {},
+
+	"rbac.authorization.k8s.io/v1/ClusterRole//castai-agent":        {},
+	"rbac.authorization.k8s.io/v1/ClusterRoleBinding//castai-agent": {},
+	"rbac.authorization.k8s.io/v1/Role//castai-agent":               {},
+	"rbac.authorization.k8s.io/v1/RoleBinding//castai-agent":        {},
+
+	"rbac.authorization.k8s.io/v1/ClusterRole//castai-spot-handler":        {},
+	"rbac.authorization.k8s.io/v1/ClusterRoleBinding//castai-spot-handler": {},
+	"rbac.authorization.k8s.io/v1/Role//castai-spot-handler":               {},
+	"rbac.authorization.k8s.io/v1/RoleBinding//castai-spot-handler":        {},
+
+	"rbac.authorization.k8s.io/v1/ClusterRole//castai-egressd":        {},
+	"rbac.authorization.k8s.io/v1/ClusterRoleBinding//castai-egressd": {},
+	"rbac.authorization.k8s.io/v1/Role//castai-egressd":               {},
+	"rbac.authorization.k8s.io/v1/RoleBinding//castai-egressd":        {},
 
 	"rbac.authorization.k8s.io/v1/ClusterRole//castai-kvisor":        {},
 	"rbac.authorization.k8s.io/v1/ClusterRoleBinding//castai-kvisor": {},
+	"rbac.authorization.k8s.io/v1/Role//castai-kvisor":               {},
+	"rbac.authorization.k8s.io/v1/RoleBinding//castai-kvisor":        {},
 
 	"rbac.authorization.k8s.io/v1/ClusterRole//castai-kvisor-runtime":        {},
 	"rbac.authorization.k8s.io/v1/ClusterRoleBinding//castai-kvisor-runtime": {},
+	"rbac.authorization.k8s.io/v1/Role//castai-kvisor-runtime":               {},
+	"rbac.authorization.k8s.io/v1/RoleBinding//castai-kvisor-runtime":        {},
+
+	"rbac.authorization.k8s.io/v1/ClusterRole//castai-cluster-controller":        {},
+	"rbac.authorization.k8s.io/v1/ClusterRoleBinding//castai-cluster-controller": {},
+	"rbac.authorization.k8s.io/v1/Role//castai-cluster-controller":               {},
+	"rbac.authorization.k8s.io/v1/RoleBinding//castai-cluster-controller":        {},
 }
 
 const (
@@ -55,7 +81,6 @@ func (l *LabelIgnoreHook) Run(renderedManifests *bytes.Buffer) (*bytes.Buffer, e
 	if err != nil {
 		return nil, err
 	}
-
 	for _, r := range newManifests {
 		u := r.Object.(*unstructured.Unstructured)
 
