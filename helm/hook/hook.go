@@ -81,6 +81,7 @@ func (l *LabelIgnoreHook) Run(renderedManifests *bytes.Buffer) (*bytes.Buffer, e
 	if err != nil {
 		return nil, err
 	}
+
 	for _, r := range newManifests {
 		u := r.Object.(*unstructured.Unstructured)
 
