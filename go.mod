@@ -14,11 +14,11 @@ require (
 	go.uber.org/goleak v1.2.0
 	golang.org/x/sync v0.1.0
 	helm.sh/helm/v3 v3.11.1
-	k8s.io/api v0.26.2
-	k8s.io/apimachinery v0.26.2
+	k8s.io/api v0.26.8
+	k8s.io/apimachinery v0.26.8
 	k8s.io/apiserver v0.26.2
 	k8s.io/cli-runtime v0.26.0
-	k8s.io/client-go v0.26.2
+	k8s.io/client-go v0.26.8
 	k8s.io/kubectl v0.26.0
 	sigs.k8s.io/controller-runtime v0.8.3
 	sigs.k8s.io/yaml v1.3.0
