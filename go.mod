@@ -3,6 +3,7 @@ module github.com/castai/cluster-controller
 go 1.19
 
 require (
+	github.com/bombsimon/logrusr/v4 v4.0.0
 	github.com/cenkalti/backoff/v4 v4.2.0
 	github.com/go-resty/resty/v2 v2.5.0
 	github.com/golang/mock v1.6.0

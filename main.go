@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/bombsimon/logrusr/v4"
 	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
@@ -22,6 +23,7 @@ import (
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"k8s.io/client-go/util/flowcontrol"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
 	"github.com/castai/cluster-controller/actions"
@@ -126,7 +128,12 @@ func run(
 		"running_on":    nodeName,
 		"ctrl_pod_name": podName,
 	})
-	log.Infof("running castai-cluster-controller version %v", binVersion)
+
+	// Set logr/klog to logrus adapter so all logging goes through logrus
+	logr := logrusr.New(log)
+	klog.SetLogger(logr)
+
+	log.Infof("running castai-cluster-controller version %v, log-level: %v", binVersion, logger.Level)
 
 	actionsConfig := actions.Config{
 		PollWaitInterval: 5 * time.Second,
