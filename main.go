@@ -109,10 +109,12 @@ func run(
 	if err != nil {
 		return err
 	}
-
-	restconfig.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(float32(cfg.KubeClient.QPS), cfg.KubeClient.Burst)
 	restConfigLeader := rest.CopyConfig(restconfig)
 	restConfigDynamic := rest.CopyConfig(restconfig)
+
+	restconfig.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(float32(cfg.KubeClient.QPS), cfg.KubeClient.Burst)
+	restConfigLeader.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(float32(cfg.KubeClient.QPS), cfg.KubeClient.Burst)
+	restConfigDynamic.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(float32(cfg.KubeClient.QPS), cfg.KubeClient.Burst)
 
 	helmClient := helm.NewClient(logger, helm.NewChartLoader(), restconfig)
 
