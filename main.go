@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"os"
+	"path"
+	"runtime"
 	"time"
 
 	"github.com/bombsimon/logrusr/v4"
@@ -55,6 +57,13 @@ func main() {
 
 	logger := logrus.New()
 	logger.SetLevel(logrus.Level(cfg.Log.Level))
+	logger.SetReportCaller(true)
+	logger.Formatter = &logrus.TextFormatter{
+		CallerPrettyfier: func(f *runtime.Frame) (string, string) {
+			filename := path.Base(f.File)
+			return fmt.Sprintf("%s()", f.Function), fmt.Sprintf("%s:%d", filename, f.Line)
+		},
+	}
 
 	client := castai.NewClient(
 		logger,
