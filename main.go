@@ -109,7 +109,10 @@ func run(
 	if err != nil {
 		return err
 	}
+
 	restconfig.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(float32(cfg.KubeClient.QPS), cfg.KubeClient.Burst)
+	restConfigLeader := rest.CopyConfig(restconfig)
+	restConfigDynamic := rest.CopyConfig(restconfig)
 
 	helmClient := helm.NewClient(logger, helm.NewChartLoader(), restconfig)
 
@@ -117,8 +120,12 @@ func run(
 	if err != nil {
 		return err
 	}
+	clientSetLeader, err := kubernetes.NewForConfig(restConfigLeader)
+	if err != nil {
+		return err
+	}
 
-	dynamicClient, err := dynamic.NewForConfig(restconfig)
+	dynamicClient, err := dynamic.NewForConfig(restConfigDynamic)
 	if err != nil {
 		return err
 	}
@@ -190,7 +197,7 @@ func run(
 
 	if cfg.LeaderElection.Enabled {
 		// Run actions service with leader election. Blocks.
-		return runWithLeaderElection(ctx, log, clientset, leaderHealthCheck, cfg.LeaderElection, svc.Run)
+		return runWithLeaderElection(ctx, log, clientSetLeader, leaderHealthCheck, cfg.LeaderElection, svc.Run)
 	}
 
 	// Run action service. Blocks.
