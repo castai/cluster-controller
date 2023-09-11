@@ -232,6 +232,14 @@ func runWithLeaderElection(
 				runFunc(ctx)
 			},
 			OnStoppedLeading: func() {
+				// This method is always called(even if it was not a leader):
+				// - when controller shuts dow (for example because of SIGTERM)
+				// - we actually lost leader
+				// So we need to check what whas reason of acutally stopping.
+				if err := ctx.Err(); err != nil {
+					log.Infof("main context done, stopping controller: %v", err)
+					return
+				}
 				log.Infof("leader lost: %s", id)
 				// We don't need to exit here.
 				// Leader "on started leading" receive a context that gets cancelled when you're no longer the leader.
