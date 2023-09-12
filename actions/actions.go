@@ -72,6 +72,7 @@ func NewService(
 			reflect.TypeOf(&castai.ActionCheckNodeDeleted{}):  newCheckNodeDeletedHandler(log, clientset),
 			reflect.TypeOf(&castai.ActionCheckNodeStatus{}):   newCheckNodeStatusHandler(log, clientset),
 			reflect.TypeOf(&castai.ActionPatch{}):             newPatchHandler(log, dynamicClient),
+			reflect.TypeOf(&castai.ActionCreate{}):            newCreateHandler(log, dynamicClient),
 		},
 		healthCheck: healthCheck,
 	}
