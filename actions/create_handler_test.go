@@ -102,6 +102,7 @@ func Test_newCreateHandler(t *testing.T) {
 				return
 			}
 
+			r.NoError(err)
 			res := c.Resource(schema.GroupVersionResource{
 				Group:    test.action.ActionCreate.Group,
 				Version:  test.action.ActionCreate.Version,

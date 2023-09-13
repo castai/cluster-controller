@@ -36,6 +36,7 @@ type ClusterAction struct {
 	ActionCheckNodeStatus   *ActionCheckNodeStatus   `json:"actionCheckNodeStatus,omitempty"`
 	ActionPatch             *ActionPatch             `json:"actionPatch,omitempty"`
 	ActionCreate            *ActionCreate            `json:"actionCreate,omitempty"`
+	ActionDelete            *ActionDelete            `json:"actionDelete,omitempty"`
 	CreatedAt               time.Time                `json:"createdAt"`
 	DoneAt                  *time.Time               `json:"doneAt,omitempty"`
 	Error                   *string                  `json:"error,omitempty"`
@@ -84,6 +85,9 @@ func (c *ClusterAction) Data() interface{} {
 	if c.ActionCreate != nil {
 		return c.ActionCreate
 	}
+	if c.ActionDelete != nil {
+		return c.ActionDelete
+	}
 	return nil
 }
 
@@ -115,6 +119,10 @@ type ActionPatch struct {
 type ActionCreate struct {
 	GroupVersionResource `json:",inline"`
 	Object               map[string]interface{} `json:"object,omitempty"`
+}
+
+type ActionDelete struct {
+	ID ObjectID `json:"id"`
 }
 
 type ActionDeleteNode struct {
