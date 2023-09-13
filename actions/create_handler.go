@@ -46,12 +46,10 @@ func (h *createHandler) Handle(ctx context.Context, action *castai.ClusterAction
 	}
 
 	log := h.log.WithFields(logrus.Fields{
-		"id":       action.ID,
-		"action":   reflect.TypeOf(action.Data()).String(),
-		"group":    req.Group,
-		"resource": req.Resource,
-		"version":  req.Version,
-		"name":     newObj.GetName(),
+		"id":     action.ID,
+		"action": reflect.TypeOf(action.Data()).String(),
+		"gvr":    req.GroupVersionResource.String(),
+		"name":   newObj.GetName(),
 	})
 
 	r := h.client.Resource(schema.GroupVersionResource{

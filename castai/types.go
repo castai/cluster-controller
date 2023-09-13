@@ -2,6 +2,7 @@ package castai
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -102,6 +103,10 @@ type GroupVersionResource struct {
 	Group    string `json:"group"`
 	Version  string `json:"version"`
 	Resource string `json:"resource"`
+}
+
+func (r GroupVersionResource) String() string {
+	return fmt.Sprintf("%v/%v/%v", r.Group, r.Version, r.Resource)
 }
 
 type ObjectID struct {
