@@ -2,6 +2,7 @@ package castai
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -35,6 +36,8 @@ type ClusterAction struct {
 	ActionCheckNodeDeleted  *ActionCheckNodeDeleted  `json:"actionCheckNodeDeleted,omitempty"`
 	ActionCheckNodeStatus   *ActionCheckNodeStatus   `json:"actionCheckNodeStatus,omitempty"`
 	ActionPatch             *ActionPatch             `json:"actionPatch,omitempty"`
+	ActionCreate            *ActionCreate            `json:"actionCreate,omitempty"`
+	ActionDelete            *ActionDelete            `json:"actionDelete,omitempty"`
 	CreatedAt               time.Time                `json:"createdAt"`
 	DoneAt                  *time.Time               `json:"doneAt,omitempty"`
 	Error                   *string                  `json:"error,omitempty"`
@@ -80,6 +83,12 @@ func (c *ClusterAction) Data() interface{} {
 	if c.ActionPatch != nil {
 		return c.ActionPatch
 	}
+	if c.ActionCreate != nil {
+		return c.ActionCreate
+	}
+	if c.ActionDelete != nil {
+		return c.ActionDelete
+	}
 	return nil
 }
 
@@ -90,18 +99,35 @@ type LogEvent struct {
 	Fields  logrus.Fields `json:"fields"`
 }
 
+type GroupVersionResource struct {
+	Group    string `json:"group"`
+	Version  string `json:"version"`
+	Resource string `json:"resource"`
+}
+
+func (r GroupVersionResource) String() string {
+	return fmt.Sprintf("%v/%v/%v", r.Group, r.Version, r.Resource)
+}
+
 type ObjectID struct {
-	Group     string  `json:"group"`
-	Version   string  `json:"version"`
-	Resource  string  `json:"resource"`
-	Namespace *string `json:"namespace"`
-	Name      string  `json:"name"`
+	GroupVersionResource `json:",inline"`
+	Namespace            *string `json:"namespace"`
+	Name                 string  `json:"name"`
 }
 
 type ActionPatch struct {
 	ID        ObjectID `json:"id"`
 	PatchType string   `json:"patchType"`
 	Patch     string   `json:"patch"`
+}
+
+type ActionCreate struct {
+	GroupVersionResource `json:",inline"`
+	Object               map[string]interface{} `json:"object,omitempty"`
+}
+
+type ActionDelete struct {
+	ID ObjectID `json:"id"`
 }
 
 type ActionDeleteNode struct {

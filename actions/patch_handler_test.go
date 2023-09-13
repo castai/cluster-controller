@@ -53,9 +53,11 @@ func TestPatchHandler(t *testing.T) {
 			action: &castai.ClusterAction{
 				ActionPatch: &castai.ActionPatch{
 					ID: castai.ObjectID{
-						Group:     "apps",
-						Version:   "v1",
-						Resource:  "deployments",
+						GroupVersionResource: castai.GroupVersionResource{
+							Group:    "apps",
+							Version:  "v1",
+							Resource: "deployments",
+						},
 						Namespace: lo.ToPtr("default"),
 						Name:      "existing-deployment",
 					},
