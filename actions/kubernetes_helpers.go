@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apitypes "k8s.io/apimachinery/pkg/types"
@@ -43,6 +44,26 @@ func patchNode(ctx context.Context, clientset kubernetes.Interface, node *v1.Nod
 	}
 
 	return nil
+}
+
+func getNodeForPatching(ctx context.Context, log logrus.FieldLogger, clientset kubernetes.Interface, nodeName string) (*v1.Node, error) {
+	logRetry := func(err error, _ time.Duration) {
+		log.Warnf("getting node, will retry: %v", err)
+	}
+	var node *v1.Node
+	b := backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 3)
+	err := backoff.RetryNotify(func() error {
+		var err error
+		node, err = clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+		return err
+	}, b, logRetry)
+	if err != nil {
+		return nil, err
+	}
+	return node, nil
 }
 
 func defaultBackoff(ctx context.Context) backoff.BackOffContext {

@@ -10,7 +10,6 @@ import (
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/castai"
@@ -56,10 +55,14 @@ func (h *patchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 		"id":        action.ID,
 	})
 
-	node, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
+	// on GKE we noticed that sometimes the node is not found, even though it is in the cluster
+	// as result was returned from watch. But subsequent get request returns not found.
+	// This in theory should not happen as get should be consistent with api server state.
+	// But we have seen this happening, so we retry the get request.
+	node, err := getNodeForPatching(ctx, h.log, h.clientset, req.NodeName)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			log.Info("node not found, skipping patch")
+			log.WithError(err).Infof("node not found, skipping patch")
 			return nil
 		}
 		return err
