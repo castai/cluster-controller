@@ -180,7 +180,7 @@ func (s *service) handleActions(ctx context.Context, actions []*castai.ClusterAc
 				err = fmt.Errorf("%v:%w", err, ackErr)
 			}
 			if err != nil {
-				s.log.Errorf("handle failed: %v", err)
+				s.log.Errorf("handle failed id=%s error=%v", action.ID, err)
 			}
 		}(action)
 	}
