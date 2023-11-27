@@ -69,6 +69,7 @@ func TestIgnoreHook(t *testing.T) {
 
 	components := map[string]componentVersions{
 		"castai-evictor":            {"0.5.1", "0.10.0", "0.6.0", "0.11.0"},
+		"castai-pod-pinner":         {"0.5.1", "0.10.0", "0.6.0", "0.11.0"},
 		"castai-agent":              {"0.5.1", "0.10.0", "0.6.0", "0.11.0"},
 		"castai-spot-handler":       {"0.5.1", "0.10.0", "0.6.0", "0.11.0"},
 		"castai-egressd":            {"0.5.1", "0.10.0", "0.6.0", "0.11.0"},
