@@ -18,6 +18,11 @@ var labelIgnoreResources = map[string]struct{}{
 	"rbac.authorization.k8s.io/v1/Role//castai-evictor":               {},
 	"rbac.authorization.k8s.io/v1/RoleBinding//castai-evictor":        {},
 
+	"rbac.authorization.k8s.io/v1/ClusterRole//castai-pod-pinner":        {},
+	"rbac.authorization.k8s.io/v1/ClusterRoleBinding//castai-pod-pinner": {},
+	"rbac.authorization.k8s.io/v1/Role//castai-pod-pinner":               {},
+	"rbac.authorization.k8s.io/v1/RoleBinding//castai-pod-pinner":        {},
+
 	"rbac.authorization.k8s.io/v1/ClusterRole//castai-agent":        {},
 	"rbac.authorization.k8s.io/v1/ClusterRoleBinding//castai-agent": {},
 	"rbac.authorization.k8s.io/v1/Role//castai-agent":               {},
