@@ -65,13 +65,20 @@ func main() {
 		},
 	}
 
+	log := logrus.WithFields(logrus.Fields{})
+
+	// Create a new client to communicate with CAST AI API.
+	deltaHTTPClient, err := castai.NewDefaultClient(cfg.API.URL, cfg.API.Key, logger.Level, binVersion)
+	if err != nil {
+		log.Fatalf("new http client failed: %v", err)
+	}
+
 	client := castai.NewClient(
 		logger,
-		castai.NewDefaultClient(cfg.API.URL, cfg.API.Key, logger.Level, binVersion),
+		deltaHTTPClient,
 		cfg.ClusterID,
 	)
 
-	log := logrus.WithFields(logrus.Fields{})
 	e := ctrlog.NewExporter(logger, client)
 	logger.AddHook(e)
 	logrus.RegisterExitHandler(e.Wait)
