@@ -18,7 +18,6 @@ const (
 	headerAPIKey            = "X-API-Key"
 	headerUserAgent         = "User-Agent"
 	headerKubernetesVersion = "X-K8s-Version"
-	defaultTimeout          = 1 * time.Minute
 )
 
 type Client interface {
@@ -37,7 +36,7 @@ func NewClient(log *logrus.Logger, rest *resty.Client, clusterID string) Client 
 }
 
 // NewDefaultClient configures a default instance of the resty.Client used to do HTTP requests.
-func NewDefaultClient(url, key string, level logrus.Level, binVersion *config.ClusterControllerVersion) (*resty.Client, error) {
+func NewDefaultClient(url, key string, level logrus.Level, binVersion *config.ClusterControllerVersion, defaultTimeout time.Duration) (*resty.Client, error) {
 	clientTransport, err := createHTTPTransport()
 	if err != nil {
 		return nil, err
