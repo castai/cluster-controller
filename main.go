@@ -44,7 +44,10 @@ var (
 	Version   = "local"
 )
 
-const leaderLeaseDuration = time.Second * 15
+const (
+	leaderLeaseDuration = time.Second * 15
+	defaultPollTimeout  = 5 * time.Minute
+)
 
 func main() {
 	cfg := config.Get()
@@ -65,13 +68,20 @@ func main() {
 		},
 	}
 
+	log := logrus.WithFields(logrus.Fields{})
+
+	// Create a new client to communicate with CAST AI API.
+	defaultClient, err := castai.NewDefaultClient(cfg.API.URL, cfg.API.Key, logger.Level, binVersion, defaultPollTimeout)
+	if err != nil {
+		log.Fatalf("new http client failed: %v", err)
+	}
+
 	client := castai.NewClient(
 		logger,
-		castai.NewDefaultClient(cfg.API.URL, cfg.API.Key, logger.Level, binVersion),
+		defaultClient,
 		cfg.ClusterID,
 	)
 
-	log := logrus.WithFields(logrus.Fields{})
 	e := ctrlog.NewExporter(logger, client)
 	logger.AddHook(e)
 	logrus.RegisterExitHandler(e.Wait)
@@ -155,7 +165,7 @@ func run(
 
 	actionsConfig := actions.Config{
 		PollWaitInterval: 5 * time.Second,
-		PollTimeout:      5 * time.Minute,
+		PollTimeout:      defaultPollTimeout,
 		AckTimeout:       30 * time.Second,
 		AckRetriesCount:  3,
 		AckRetryWait:     1 * time.Second,
