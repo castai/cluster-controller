@@ -147,14 +147,11 @@ func run(
 		return fmt.Errorf("getting kubernetes version: %w", err)
 	}
 
-	nodeName := os.Getenv("KUBERNETES_NODE_NAME")
-	podName := os.Getenv("KUBERNETES_POD")
-
 	log := logger.WithFields(logrus.Fields{
 		"version":       binVersion.Version,
 		"k8s_version":   k8sVersion.Full(),
-		"running_on":    nodeName,
-		"ctrl_pod_name": podName,
+		"running_on":    cfg.NodeName,
+		"ctrl_pod_name": cfg.PodName,
 	})
 
 	// Set logr/klog to logrus adapter so all logging goes through logrus
