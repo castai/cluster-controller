@@ -44,6 +44,17 @@ func patchNode(ctx context.Context, clientset kubernetes.Interface, node *v1.Nod
 	return nil
 }
 
+func patchNodeStatus(ctx context.Context, clientset kubernetes.Interface, name string, patch []byte) error {
+	err := backoff.Retry(func() error {
+		_, err := clientset.CoreV1().Nodes().PatchStatus(ctx, name, patch)
+		return err
+	}, defaultBackoff(ctx))
+	if err != nil {
+		return fmt.Errorf("patch status: %w", err)
+	}
+	return nil
+}
+
 func getNodeForPatching(ctx context.Context, log logrus.FieldLogger, clientset kubernetes.Interface, nodeName string) (*v1.Node, error) {
 	logRetry := func(err error, _ time.Duration) {
 		log.Warnf("getting node, will retry: %v", err)

@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -74,12 +75,29 @@ func (h *patchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	}
 	log.Infof("patching node, labels=%v, taints=%v, annotations=%v, unschedulable=%v", req.Labels, req.Taints, req.Annotations, unschedulable)
 
-	return patchNode(ctx, h.clientset, node, func(n *v1.Node) {
+	err = patchNode(ctx, h.clientset, node, func(n *v1.Node) {
 		n.Labels = patchNodeMapField(n.Labels, req.Labels)
 		n.Annotations = patchNodeMapField(n.Annotations, req.Annotations)
 		n.Spec.Taints = patchTaints(n.Spec.Taints, req.Taints)
 		n.Spec.Unschedulable = patchUnschedulable(n.Spec.Unschedulable, req.Unschedulable)
 	})
+	if err != nil {
+		return err
+	}
+
+	if len(req.Capacity) > 0 {
+		log.Infof("patching node status, capacity=%v", req.Capacity)
+		patch, err := json.Marshal(map[string]interface{}{
+			"status": map[string]interface{}{
+				"capacity": req.Capacity,
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("marshal patch for status: %w", err)
+		}
+		return patchNodeStatus(ctx, h.clientset, node.Name, patch)
+	}
+	return nil
 }
 
 func patchNodeMapField(values map[string]string, patch map[string]string) map[string]string {
