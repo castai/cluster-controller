@@ -74,12 +74,11 @@ func (h *patchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	}
 	log.Infof("patching node, labels=%v, taints=%v, annotations=%v, unschedulable=%v", req.Labels, req.Taints, req.Annotations, unschedulable)
 
-	return patchNode(ctx, h.clientset, node, func(n *v1.Node) error {
-		node.Labels = patchNodeMapField(node.Labels, req.Labels)
-		node.Annotations = patchNodeMapField(node.Annotations, req.Annotations)
-		node.Spec.Taints = patchTaints(node.Spec.Taints, req.Taints)
-		node.Spec.Unschedulable = patchUnschedulable(node.Spec.Unschedulable, req.Unschedulable)
-		return nil
+	return patchNode(ctx, h.clientset, node, func(n *v1.Node) {
+		n.Labels = patchNodeMapField(n.Labels, req.Labels)
+		n.Annotations = patchNodeMapField(n.Annotations, req.Annotations)
+		n.Spec.Taints = patchTaints(n.Spec.Taints, req.Taints)
+		n.Spec.Unschedulable = patchUnschedulable(n.Spec.Unschedulable, req.Unschedulable)
 	})
 }
 
