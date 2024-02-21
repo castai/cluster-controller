@@ -73,16 +73,21 @@ func (h *patchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	if req.Unschedulable != nil {
 		unschedulable = strconv.FormatBool(*req.Unschedulable)
 	}
-	log.Infof("patching node, labels=%v, taints=%v, annotations=%v, unschedulable=%v", req.Labels, req.Taints, req.Annotations, unschedulable)
 
-	err = patchNode(ctx, h.clientset, node, func(n *v1.Node) {
-		n.Labels = patchNodeMapField(n.Labels, req.Labels)
-		n.Annotations = patchNodeMapField(n.Annotations, req.Annotations)
-		n.Spec.Taints = patchTaints(n.Spec.Taints, req.Taints)
-		n.Spec.Unschedulable = patchUnschedulable(n.Spec.Unschedulable, req.Unschedulable)
-	})
-	if err != nil {
-		return err
+	if req.Unschedulable == nil && len(req.Labels) == 0 && len(req.Taints) == 0 && len(req.Annotations) == 0 {
+		log.Info("no patch for node spec or labels")
+	} else {
+		log.Infof("patching node, labels=%v, taints=%v, annotations=%v, unschedulable=%v", req.Labels, req.Taints, req.Annotations, unschedulable)
+
+		err = patchNode(ctx, h.clientset, node, func(n *v1.Node) {
+			n.Labels = patchNodeMapField(n.Labels, req.Labels)
+			n.Annotations = patchNodeMapField(n.Annotations, req.Annotations)
+			n.Spec.Taints = patchTaints(n.Spec.Taints, req.Taints)
+			n.Spec.Unschedulable = patchUnschedulable(n.Spec.Unschedulable, req.Unschedulable)
+		})
+		if err != nil {
+			return err
+		}
 	}
 
 	if len(req.Capacity) > 0 {
