@@ -147,9 +147,8 @@ func (h *drainNodeHandler) taintNode(ctx context.Context, node *v1.Node) error {
 		return nil
 	}
 
-	err := patchNode(ctx, h.clientset, node, func(n *v1.Node) error {
+	err := patchNode(ctx, h.clientset, node, func(n *v1.Node) {
 		n.Spec.Unschedulable = true
-		return nil
 	})
 	if err != nil {
 		return fmt.Errorf("patching node unschedulable: %w", err)
