@@ -142,7 +142,7 @@ func (s *service) doWork(ctx context.Context) error {
 		return nil
 	}
 
-	s.log.Infof("received %d actions in %s", len(actions), pollDuration)
+	s.log.WithFields(logrus.Fields{"n": len(actions)}).Infof("received in %s", pollDuration)
 	s.handleActions(ctx, actions)
 	return nil
 }
@@ -180,7 +180,10 @@ func (s *service) handleActions(ctx context.Context, actions []*castai.ClusterAc
 				err = fmt.Errorf("%v:%w", err, ackErr)
 			}
 			if err != nil {
-				s.log.Errorf("handle failed id=%s error=%v", action.ID, err)
+				s.log.WithFields(logrus.Fields{
+					"id":    action.ID,
+					"error": err,
+				}).Error("handle actions")
 			}
 		}(action)
 	}
@@ -216,7 +219,10 @@ func (s *service) handleAction(ctx context.Context, action *castai.ClusterAction
 		}
 	}()
 
-	s.log.Infof("handling action, id=%s, type=%s", action.ID, actionType)
+	s.log.WithFields(logrus.Fields{
+		"id":   action.ID,
+		"type": actionType,
+	}).Info("handle action")
 	handler, ok := s.actionHandlers[actionType]
 	if !ok {
 		return fmt.Errorf("handler not found for agent action=%s", actionType)
@@ -230,7 +236,10 @@ func (s *service) handleAction(ctx context.Context, action *castai.ClusterAction
 
 func (s *service) ackAction(ctx context.Context, action *castai.ClusterAction, handleErr error) error {
 	actionType := reflect.TypeOf(action.Data())
-	s.log.Infof("ack action, id=%s, type=%s", action.ID, actionType)
+	s.log.WithFields(logrus.Fields{
+		"id":   action.ID,
+		"type": actionType,
+	}).Info("ack action")
 
 	return backoff.RetryNotify(func() error {
 		ctx, cancel := context.WithTimeout(ctx, s.cfg.AckTimeout)
