@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"time"
@@ -23,14 +24,16 @@ type deleteNodeConfig struct {
 	podsTerminationWait time.Duration
 }
 
+var errNodeMismatch = errors.New("node id mismatch")
+
 func newDeleteNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface) ActionHandler {
 	return &deleteNodeHandler{
 		log:       log,
 		clientset: clientset,
 		cfg: deleteNodeConfig{
-			deleteRetries:       6,
-			deleteRetryWait:     2 * time.Second,
-			podsTerminationWait: 10 * time.Second,
+			deleteRetries:       10,
+			deleteRetryWait:     5 * time.Second,
+			podsTerminationWait: 30 * time.Second,
 		},
 		drainNodeHandler: drainNodeHandler{
 			log:       log,
@@ -74,7 +77,7 @@ func (h *deleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 		if val, ok := current.Labels[castai.LabelNodeID]; ok {
 			if val != "" && val != req.NodeID {
 				log.Infof("node id mismatch, expected %q got %q. Skipping delete.", req.NodeID, val)
-				return nil
+				return errNodeMismatch
 			}
 		}
 
@@ -85,6 +88,10 @@ func (h *deleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 		}
 		return err
 	}, b)
+
+	if errors.Is(err, errNodeMismatch) {
+		return nil
+	}
 
 	if err != nil {
 		return fmt.Errorf("error removing node %w", err)
