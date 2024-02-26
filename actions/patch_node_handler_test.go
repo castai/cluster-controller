@@ -9,6 +9,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
@@ -79,6 +80,9 @@ func TestPatchNodeHandler(t *testing.T) {
 						Effect: string(v1.TaintEffectNoSchedule),
 					},
 				},
+				Capacity: map[v1.ResourceName]resource.Quantity{
+					"foo": resource.MustParse("123"),
+				},
 			},
 		}
 
@@ -103,6 +107,8 @@ func TestPatchNodeHandler(t *testing.T) {
 			{Key: "t3", Value: "t3", Effect: "NoSchedule", TimeAdded: (*metav1.Time)(nil)},
 		}
 		r.Equal(expectedTaints, n.Spec.Taints)
+
+		r.Equal(action.ActionPatchNode.Capacity["foo"], n.Status.Capacity["foo"])
 	})
 
 	t.Run("skip patch when node not found", func(t *testing.T) {

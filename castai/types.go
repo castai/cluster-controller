@@ -154,6 +154,9 @@ type ActionPatchNode struct {
 	Taints        []NodeTaint       `json:"taints"`
 	Annotations   map[string]string `json:"annotations"`
 	Unschedulable *bool             `json:"unschedulable"`
+	// Capacity allows advertising extended resources for a Node.
+	// More info: https://kubernetes.io/docs/tasks/administer-cluster/extended-resource-node/
+	Capacity v1.ResourceList `json:"capacity"`
 }
 
 type NodeTaint struct {

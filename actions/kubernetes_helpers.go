@@ -15,15 +15,13 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func patchNode(ctx context.Context, clientset kubernetes.Interface, node *v1.Node, changeFn func(*v1.Node) error) error {
+func patchNode(ctx context.Context, clientset kubernetes.Interface, node *v1.Node, changeFn func(*v1.Node)) error {
 	oldData, err := json.Marshal(node)
 	if err != nil {
 		return fmt.Errorf("marshaling old data: %w", err)
 	}
 
-	if err := changeFn(node); err != nil {
-		return err
-	}
+	changeFn(node)
 
 	newData, err := json.Marshal(node)
 	if err != nil {
@@ -43,6 +41,17 @@ func patchNode(ctx context.Context, clientset kubernetes.Interface, node *v1.Nod
 		return fmt.Errorf("patching node: %w", err)
 	}
 
+	return nil
+}
+
+func patchNodeStatus(ctx context.Context, clientset kubernetes.Interface, name string, patch []byte) error {
+	err := backoff.Retry(func() error {
+		_, err := clientset.CoreV1().Nodes().PatchStatus(ctx, name, patch)
+		return err
+	}, defaultBackoff(ctx))
+	if err != nil {
+		return fmt.Errorf("patch status: %w", err)
+	}
 	return nil
 }
 
