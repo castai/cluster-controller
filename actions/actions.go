@@ -124,8 +124,6 @@ func (s *service) doWork(ctx context.Context) error {
 		err       error
 		iteration int
 	)
-	ctx, cancel := context.WithTimeout(ctx, s.cfg.PollTimeout)
-	defer cancel()
 
 	b := backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), 3), ctx)
 	errR := backoff.Retry(func() error {

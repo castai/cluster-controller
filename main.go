@@ -45,7 +45,10 @@ var (
 	Version   = "local"
 )
 
-const leaderLeaseDuration = time.Second * 15
+const (
+	maxRequestTimeout   = 5 * time.Minute
+	leaderLeaseDuration = time.Second * 15
+)
 
 func main() {
 	cfg := config.Get()
@@ -65,7 +68,7 @@ func main() {
 			return fmt.Sprintf("%s()", f.Function), fmt.Sprintf("%s:%d", filename, f.Line)
 		},
 	}
-	cl, err := castai.NewDefaultClient(cfg.API.URL, cfg.API.Key, logger.Level, binVersion, time.Minute*5)
+	cl, err := castai.NewDefaultClient(cfg.API.URL, cfg.API.Key, logger.Level, binVersion, maxRequestTimeout)
 	if err != nil {
 		log.Fatalf("failed to create castai client: %v", err)
 
@@ -157,7 +160,7 @@ func run(
 
 	actionsConfig := actions.Config{
 		PollWaitInterval: 5 * time.Second,
-		PollTimeout:      5 * time.Minute,
+		PollTimeout:      maxRequestTimeout,
 		AckTimeout:       30 * time.Second,
 		AckRetriesCount:  3,
 		AckRetryWait:     1 * time.Second,
