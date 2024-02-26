@@ -9,6 +9,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apitypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
@@ -44,9 +45,14 @@ func patchNode(ctx context.Context, clientset kubernetes.Interface, node *v1.Nod
 	return nil
 }
 
-func patchNodeStatus(ctx context.Context, clientset kubernetes.Interface, name string, patch []byte) error {
+func patchNodeStatus(ctx context.Context, log logrus.FieldLogger, clientset kubernetes.Interface, name string, patch []byte) error {
 	err := backoff.Retry(func() error {
 		_, err := clientset.CoreV1().Nodes().PatchStatus(ctx, name, patch)
+		if k8serrors.IsForbidden(err) {
+			// permissions might be of older version that can't patch node/status
+			log.WithField("node", name).WithError(err).Error("skip patch node/status")
+			return nil
+		}
 		return err
 	}, defaultBackoff(ctx))
 	if err != nil {
