@@ -50,7 +50,7 @@ func patchNodeStatus(ctx context.Context, log logrus.FieldLogger, clientset kube
 		_, err := clientset.CoreV1().Nodes().PatchStatus(ctx, name, patch)
 		if k8serrors.IsForbidden(err) {
 			// permissions might be of older version that can't patch node/status
-			log.WithField("node", name).WithError(err).Error("skip patch node/status")
+			log.WithField("node", name).WithError(err).Warn("skip patch node/status")
 			return nil
 		}
 		return err
