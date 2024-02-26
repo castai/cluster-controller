@@ -80,7 +80,7 @@ func createHTTPTransport() (*http.Transport, error) {
 		//  - PingTimeout is the time before the TCP connection being closed if a Ping response is not received
 		// So in total, if a TCP connection goes bad, it would take the combined time before the TCP connection is closed
 		t2.ReadIdleTimeout = 10 * time.Second
-		t2.PingTimeout = 5 * time.Second
+		t2.PingTimeout = 15 * time.Second
 	}
 
 	return t1, nil
