@@ -100,7 +100,7 @@ func (h *patchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 		if err != nil {
 			return fmt.Errorf("marshal patch for status: %w", err)
 		}
-		return patchNodeStatus(ctx, h.clientset, node.Name, patch)
+		return patchNodeStatus(ctx, h.log, h.clientset, node.Name, patch)
 	}
 	return nil
 }
