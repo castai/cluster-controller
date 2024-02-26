@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -64,10 +65,14 @@ func main() {
 			return fmt.Sprintf("%s()", f.Function), fmt.Sprintf("%s:%d", filename, f.Line)
 		},
 	}
+	cl, err := castai.NewDefaultClient(cfg.API.URL, cfg.API.Key, logger.Level, binVersion, time.Minute*5)
+	if err != nil {
+		log.Fatalf("failed to create castai client: %v", err)
 
+	}
 	client := castai.NewClient(
 		logger,
-		castai.NewDefaultClient(cfg.API.URL, cfg.API.Key, logger.Level, binVersion),
+		cl,
 		cfg.ClusterID,
 	)
 
