@@ -21,12 +21,12 @@ if [ -z "$CLUSTER_ID" ]; then
 fi
 
 # Build bo binary and push docker image.
-IMAGE_TAG=v0.0.1
-GOOS=linux GOARCH=amd64 go build -ldflags "-X main.Version=${IMAGE_TAG}" -o bin/castai-cluster-controller .
-DOCKER_IMAGE_REPO=europe-west3-docker.pkg.dev/ci-master-mo3d/tilt/$USER/castai-cluster-controller
+IMAGE_TAG="v${USER}0.0.1"
+GOOS=linux GOARCH=amd64 go build -ldflags "-X main.Version=${IMAGE_TAG}" -o bin/castai-cluster-controller-amd64 .
+DOCKER_IMAGE_REPO=gcr.io/staging-eu-castai-vt5hy2/castai-cluster-controller
 
 if [ -z "$SKIP_BUILD" ]; then
-  docker build -t "$DOCKER_IMAGE_REPO:$IMAGE_TAG" .
+  docker build --build-arg TARGETARCH=amd64 -t "$DOCKER_IMAGE_REPO:$IMAGE_TAG" .
   docker push "$DOCKER_IMAGE_REPO:$IMAGE_TAG"
 fi
 

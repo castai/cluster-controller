@@ -8,15 +8,25 @@ Check our official helm charts repo https://github.com/castai/castai-helm-charts
 
 ## Testing
 
-### Remote
+### Pull requests
+
+Each pull request builds and publishes docker image for easier code review and testing. Check relevant GitHub actions.
+
+### On existing cluster enrolled to CAST AI
 
 Deploy cluster-controller to already connected remote cluster.
 
 *NOTE*: Make sure your kubectl context is pointing to your remote cluster.
 
-One time setup.
+Have a configured `gcloud`. Make sure to docker login with
 ```shell
-DOCKER_SECRET_TMPL_PATH=./secret-pull-script.sh ./hack/remote/setup.sh
+gcloud auth configure-docker gcr.io
+```
+
+Clone https://github.com/castai/castai-helm-charts adjacent to repo root folder. It will be used by our scripts
+```shell
+cd <cluster-controller-parent-directory>
+git clone https://github.com/castai/castai-helm-charts gh-helm-charts
 ```
 
 Deploy.
