@@ -69,6 +69,16 @@ func (c *client) SendAKSInitData(ctx context.Context, req *AKSInitDataRequest) e
 }
 
 func (c *client) SendLogs(ctx context.Context, req *LogEvent) error {
+	// Server expects fields values to be strings. If they're not it fails with BAD_REQUEST/400.
+	// Alternatively we could use "google/protobuf/any.proto" on server side but ATM it doesn't work.
+	for k, v := range req.Fields {
+		switch v.(type) {
+		case string:
+		// do nothing
+		default:
+			req.Fields[k] = fmt.Sprint(v) // Force into string
+		}
+	}
 	resp, err := c.rest.R().
 		SetBody(req).
 		SetContext(ctx).
