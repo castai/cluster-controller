@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"runtime/debug"
+	"strconv"
 	"sync"
 	"time"
 
@@ -142,7 +143,7 @@ func (s *service) doWork(ctx context.Context) error {
 		return nil
 	}
 
-	s.log.WithFields(logrus.Fields{"n": len(actions)}).Infof("received in %s", pollDuration)
+	s.log.WithFields(logrus.Fields{"n": strconv.Itoa(len(actions))}).Infof("received in %s", pollDuration)
 	s.handleActions(ctx, actions)
 	return nil
 }
@@ -182,7 +183,7 @@ func (s *service) handleActions(ctx context.Context, actions []*castai.ClusterAc
 			if err != nil {
 				s.log.WithFields(logrus.Fields{
 					"id":    action.ID,
-					"error": err,
+					"error": err.Error(),
 				}).Error("handle actions")
 			}
 		}(action)
@@ -221,7 +222,7 @@ func (s *service) handleAction(ctx context.Context, action *castai.ClusterAction
 
 	s.log.WithFields(logrus.Fields{
 		"id":   action.ID,
-		"type": actionType,
+		"type": actionType.String(),
 	}).Info("handle action")
 	handler, ok := s.actionHandlers[actionType]
 	if !ok {
@@ -238,7 +239,7 @@ func (s *service) ackAction(ctx context.Context, action *castai.ClusterAction, h
 	actionType := reflect.TypeOf(action.Data())
 	s.log.WithFields(logrus.Fields{
 		"id":   action.ID,
-		"type": actionType,
+		"type": actionType.String(),
 	}).Info("ack action")
 
 	return backoff.RetryNotify(func() error {
