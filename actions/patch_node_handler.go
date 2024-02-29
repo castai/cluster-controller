@@ -56,10 +56,6 @@ func (h *patchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 		"id":        action.ID,
 	})
 
-	// on GKE we noticed that sometimes the node is not found, even though it is in the cluster
-	// as result was returned from watch. But subsequent get request returns not found.
-	// This in theory should not happen as get should be consistent with api server state.
-	// But we have seen this happening, so we retry the get request.
 	node, err := getNodeForPatching(ctx, h.log, h.clientset, req.NodeName)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -77,7 +73,12 @@ func (h *patchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	if req.Unschedulable == nil && len(req.Labels) == 0 && len(req.Taints) == 0 && len(req.Annotations) == 0 {
 		log.Info("no patch for node spec or labels")
 	} else {
-		log.Infof("patching node, labels=%v, taints=%v, annotations=%v, unschedulable=%v", req.Labels, req.Taints, req.Annotations, unschedulable)
+		log.WithFields(map[string]interface{}{
+			"labels":      req.Labels,
+			"taints":      req.Taints,
+			"annotations": req.Annotations,
+			"capacity":    req.Capacity,
+		}).Infof("patching node, labels=%v, taints=%v, annotations=%v, unschedulable=%v", req.Labels, req.Taints, req.Annotations, unschedulable)
 
 		err = patchNode(ctx, h.clientset, node, func(n *v1.Node) {
 			n.Labels = patchNodeMapField(n.Labels, req.Labels)
@@ -91,7 +92,7 @@ func (h *patchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	}
 
 	if len(req.Capacity) > 0 {
-		log.Infof("patching node status, capacity=%v", req.Capacity)
+		log.WithField("capacity", req.Capacity).Infof("patching node status")
 		patch, err := json.Marshal(map[string]interface{}{
 			"status": map[string]interface{}{
 				"capacity": req.Capacity,
