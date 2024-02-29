@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -44,7 +45,10 @@ var (
 	Version   = "local"
 )
 
-const leaderLeaseDuration = time.Second * 15
+const (
+	maxRequestTimeout   = 5 * time.Minute
+	leaderLeaseDuration = time.Second * 15
+)
 
 func main() {
 	cfg := config.Get()
@@ -64,10 +68,14 @@ func main() {
 			return fmt.Sprintf("%s()", f.Function), fmt.Sprintf("%s:%d", filename, f.Line)
 		},
 	}
+	cl, err := castai.NewDefaultClient(cfg.API.URL, cfg.API.Key, logger.Level, binVersion, maxRequestTimeout)
+	if err != nil {
+		log.Fatalf("failed to create castai client: %v", err)
 
+	}
 	client := castai.NewClient(
 		logger,
-		castai.NewDefaultClient(cfg.API.URL, cfg.API.Key, logger.Level, binVersion),
+		cl,
 		cfg.ClusterID,
 	)
 
@@ -137,14 +145,11 @@ func run(
 		return fmt.Errorf("getting kubernetes version: %w", err)
 	}
 
-	nodeName := os.Getenv("KUBERNETES_NODE_NAME")
-	podName := os.Getenv("KUBERNETES_POD")
-
 	log := logger.WithFields(logrus.Fields{
 		"version":       binVersion.Version,
 		"k8s_version":   k8sVersion.Full(),
-		"running_on":    nodeName,
-		"ctrl_pod_name": podName,
+		"running_on":    cfg.NodeName,
+		"ctrl_pod_name": cfg.PodName,
 	})
 
 	// Set logr/klog to logrus adapter so all logging goes through logrus
@@ -155,7 +160,7 @@ func run(
 
 	actionsConfig := actions.Config{
 		PollWaitInterval: 5 * time.Second,
-		PollTimeout:      5 * time.Minute,
+		PollTimeout:      maxRequestTimeout,
 		AckTimeout:       30 * time.Second,
 		AckRetriesCount:  3,
 		AckRetryWait:     1 * time.Second,

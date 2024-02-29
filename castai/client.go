@@ -3,10 +3,13 @@ package castai
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/http"
 	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/net/http2"
 
 	"github.com/castai/cluster-controller/config"
 )
@@ -33,17 +36,54 @@ func NewClient(log *logrus.Logger, rest *resty.Client, clusterID string) Client 
 }
 
 // NewDefaultClient configures a default instance of the resty.Client used to do HTTP requests.
-func NewDefaultClient(url, key string, level logrus.Level, binVersion *config.ClusterControllerVersion) *resty.Client {
-	client := resty.New()
+func NewDefaultClient(url, key string, level logrus.Level, binVersion *config.ClusterControllerVersion, defaultTimeout time.Duration) (*resty.Client, error) {
+	clientTransport, err := createHTTPTransport()
+	if err != nil {
+		return nil, err
+	}
+
+	client := resty.NewWithClient(&http.Client{
+		Timeout:   defaultTimeout,
+		Transport: clientTransport,
+	})
+
 	client.SetHostURL(url)
-	client.SetTimeout(5 * time.Minute) // Hard timeout for any request.
 	client.Header.Set(headerAPIKey, key)
 	client.Header.Set(headerUserAgent, "castai-cluster-controller/"+binVersion.Version)
 	if level == logrus.TraceLevel {
 		client.SetDebug(true)
 	}
 
-	return client
+	return client, nil
+}
+
+func createHTTPTransport() (*http.Transport, error) {
+	t1 := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout: 15 * time.Second,
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   5 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+
+	t2, err := http2.ConfigureTransports(t1)
+	if err != nil {
+		return nil, fmt.Errorf("failed to configure HTTP2 transport: %w", err)
+	} else {
+		// Adding timeout settings to the http2 transport to prevent bad tcp connection hanging the requests for too long
+		// Doc: https://pkg.go.dev/golang.org/x/net/http2#Transport
+		//  - ReadIdleTimeout is the time before a ping is sent when no frame has been received from a connection
+		//  - PingTimeout is the time before the TCP connection being closed if a Ping response is not received
+		// So in total, if a TCP connection goes bad, it would take the combined time before the TCP connection is closed
+		t2.ReadIdleTimeout = 30 * time.Second
+		t2.PingTimeout = 15 * time.Second
+	}
+
+	return t1, nil
 }
 
 type client struct {

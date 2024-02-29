@@ -57,7 +57,7 @@ func NewService(
 		log:            log,
 		cfg:            cfg,
 		k8sVersion:     k8sVersion,
-		castaiClient:   castaiClient,
+		castAIClient:   castaiClient,
 		startedActions: map[string]struct{}{},
 		actionHandlers: map[reflect.Type]ActionHandler{
 			reflect.TypeOf(&castai.ActionDeleteNode{}):        newDeleteNodeHandler(log, clientset),
@@ -83,7 +83,7 @@ func NewService(
 type service struct {
 	log          logrus.FieldLogger
 	cfg          Config
-	castaiClient castai.Client
+	castAIClient castai.Client
 
 	k8sVersion string
 
@@ -121,18 +121,22 @@ func (s *service) doWork(ctx context.Context) error {
 	s.log.Info("polling actions")
 	start := time.Now()
 	var (
-		actions []*castai.ClusterAction
-		err     error
+		actions   []*castai.ClusterAction
+		err       error
+		iteration int
 	)
+
 	b := backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), 3), ctx)
-	err = backoff.Retry(func() error {
-		actions, err = s.pollActions(ctx)
+	errR := backoff.Retry(func() error {
+		iteration++
+		actions, err = s.castAIClient.GetActions(ctx, s.k8sVersion)
 		if err != nil {
+			s.log.Errorf("polling actions: get action request failed: iteration: %v %v", iteration, err)
 			return err
 		}
 		return nil
 	}, b)
-	if err != nil {
+	if errR != nil {
 		return fmt.Errorf("polling actions: %w", err)
 	}
 
@@ -146,16 +150,6 @@ func (s *service) doWork(ctx context.Context) error {
 	s.log.WithFields(logrus.Fields{"n": strconv.Itoa(len(actions))}).Infof("received in %s", pollDuration)
 	s.handleActions(ctx, actions)
 	return nil
-}
-
-func (s *service) pollActions(ctx context.Context) ([]*castai.ClusterAction, error) {
-	ctx, cancel := context.WithTimeout(ctx, s.cfg.PollTimeout)
-	defer cancel()
-	actions, err := s.castaiClient.GetActions(ctx, s.k8sVersion)
-	if err != nil {
-		return nil, err
-	}
-	return actions, nil
 }
 
 func (s *service) handleActions(ctx context.Context, actions []*castai.ClusterAction) {
@@ -245,7 +239,7 @@ func (s *service) ackAction(ctx context.Context, action *castai.ClusterAction, h
 	return backoff.RetryNotify(func() error {
 		ctx, cancel := context.WithTimeout(ctx, s.cfg.AckTimeout)
 		defer cancel()
-		return s.castaiClient.AckAction(ctx, action.ID, &castai.AckClusterActionRequest{
+		return s.castAIClient.AckAction(ctx, action.ID, &castai.AckClusterActionRequest{
 			Error: getHandlerError(handleErr),
 		})
 	}, backoff.WithContext(
