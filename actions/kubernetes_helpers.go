@@ -62,11 +62,16 @@ func patchNodeStatus(ctx context.Context, log logrus.FieldLogger, clientset kube
 }
 
 func getNodeForPatching(ctx context.Context, log logrus.FieldLogger, clientset kubernetes.Interface, nodeName string) (*v1.Node, error) {
+	// on GKE we noticed that sometimes the node is not found, even though it is in the cluster
+	// as a result was returned from watch. But subsequent get request returns not found.
+	// This is likely due to clientset's caching that's meant to alleviate API's load.
+	// So we give enough time for cache to sync.
 	logRetry := func(err error, _ time.Duration) {
 		log.Warnf("getting node, will retry: %v", err)
 	}
 	var node *v1.Node
-	b := backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 3)
+	b := backoff.NewExponentialBackOff()
+	b.MaxElapsedTime = 10 * time.Second
 	err := backoff.RetryNotify(func() error {
 		var err error
 		node, err = clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
