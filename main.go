@@ -250,7 +250,10 @@ func runWithLeaderElection(
 		WatchDog:        watchDog,
 		Callbacks: leaderelection.LeaderCallbacks{
 			OnStartedLeading: func(ctx context.Context) {
-				log.Infof("started leader: %s leaseDuration: %v, leaseRenewDeadline: %v", id, cfg.LeaseDuration, cfg.LeaseRenewDeadline)
+				log.WithFields(logrus.Fields{
+					"leaseDuration":      cfg.LeaseDuration.String(),
+					"leaseRenewDuration": cfg.LeaseRenewDeadline.String(),
+				}).Infof("leader elected: %s", id)
 				runFunc(ctx)
 			},
 			OnStoppedLeading: func() {
