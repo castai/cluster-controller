@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -50,6 +49,7 @@ const (
 )
 
 func main() {
+	log := logrus.WithFields(logrus.Fields{})
 	cfg := config.Get()
 
 	binVersion := &config.ClusterControllerVersion{
@@ -57,6 +57,7 @@ func main() {
 		GitRef:    GitRef,
 		Version:   Version,
 	}
+	log.Info("running castai-cluster-controller version %v, config: %+v", binVersion, cfg)
 
 	logger := logrus.New()
 	logger.SetLevel(logrus.Level(cfg.Log.Level))
@@ -78,7 +79,6 @@ func main() {
 		cfg.ClusterID,
 	)
 
-	log := logrus.WithFields(logrus.Fields{})
 	e := ctrlog.NewExporter(logger, client)
 	logger.AddHook(e)
 	logrus.RegisterExitHandler(e.Wait)
