@@ -3,7 +3,9 @@ package config
 import (
 	"os"
 	"testing"
+	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,16 +17,34 @@ func TestConfig(t *testing.T) {
 	require.NoError(t, os.Setenv("LEADER_ELECTION_ENABLED", "true"))
 	require.NoError(t, os.Setenv("LEADER_ELECTION_NAMESPACE", "castai-agent"))
 	require.NoError(t, os.Setenv("LEADER_ELECTION_LOCK_NAME", "castai-cluster-controller"))
+	require.NoError(t, os.Setenv("LEADER_ELECTION_LEASE_DURATION", "25s"))
+	require.NoError(t, os.Setenv("LEADER_ELECTION_LEASE_RENEW_DEADLINE", "20s"))
 
 	cfg := Get()
 
-	require.Equal(t, "abc", cfg.API.Key)
-	require.Equal(t, "api.cast.ai", cfg.API.URL)
-	require.Equal(t, "~/.kube/config", cfg.Kubeconfig)
-	require.Equal(t, "c1", cfg.ClusterID)
-	require.Equal(t, true, cfg.LeaderElection.Enabled)
-	require.Equal(t, "castai-agent", cfg.LeaderElection.Namespace)
-	require.Equal(t, "castai-cluster-controller", cfg.LeaderElection.LockName)
-	require.Equal(t, 25, cfg.KubeClient.QPS)
-	require.Equal(t, 150, cfg.KubeClient.Burst)
+	expected := Config{
+		Log: Log{
+			Level: int(logrus.InfoLevel),
+		},
+		PprofPort: 6060,
+		API: API{
+			Key: "abc",
+			URL: "api.cast.ai",
+		},
+		Kubeconfig: "~/.kube/config",
+		ClusterID:  "c1",
+		LeaderElection: LeaderElection{
+			Enabled:            true,
+			Namespace:          "castai-agent",
+			LockName:           "castai-cluster-controller",
+			LeaseDuration:      time.Second * 25,
+			LeaseRenewDeadline: time.Second * 20,
+		},
+		KubeClient: KubeClient{
+			QPS:   25,
+			Burst: 150,
+		},
+	}
+
+	require.Equal(t, expected, cfg)
 }
