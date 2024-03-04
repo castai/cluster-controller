@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -29,9 +30,11 @@ type API struct {
 }
 
 type LeaderElection struct {
-	Enabled   bool
-	Namespace string
-	LockName  string
+	Enabled            bool
+	Namespace          string
+	LockName           string
+	LeaseDuration      time.Duration
+	LeaseRenewDeadline time.Duration
 }
 
 type KubeClient struct {
@@ -62,6 +65,8 @@ func Get() Config {
 	_ = viper.BindEnv("leaderelection.enabled", "LEADER_ELECTION_ENABLED")
 	_ = viper.BindEnv("leaderelection.namespace", "LEADER_ELECTION_NAMESPACE")
 	_ = viper.BindEnv("leaderelection.lockname", "LEADER_ELECTION_LOCK_NAME")
+	_ = viper.BindEnv("leaderelection.leaseduration", "LEADER_ELECTION_LEASE_DURATION_SEC")
+	_ = viper.BindEnv("leaderelection.leaserenewdeadline", "LEADER_ELECTION_LEASE_RENEW_DEADLINE_SEC")
 	_ = viper.BindEnv("aksinitdata", "AKS_INIT_DATA")
 	_ = viper.BindEnv("nodename", "KUBERNETES_NODE_NAME")
 	_ = viper.BindEnv("podname", "KUBERNETES_POD")
@@ -92,6 +97,16 @@ func Get() Config {
 		}
 		if cfg.LeaderElection.LockName == "" {
 			required("LEADER_ELECTION_LOCK_NAME")
+		}
+		if cfg.LeaderElection.LeaseDuration == 0 {
+			cfg.LeaderElection.LeaseDuration = 15 * time.Second
+		} else {
+			cfg.LeaderElection.LeaseDuration = cfg.LeaderElection.LeaseDuration * time.Second
+		}
+		if cfg.LeaderElection.LeaseRenewDeadline == 0 {
+			cfg.LeaderElection.LeaseRenewDeadline = 10 * time.Second
+		} else {
+			cfg.LeaderElection.LeaseRenewDeadline = cfg.LeaderElection.LeaseRenewDeadline * time.Second
 		}
 	}
 	if cfg.KubeClient.QPS == 0 {

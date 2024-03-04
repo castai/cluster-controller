@@ -46,8 +46,7 @@ var (
 )
 
 const (
-	maxRequestTimeout   = 5 * time.Minute
-	leaderLeaseDuration = time.Second * 15
+	maxRequestTimeout = 5 * time.Minute
 )
 
 func main() {
@@ -245,13 +244,16 @@ func runWithLeaderElection(
 		// get elected before your background loop finished, violating
 		// the stated goal of the lease.
 		ReleaseOnCancel: true,
-		LeaseDuration:   leaderLeaseDuration,
-		RenewDeadline:   10 * time.Second,
+		LeaseDuration:   cfg.LeaseDuration,
+		RenewDeadline:   cfg.LeaseRenewDeadline,
 		RetryPeriod:     3 * time.Second,
 		WatchDog:        watchDog,
 		Callbacks: leaderelection.LeaderCallbacks{
 			OnStartedLeading: func(ctx context.Context) {
-				log.Infof("started leader: %s", id)
+				log.WithFields(logrus.Fields{
+					"leaseDuration":      cfg.LeaseDuration.String(),
+					"leaseRenewDuration": cfg.LeaseRenewDeadline.String(),
+				}).Infof("leader elected: %s", id)
 				runFunc(ctx)
 			},
 			OnStoppedLeading: func() {
