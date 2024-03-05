@@ -57,7 +57,7 @@ func main() {
 		GitRef:    GitRef,
 		Version:   Version,
 	}
-	log.Infof("running castai-cluster-controller version %v, config: %+v", binVersion, cfg)
+	log.Infof("running castai-cluster-controller version %v", binVersion)
 
 	logger := logrus.New()
 	logger.SetLevel(logrus.Level(cfg.Log.Level))
