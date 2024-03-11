@@ -20,6 +20,12 @@ import (
 	"github.com/castai/cluster-controller/helm"
 )
 
+const (
+	// actionIDLogField is the log field name for action ID.
+	// This field is used in backend to detect actions ID in logs.
+	actionIDLogField = "id"
+)
+
 func newUnexpectedTypeErr(value interface{}, expectedType interface{}) error {
 	return fmt.Errorf("unexpected type %T, expected %T", value, expectedType)
 }
@@ -176,8 +182,8 @@ func (s *service) handleActions(ctx context.Context, actions []*castai.ClusterAc
 			}
 			if err != nil {
 				s.log.WithFields(logrus.Fields{
-					"id":    action.ID,
-					"error": err.Error(),
+					actionIDLogField: action.ID,
+					"error":          err.Error(),
 				}).Error("handle actions")
 			}
 		}(action)
@@ -215,8 +221,8 @@ func (s *service) handleAction(ctx context.Context, action *castai.ClusterAction
 	}()
 
 	s.log.WithFields(logrus.Fields{
-		"id":   action.ID,
-		"type": actionType.String(),
+		actionIDLogField: action.ID,
+		"type":           actionType.String(),
 	}).Info("handle action")
 	handler, ok := s.actionHandlers[actionType]
 	if !ok {
@@ -232,8 +238,8 @@ func (s *service) handleAction(ctx context.Context, action *castai.ClusterAction
 func (s *service) ackAction(ctx context.Context, action *castai.ClusterAction, handleErr error) error {
 	actionType := reflect.TypeOf(action.Data())
 	s.log.WithFields(logrus.Fields{
-		"id":   action.ID,
-		"type": actionType.String(),
+		actionIDLogField: action.ID,
+		"type":           actionType.String(),
 	}).Info("ack action")
 
 	return backoff.RetryNotify(func() error {

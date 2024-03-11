@@ -81,10 +81,10 @@ func (h *drainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	}
 	drainTimeout := h.getDrainTimeout(action)
 	log := h.log.WithFields(logrus.Fields{
-		"node_name": req.NodeName,
-		"node_id":   req.NodeID,
-		"action":    reflect.TypeOf(action.Data().(*castai.ActionDrainNode)).String(),
-		"id":        action.ID,
+		"node_name":      req.NodeName,
+		"node_id":        req.NodeID,
+		"action":         reflect.TypeOf(action.Data().(*castai.ActionDrainNode)).String(),
+		actionIDLogField: action.ID,
 	})
 
 	node, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})

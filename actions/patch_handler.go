@@ -40,10 +40,10 @@ func (h *patchHandler) Handle(ctx context.Context, action *castai.ClusterAction)
 	}
 
 	log := h.log.WithFields(logrus.Fields{
-		"id":     action.ID,
-		"action": reflect.TypeOf(action.Data()).String(),
-		"gvr":    req.ID.GroupVersionResource.String(),
-		"name":   req.ID.Name,
+		actionIDLogField: action.ID,
+		"action":         reflect.TypeOf(action.Data()).String(),
+		"gvr":            req.ID.GroupVersionResource.String(),
+		"name":           req.ID.Name,
 	})
 	if req.ID.Namespace != nil {
 		log = log.WithField("namespace", *req.ID.Namespace)

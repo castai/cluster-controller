@@ -50,10 +50,10 @@ func (h *patchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	}
 
 	log := h.log.WithFields(logrus.Fields{
-		"node_name": req.NodeName,
-		"node_id":   req.NodeID,
-		"action":    reflect.TypeOf(action.Data().(*castai.ActionPatchNode)).String(),
-		"id":        action.ID,
+		"node_name":      req.NodeName,
+		"node_id":        req.NodeID,
+		"action":         reflect.TypeOf(action.Data().(*castai.ActionPatchNode)).String(),
+		actionIDLogField: action.ID,
 	})
 
 	node, err := getNodeForPatching(ctx, h.log, h.clientset, req.NodeName)

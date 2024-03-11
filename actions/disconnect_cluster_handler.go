@@ -40,8 +40,8 @@ func (c *disconnectClusterHandler) Handle(ctx context.Context, action *castai.Cl
 		return err
 	}
 	log := c.log.WithFields(logrus.Fields{
-		"type": reflect.TypeOf(action.Data().(*castai.ActionDisconnectCluster)).String(),
-		"id":   action.ID,
+		"type":           reflect.TypeOf(action.Data().(*castai.ActionDisconnectCluster)).String(),
+		actionIDLogField: action.ID,
 	})
 
 	log.Infof("deleting namespace %q", ns)

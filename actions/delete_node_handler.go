@@ -56,10 +56,10 @@ func (h *deleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 	}
 
 	log := h.log.WithFields(logrus.Fields{
-		"node_name": req.NodeName,
-		"node_id":   req.NodeID,
-		"type":      reflect.TypeOf(action.Data().(*castai.ActionDeleteNode)).String(),
-		"id":        action.ID,
+		"node_name":      req.NodeName,
+		"node_id":        req.NodeID,
+		"type":           reflect.TypeOf(action.Data().(*castai.ActionDeleteNode)).String(),
+		actionIDLogField: action.ID,
 	})
 	log.Info("deleting kubernetes node")
 
