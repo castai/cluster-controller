@@ -45,10 +45,10 @@ func (h *checkNodeDeletedHandler) Handle(ctx context.Context, action *castai.Clu
 	}
 
 	log := h.log.WithFields(logrus.Fields{
-		"node_name": req.NodeName,
-		"node_id":   req.NodeID,
-		"type":      reflect.TypeOf(action.Data().(*castai.ActionCheckNodeDeleted)).String(),
-		"id":        action.ID,
+		"node_name":      req.NodeName,
+		"node_id":        req.NodeID,
+		"type":           reflect.TypeOf(action.Data().(*castai.ActionCheckNodeDeleted)).String(),
+		actionIDLogField: action.ID,
 	})
 	log.Info("checking if node is deleted")
 

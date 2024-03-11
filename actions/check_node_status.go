@@ -37,11 +37,11 @@ func (h *checkNodeStatusHandler) Handle(ctx context.Context, action *castai.Clus
 	}
 
 	log := h.log.WithFields(logrus.Fields{
-		"node_name":   req.NodeName,
-		"node_id":     req.NodeID,
-		"node_status": req.NodeStatus,
-		"type":        reflect.TypeOf(action.Data().(*castai.ActionCheckNodeStatus)).String(),
-		"id":          action.ID,
+		"node_name":      req.NodeName,
+		"node_id":        req.NodeID,
+		"node_status":    req.NodeStatus,
+		"type":           reflect.TypeOf(action.Data().(*castai.ActionCheckNodeStatus)).String(),
+		actionIDLogField: action.ID,
 	})
 
 	switch req.NodeStatus {

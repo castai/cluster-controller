@@ -37,10 +37,10 @@ func (h *approveCSRHandler) Handle(ctx context.Context, action *castai.ClusterAc
 		return fmt.Errorf("unexpected type %T for approve csr handler", action.Data())
 	}
 	log := h.log.WithFields(logrus.Fields{
-		"node_name": req.NodeName,
-		"node_id":   req.NodeID,
-		"type":      reflect.TypeOf(action.Data().(*castai.ActionApproveCSR)).String(),
-		"id":        action.ID,
+		"node_name":      req.NodeName,
+		"node_id":        req.NodeID,
+		"type":           reflect.TypeOf(action.Data().(*castai.ActionApproveCSR)).String(),
+		actionIDLogField: action.ID,
 	})
 
 	cert, err := h.getInitialNodeCSR(ctx, log, req.NodeName)
