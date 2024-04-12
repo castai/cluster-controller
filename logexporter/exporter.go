@@ -1,4 +1,4 @@
-package log
+package logexporter
 
 import (
 	"context"
@@ -7,8 +7,6 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/sirupsen/logrus"
-
-	"github.com/castai/cluster-controller/castai"
 )
 
 const (
@@ -20,18 +18,32 @@ type Exporter interface {
 	Wait()
 }
 
-func NewExporter(logger *logrus.Logger, client castai.Client) Exporter {
-	return &exporter{
-		logger: logger,
-		client: client,
-		wg:     sync.WaitGroup{},
-	}
+type Sender interface {
+	SendLog(ctx context.Context, entry *Entry) error
+}
+
+type Entry struct {
+	Level   string        `json:"level"`
+	Time    time.Time     `json:"time"`
+	Message string        `json:"message"`
+	Fields  logrus.Fields `json:"fields"`
 }
 
 type exporter struct {
 	logger *logrus.Logger
-	client castai.Client
+	sender Sender
 	wg     sync.WaitGroup
+}
+
+// exporter must satisfy logrus.Hook.
+var _ logrus.Hook = new(exporter)
+
+func New(logger *logrus.Logger, sender Sender) *exporter {
+	return &exporter{
+		logger: logger,
+		sender: sender,
+		wg:     sync.WaitGroup{},
+	}
 }
 
 func (e *exporter) Levels() []logrus.Level {
@@ -63,7 +75,7 @@ func (e *exporter) sendLogEvent(log *logrus.Entry) {
 	ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
 	defer cancel()
 
-	req := &castai.LogEvent{
+	entry := &Entry{
 		Level:   log.Level.String(),
 		Time:    log.Time,
 		Message: log.Message,
@@ -72,7 +84,7 @@ func (e *exporter) sendLogEvent(log *logrus.Entry) {
 
 	b := backoff.WithContext(backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 3), ctx)
 	err := backoff.Retry(func() error {
-		return e.client.SendLogs(ctx, req)
+		return e.sender.SendLog(ctx, entry)
 	}, b)
 
 	if err != nil {

@@ -12,6 +12,7 @@ import (
 	"golang.org/x/net/http2"
 
 	"github.com/castai/cluster-controller/config"
+	"github.com/castai/cluster-controller/logexporter"
 )
 
 const (
@@ -23,11 +24,19 @@ const (
 type Client interface {
 	GetActions(ctx context.Context, k8sVersion string) ([]*ClusterAction, error)
 	AckAction(ctx context.Context, actionID string, req *AckClusterActionRequest) error
-	SendLogs(ctx context.Context, req *LogEvent) error
 	SendAKSInitData(ctx context.Context, req *AKSInitDataRequest) error
 }
 
-func NewClient(log *logrus.Logger, rest *resty.Client, clusterID string) Client {
+type client struct {
+	log       *logrus.Logger
+	rest      *resty.Client
+	clusterID string
+}
+
+// client must satisfy logexporter.Sender.
+var _ logexporter.Sender = new(client)
+
+func NewClient(log *logrus.Logger, rest *resty.Client, clusterID string) *client {
 	return &client{
 		log:       log,
 		rest:      rest,
@@ -86,12 +95,6 @@ func createHTTPTransport() (*http.Transport, error) {
 	return t1, nil
 }
 
-type client struct {
-	log       *logrus.Logger
-	rest      *resty.Client
-	clusterID string
-}
-
 func (c *client) SendAKSInitData(ctx context.Context, req *AKSInitDataRequest) error {
 	resp, err := c.rest.R().
 		SetBody(req).
@@ -108,19 +111,19 @@ func (c *client) SendAKSInitData(ctx context.Context, req *AKSInitDataRequest) e
 	return nil
 }
 
-func (c *client) SendLogs(ctx context.Context, req *LogEvent) error {
+func (c *client) SendLog(ctx context.Context, entry *logexporter.Entry) error {
 	// Server expects fields values to be strings. If they're not it fails with BAD_REQUEST/400.
 	// Alternatively we could use "google/protobuf/any.proto" on server side but ATM it doesn't work.
-	for k, v := range req.Fields {
+	for k, v := range entry.Fields {
 		switch v.(type) {
 		case string:
 		// do nothing
 		default:
-			req.Fields[k] = fmt.Sprint(v) // Force into string
+			entry.Fields[k] = fmt.Sprint(v) // Force into string
 		}
 	}
 	resp, err := c.rest.R().
-		SetBody(req).
+		SetBody(entry).
 		SetContext(ctx).
 		Post(fmt.Sprintf("/v1/kubernetes/clusters/%s/actions/logs", c.clusterID))
 

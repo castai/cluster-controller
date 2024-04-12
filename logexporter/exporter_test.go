@@ -1,14 +1,14 @@
-package log
+package logexporter
 
 import (
+	"context"
+	"sync"
 	"testing"
 
 	"github.com/sirupsen/logrus"
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
-
-	"github.com/castai/cluster-controller/castai/mock"
 )
 
 func TestMain(m *testing.M) {
@@ -20,8 +20,8 @@ func TestLogExporter(t *testing.T) {
 	logger, hook := test.NewNullLogger()
 	defer hook.Reset()
 
-	client := mock.NewMockAPIClient(nil)
-	e := NewExporter(nil, client)
+	sender := &mockSender{}
+	e := New(nil, sender)
 	logger.AddHook(e)
 	log := logger.WithFields(logrus.Fields{
 		"cluster_id": "test-cluster",
@@ -31,8 +31,20 @@ func TestLogExporter(t *testing.T) {
 	log.Log(logrus.DebugLevel, "sending logs")
 	e.Wait()
 
-	it.Len(client.Logs, 1)
-	it.Equal(client.Logs[0].Message, "failed to add node")
-	it.Equal(client.Logs[0].Level, "error")
-	it.Equal(client.Logs[0].Fields, logrus.Fields{"cluster_id": "test-cluster"})
+	it.Len(sender.Entries, 1)
+	it.Equal(sender.Entries[0].Message, "failed to add node")
+	it.Equal(sender.Entries[0].Level, "error")
+	it.Equal(sender.Entries[0].Fields, logrus.Fields{"cluster_id": "test-cluster"})
+}
+
+type mockSender struct {
+	mu      sync.Mutex
+	Entries []*Entry
+}
+
+func (s *mockSender) SendLog(_ context.Context, entry *Entry) error {
+	s.mu.Lock()
+	s.Entries = append(s.Entries, entry)
+	s.mu.Unlock()
+	return nil
 }
