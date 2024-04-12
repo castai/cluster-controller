@@ -123,7 +123,7 @@ func run(
 	restConfigLeader.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(float32(cfg.KubeClient.QPS), cfg.KubeClient.Burst)
 	restConfigDynamic.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(float32(cfg.KubeClient.QPS), cfg.KubeClient.Burst)
 
-	helmClient := helm.NewClient(logger, helm.NewChartLoader(), restconfig)
+	helmClient := helm.NewClient(logger, restconfig)
 
 	clientset, err := kubernetes.NewForConfig(restconfig)
 	if err != nil {

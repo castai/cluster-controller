@@ -15,16 +15,16 @@ import (
 	"helm.sh/helm/v3/pkg/storage"
 	"helm.sh/helm/v3/pkg/storage/driver"
 	"helm.sh/helm/v3/pkg/time"
-
-	"github.com/castai/cluster-controller/castai"
 )
 
 func TestClientInstall(t *testing.T) {
 	r := require.New(t)
 
 	client := &client{
-		log:                 logrus.New(),
-		chartLoader:         &testChartLoader{chart: buildNginxIngressChart()},
+		log: logrus.New(),
+		loadChart: func(_ context.Context, _ *ChartSource) (*chart.Chart, error) {
+			return buildNginxIngressChart(), nil
+		},
 		configurationGetter: &testConfigurationGetter{t: t},
 	}
 
@@ -51,8 +51,10 @@ func TestClientUpdate(t *testing.T) {
 
 	currentRelease := buildNginxIngressRelease(release.StatusDeployed)
 	client := &client{
-		log:         logrus.New(),
-		chartLoader: &testChartLoader{chart: buildNginxIngressChart()},
+		log: logrus.New(),
+		loadChart: func(_ context.Context, _ *ChartSource) (*chart.Chart, error) {
+			return buildNginxIngressChart(), nil
+		},
 		configurationGetter: &testConfigurationGetter{
 			t:              t,
 			currentRelease: currentRelease,
@@ -80,8 +82,10 @@ func TestClientUninstall(t *testing.T) {
 
 	currentRelease := buildNginxIngressRelease(release.StatusDeployed)
 	client := &client{
-		log:         logrus.New(),
-		chartLoader: &testChartLoader{chart: buildNginxIngressChart()},
+		log: logrus.New(),
+		loadChart: func(_ context.Context, _ *ChartSource) (*chart.Chart, error) {
+			return buildNginxIngressChart(), nil
+		},
 		configurationGetter: &testConfigurationGetter{
 			t:              t,
 			currentRelease: currentRelease,
@@ -118,14 +122,6 @@ func (c *testConfigurationGetter) Get(_ string) (*action.Configuration, error) {
 	}
 
 	return cfg, nil
-}
-
-type testChartLoader struct {
-	chart *chart.Chart
-}
-
-func (t *testChartLoader) Load(_ context.Context, _ *castai.ChartSource) (*chart.Chart, error) {
-	return t.chart, nil
 }
 
 func buildNginxIngressChart() *chart.Chart {

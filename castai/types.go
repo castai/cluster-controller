@@ -1,10 +1,10 @@
 package castai
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
+	"github.com/castai/cluster-controller/helm"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 )
@@ -204,7 +204,7 @@ type ActionChartUpsert struct {
 	Namespace       string            `json:"namespace"`
 	ReleaseName     string            `json:"releaseName"`
 	ValuesOverrides map[string]string `json:"valuesOverrides,omitempty"`
-	ChartSource     ChartSource       `json:"chartSource"`
+	ChartSource     helm.ChartSource  `json:"chartSource"`
 	CreateNamespace bool              `json:"createNamespace"`
 }
 
@@ -217,25 +217,6 @@ type ActionChartRollback struct {
 	Namespace   string `json:"namespace"`
 	ReleaseName string `json:"releaseName"`
 	Version     string `json:"version"`
-}
-
-type ChartSource struct {
-	RepoURL string `json:"repoUrl"`
-	Name    string `json:"name"`
-	Version string `json:"version"`
-}
-
-func (c *ChartSource) Validate() error {
-	if c.Name == "" {
-		return errors.New("chart name is not set")
-	}
-	if c.RepoURL == "" {
-		return errors.New("chart repoURL is not set")
-	}
-	if c.Version == "" {
-		return errors.New("chart version is not set")
-	}
-	return nil
 }
 
 type AKSInitDataRequest struct {

@@ -2,8 +2,9 @@ package actions
 
 import (
 	"context"
-	"github.com/google/uuid"
 	"testing"
+
+	"github.com/google/uuid"
 
 	"github.com/golang/mock/gomock"
 	"github.com/sirupsen/logrus"
@@ -108,7 +109,7 @@ func chartUpsertAction() *castai.ActionChartUpsert {
 		Namespace:       "test",
 		ReleaseName:     "new-release",
 		ValuesOverrides: map[string]string{"image.tag": "1.0.0"},
-		ChartSource: castai.ChartSource{
+		ChartSource: helm.ChartSource{
 			RepoURL: "https://my-charts.repo",
 			Name:    "super-chart",
 			Version: "1.5.0",

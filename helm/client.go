@@ -20,12 +20,11 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/castai/cluster-controller/castai"
 	"github.com/castai/cluster-controller/helm/hook"
 )
 
 type InstallOptions struct {
-	ChartSource     *castai.ChartSource
+	ChartSource     *ChartSource
 	Namespace       string
 	CreateNamespace bool
 	ReleaseName     string
@@ -38,7 +37,7 @@ type UninstallOptions struct {
 }
 
 type UpgradeOptions struct {
-	ChartSource     *castai.ChartSource
+	ChartSource     *ChartSource
 	Release         *release.Release
 	ValuesOverrides map[string]string
 	MaxHistory      int
@@ -54,7 +53,7 @@ type RollbackOptions struct {
 	ReleaseName string
 }
 
-func NewClient(log logrus.FieldLogger, loader ChartLoader, restConfig *rest.Config) Client {
+func NewClient(log logrus.FieldLogger, restConfig *rest.Config) Client {
 	return &client{
 		log: log,
 		configurationGetter: &configurationGetter{
@@ -63,7 +62,7 @@ func NewClient(log logrus.FieldLogger, loader ChartLoader, restConfig *rest.Conf
 			helmDriver: "secrets",
 			k8sConfig:  restConfig,
 		},
-		chartLoader: loader,
+		loadChart: loadRemoteChart,
 	}
 }
 
@@ -78,11 +77,11 @@ type Client interface {
 type client struct {
 	log                 logrus.FieldLogger
 	configurationGetter ConfigurationGetter
-	chartLoader         ChartLoader
+	loadChart           chartLoaderFunc
 }
 
 func (c *client) Install(ctx context.Context, opts InstallOptions) (*release.Release, error) {
-	ch, err := c.chartLoader.Load(ctx, opts.ChartSource)
+	ch, err := c.loadChart(ctx, opts.ChartSource)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +133,7 @@ func (c *client) Uninstall(opts UninstallOptions) (*release.UninstallReleaseResp
 }
 
 func (c *client) Upgrade(ctx context.Context, opts UpgradeOptions) (*release.Release, error) {
-	ch, err := c.chartLoader.Load(ctx, opts.ChartSource)
+	ch, err := c.loadChart(ctx, opts.ChartSource)
 	if err != nil {
 		return nil, err
 	}
