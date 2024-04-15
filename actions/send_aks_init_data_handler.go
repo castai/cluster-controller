@@ -16,12 +16,11 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/castai/cluster-controller/actions/types"
 	"github.com/sirupsen/logrus"
-
-	"github.com/castai/cluster-controller/castai"
 )
 
-func newSendAKSInitDataHandler(log logrus.FieldLogger, client castai.Client) ActionHandler {
+func newSendAKSInitDataHandler(log logrus.FieldLogger, client Client) ActionHandler {
 	return &sendAKSInitDataHandler{
 		log:    log,
 		client: client,
@@ -33,13 +32,13 @@ func newSendAKSInitDataHandler(log logrus.FieldLogger, client castai.Client) Act
 
 type sendAKSInitDataHandler struct {
 	log    logrus.FieldLogger
-	client castai.Client
+	client Client
 
 	baseDir         string
 	cloudConfigPath string
 }
 
-func (s *sendAKSInitDataHandler) Handle(ctx context.Context, _ *castai.ClusterAction) error {
+func (s *sendAKSInitDataHandler) Handle(ctx context.Context, _ *types.ClusterAction) error {
 	cloudConfig, err := s.readCloudConfigBase64(s.cloudConfigPath)
 	if err != nil {
 		return fmt.Errorf("reading cloud config: %w", err)
@@ -56,7 +55,7 @@ func (s *sendAKSInitDataHandler) Handle(ctx context.Context, _ *castai.ClusterAc
 	if err != nil {
 		return fmt.Errorf("protected settings decrypt failed: %w", err)
 	}
-	return s.client.SendAKSInitData(ctx, &castai.AKSInitDataRequest{
+	return s.client.SendAKSInitData(ctx, &types.AKSInitDataRequest{
 		CloudConfigBase64:       string(cloudConfig),
 		ProtectedSettingsBase64: base64.StdEncoding.EncodeToString(protectedSettings),
 	})

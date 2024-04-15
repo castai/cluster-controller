@@ -15,7 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/castai/cluster-controller/castai"
+	actiontypes "github.com/castai/cluster-controller/actions/types"
 )
 
 func TestCreateEvent(t *testing.T) {
@@ -24,16 +24,16 @@ func TestCreateEvent(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		action        *castai.ClusterAction
+		action        *actiontypes.ClusterAction
 		actionCount   int
 		object        runtime.Object
 		expectedEvent *corev1.Event
 	}{
 		{
 			name: "create single pod event",
-			action: &castai.ClusterAction{
+			action: &actiontypes.ClusterAction{
 				ID: uuid.New().String(),
-				ActionCreateEvent: &castai.ActionCreateEvent{
+				ActionCreateEvent: &actiontypes.ActionCreateEvent{
 					Reporter:  "autoscaler.cast.ai",
 					ObjectRef: podObjReference(testPod(id)),
 					EventTime: time.Now(),
@@ -57,9 +57,9 @@ func TestCreateEvent(t *testing.T) {
 		},
 		{
 			name: "create several pod events",
-			action: &castai.ClusterAction{
+			action: &actiontypes.ClusterAction{
 				ID: "",
-				ActionCreateEvent: &castai.ActionCreateEvent{
+				ActionCreateEvent: &actiontypes.ActionCreateEvent{
 					Reporter:  "provisioning.cast.ai",
 					ObjectRef: podObjReference(testPod(id)),
 					EventTime: time.Now(),

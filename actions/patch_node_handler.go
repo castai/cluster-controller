@@ -8,12 +8,11 @@ import (
 	"reflect"
 	"strconv"
 
+	"github.com/castai/cluster-controller/actions/types"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/kubernetes"
-
-	"github.com/castai/cluster-controller/castai"
 )
 
 func newPatchNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface) ActionHandler {
@@ -28,8 +27,8 @@ type patchNodeHandler struct {
 	clientset kubernetes.Interface
 }
 
-func (h *patchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
-	req, ok := action.Data().(*castai.ActionPatchNode)
+func (h *patchNodeHandler) Handle(ctx context.Context, action *types.ClusterAction) error {
+	req, ok := action.Data().(*types.ActionPatchNode)
 	if !ok {
 		return fmt.Errorf("unexpected type %T for delete patch handler", action.Data())
 	}
@@ -52,7 +51,7 @@ func (h *patchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	log := h.log.WithFields(logrus.Fields{
 		"node_name":      req.NodeName,
 		"node_id":        req.NodeID,
-		"action":         reflect.TypeOf(action.Data().(*castai.ActionPatchNode)).String(),
+		"action":         reflect.TypeOf(action.Data().(*types.ActionPatchNode)).String(),
 		actionIDLogField: action.ID,
 	})
 
@@ -121,7 +120,7 @@ func patchNodeMapField(values map[string]string, patch map[string]string) map[st
 	return values
 }
 
-func patchTaints(taints []v1.Taint, patch []castai.NodeTaint) []v1.Taint {
+func patchTaints(taints []v1.Taint, patch []types.NodeTaint) []v1.Taint {
 	for _, v := range patch {
 		taint := &v1.Taint{Key: v.Key, Value: v.Value, Effect: v1.TaintEffect(v.Effect)}
 		if v.Key[0] == '-' {

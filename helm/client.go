@@ -1,5 +1,3 @@
-//go:generate mockgen -source ./client.go -destination ./mock/client.go . Client
-
 package helm
 
 import (
@@ -53,7 +51,7 @@ type RollbackOptions struct {
 	ReleaseName string
 }
 
-func NewClient(log logrus.FieldLogger, restConfig *rest.Config) Client {
+func NewClient(log logrus.FieldLogger, restConfig *rest.Config) *client {
 	return &client{
 		log: log,
 		configurationGetter: &configurationGetter{
@@ -64,14 +62,6 @@ func NewClient(log logrus.FieldLogger, restConfig *rest.Config) Client {
 		},
 		loadChart: loadRemoteChart,
 	}
-}
-
-type Client interface {
-	Install(ctx context.Context, opts InstallOptions) (*release.Release, error)
-	Uninstall(opts UninstallOptions) (*release.UninstallReleaseResponse, error)
-	Upgrade(ctx context.Context, opts UpgradeOptions) (*release.Release, error)
-	Rollback(opts RollbackOptions) error
-	GetRelease(opts GetReleaseOptions) (*release.Release, error)
 }
 
 type client struct {

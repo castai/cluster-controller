@@ -20,7 +20,7 @@ func TestLogExporter(t *testing.T) {
 	logger, hook := test.NewNullLogger()
 	defer hook.Reset()
 
-	client := mock.NewMockAPIClient(nil)
+	client := mock.NewMockClient(nil)
 	e := NewExporter(nil, client)
 	logger.AddHook(e)
 	log := logger.WithFields(logrus.Fields{

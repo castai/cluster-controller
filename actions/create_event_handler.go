@@ -14,7 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/castai/cluster-controller/castai"
+	actiontypes "github.com/castai/cluster-controller/actions/types"
 )
 
 func newCreateEventHandler(log logrus.FieldLogger, clientset kubernetes.Interface) ActionHandler {
@@ -29,8 +29,8 @@ type createEventHandler struct {
 	clientset kubernetes.Interface
 }
 
-func (h *createEventHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
-	req, ok := action.Data().(*castai.ActionCreateEvent)
+func (h *createEventHandler) Handle(ctx context.Context, action *actiontypes.ClusterAction) error {
+	req, ok := action.Data().(*actiontypes.ActionCreateEvent)
 	if !ok {
 		return fmt.Errorf("unexpected type %T for create event handler", action.Data())
 	}

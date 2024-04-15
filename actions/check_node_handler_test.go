@@ -2,16 +2,16 @@ package actions
 
 import (
 	"context"
-	"github.com/google/uuid"
 	"testing"
+
+	"github.com/castai/cluster-controller/actions/types"
+	"github.com/google/uuid"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
-
-	"github.com/castai/cluster-controller/castai"
 )
 
 func TestCheckNodeDeletedHandler(t *testing.T) {
@@ -35,9 +35,9 @@ func TestCheckNodeDeletedHandler(t *testing.T) {
 			cfg:       checkNodeDeletedConfig{},
 		}
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID:                     uuid.New().String(),
-			ActionCheckNodeDeleted: &castai.ActionCheckNodeDeleted{NodeName: "node1"},
+			ActionCheckNodeDeleted: &types.ActionCheckNodeDeleted{NodeName: "node1"},
 		}
 
 		err := h.Handle(context.Background(), action)
@@ -53,9 +53,9 @@ func TestCheckNodeDeletedHandler(t *testing.T) {
 			cfg:       checkNodeDeletedConfig{},
 		}
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID:                     uuid.New().String(),
-			ActionCheckNodeDeleted: &castai.ActionCheckNodeDeleted{NodeName: "node1"},
+			ActionCheckNodeDeleted: &types.ActionCheckNodeDeleted{NodeName: "node1"},
 		}
 
 		err := h.Handle(context.Background(), action)

@@ -7,11 +7,11 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/actions/types"
 	"github.com/castai/cluster-controller/helm"
 )
 
-func newChartRollbackHandler(log logrus.FieldLogger, helm helm.Client, version string) ActionHandler {
+func newChartRollbackHandler(log logrus.FieldLogger, helm HelmClient, version string) ActionHandler {
 	return &chartRollbackHandler{
 		log:     log,
 		helm:    helm,
@@ -21,12 +21,12 @@ func newChartRollbackHandler(log logrus.FieldLogger, helm helm.Client, version s
 
 type chartRollbackHandler struct {
 	log     logrus.FieldLogger
-	helm    helm.Client
+	helm    HelmClient
 	version string
 }
 
-func (c *chartRollbackHandler) Handle(_ context.Context, action *castai.ClusterAction) error {
-	req, ok := action.Data().(*castai.ActionChartRollback)
+func (c *chartRollbackHandler) Handle(_ context.Context, action *types.ClusterAction) error {
+	req, ok := action.Data().(*types.ActionChartRollback)
 	if !ok {
 		return fmt.Errorf("unexpected type %T for chart rollback handler", action.Data())
 	}
@@ -46,7 +46,7 @@ func (c *chartRollbackHandler) Handle(_ context.Context, action *castai.ClusterA
 	})
 }
 
-func (c *chartRollbackHandler) validateRequest(req *castai.ActionChartRollback) error {
+func (c *chartRollbackHandler) validateRequest(req *types.ActionChartRollback) error {
 	if req.ReleaseName == "" {
 		return errors.New("bad request: releaseName not provided")
 	}

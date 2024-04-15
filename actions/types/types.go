@@ -1,16 +1,12 @@
-package castai
+package types
 
 import (
 	"fmt"
 	"time"
 
-	"github.com/castai/cluster-controller/helm"
-	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
-)
 
-const (
-	LabelNodeID = "provisioner.cast.ai/node-id"
+	"github.com/castai/cluster-controller/helm"
 )
 
 type GetClusterActionsResponse struct {
@@ -90,13 +86,6 @@ func (c *ClusterAction) Data() interface{} {
 		return c.ActionDelete
 	}
 	return nil
-}
-
-type LogEvent struct {
-	Level   string        `json:"level"`
-	Time    time.Time     `json:"time"`
-	Message string        `json:"message"`
-	Fields  logrus.Fields `json:"fields"`
 }
 
 type GroupVersionResource struct {
@@ -187,11 +176,6 @@ type ActionCheckNodeDeleted struct {
 }
 
 type ActionCheckNodeStatus_Status string
-
-const (
-	ActionCheckNodeStatus_READY   ActionCheckNodeStatus_Status = "NodeStatus_READY"
-	ActionCheckNodeStatus_DELETED ActionCheckNodeStatus_Status = "NodeStatus_DELETED"
-)
 
 type ActionCheckNodeStatus struct {
 	NodeName           string                       `json:"nodeName"`

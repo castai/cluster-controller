@@ -3,28 +3,29 @@ package actions
 import (
 	"context"
 	"fmt"
-	"github.com/google/uuid"
 	"testing"
+
+	"github.com/google/uuid"
 
 	"github.com/golang/mock/gomock"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
-	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/actions/mock"
+	"github.com/castai/cluster-controller/actions/types"
 	"github.com/castai/cluster-controller/helm"
-	mock_helm "github.com/castai/cluster-controller/helm/mock"
 )
 
 func TestChartRollbackHandler(t *testing.T) {
 	r := require.New(t)
 	ctrl := gomock.NewController(t)
-	helmMock := mock_helm.NewMockClient(ctrl)
+	helmMock := mock.NewMockHelmClient(ctrl)
 	ctx := context.Background()
 
 	handler := newChartRollbackHandler(logrus.New(), helmMock, "v0.20.0")
 
 	t.Run("successfully rollback chart", func(t *testing.T) {
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID:                  uuid.New().String(),
 			ActionChartRollback: newRollbackAction(),
 		}
@@ -38,7 +39,7 @@ func TestChartRollbackHandler(t *testing.T) {
 	})
 
 	t.Run("skip rollback if version mismatch", func(t *testing.T) {
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID:                  uuid.New().String(),
 			ActionChartRollback: newRollbackAction(),
 		}
@@ -47,7 +48,7 @@ func TestChartRollbackHandler(t *testing.T) {
 	})
 
 	t.Run("error when rolling back chart", func(t *testing.T) {
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID:                  uuid.New().String(),
 			ActionChartRollback: newRollbackAction(),
 		}
@@ -61,7 +62,7 @@ func TestChartRollbackHandler(t *testing.T) {
 	})
 
 	t.Run("namespace is missing in rollback action", func(t *testing.T) {
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID:                  uuid.New().String(),
 			ActionChartRollback: newRollbackAction(),
 		}
@@ -71,7 +72,7 @@ func TestChartRollbackHandler(t *testing.T) {
 	})
 
 	t.Run("helm release is missing in rollback action", func(t *testing.T) {
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID:                  uuid.New().String(),
 			ActionChartRollback: newRollbackAction(),
 		}
@@ -81,8 +82,8 @@ func TestChartRollbackHandler(t *testing.T) {
 	})
 }
 
-func newRollbackAction() *castai.ActionChartRollback {
-	return &castai.ActionChartRollback{
+func newRollbackAction() *types.ActionChartRollback {
+	return &types.ActionChartRollback{
 		Namespace:   "test",
 		ReleaseName: "new-release",
 		Version:     "v0.20.0",

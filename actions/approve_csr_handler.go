@@ -11,7 +11,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/actions/types"
 	"github.com/castai/cluster-controller/csr"
 )
 
@@ -31,15 +31,15 @@ type approveCSRHandler struct {
 	csrFetchInterval       time.Duration
 }
 
-func (h *approveCSRHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
-	req, ok := action.Data().(*castai.ActionApproveCSR)
+func (h *approveCSRHandler) Handle(ctx context.Context, action *types.ClusterAction) error {
+	req, ok := action.Data().(*types.ActionApproveCSR)
 	if !ok {
 		return fmt.Errorf("unexpected type %T for approve csr handler", action.Data())
 	}
 	log := h.log.WithFields(logrus.Fields{
 		"node_name":      req.NodeName,
 		"node_id":        req.NodeID,
-		"type":           reflect.TypeOf(action.Data().(*castai.ActionApproveCSR)).String(),
+		"type":           reflect.TypeOf(action.Data().(*types.ActionApproveCSR)).String(),
 		actionIDLogField: action.ID,
 	})
 

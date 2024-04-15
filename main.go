@@ -95,7 +95,7 @@ func main() {
 
 func run(
 	ctx context.Context,
-	client castai.Client,
+	client actions.Client,
 	logger *logrus.Logger,
 	cfg config.Config,
 	binVersion *config.ClusterControllerVersion,
@@ -122,8 +122,6 @@ func run(
 	restconfig.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(float32(cfg.KubeClient.QPS), cfg.KubeClient.Burst)
 	restConfigLeader.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(float32(cfg.KubeClient.QPS), cfg.KubeClient.Burst)
 	restConfigDynamic.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(float32(cfg.KubeClient.QPS), cfg.KubeClient.Burst)
-
-	helmClient := helm.NewClient(logger, restconfig)
 
 	clientset, err := kubernetes.NewForConfig(restconfig)
 	if err != nil {
@@ -176,7 +174,7 @@ func run(
 		clientset,
 		dynamicClient,
 		client,
-		helmClient,
+		helm.NewClient(logger, restconfig),
 		healthzAction,
 	)
 

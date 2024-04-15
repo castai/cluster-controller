@@ -7,13 +7,12 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/castai/cluster-controller/actions/types"
 	"github.com/cenkalti/backoff/v4"
 	"github.com/sirupsen/logrus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-
-	"github.com/castai/cluster-controller/castai"
 )
 
 type checkNodeDeletedConfig struct {
@@ -38,8 +37,8 @@ type checkNodeDeletedHandler struct {
 	cfg       checkNodeDeletedConfig
 }
 
-func (h *checkNodeDeletedHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
-	req, ok := action.Data().(*castai.ActionCheckNodeDeleted)
+func (h *checkNodeDeletedHandler) Handle(ctx context.Context, action *types.ClusterAction) error {
+	req, ok := action.Data().(*types.ActionCheckNodeDeleted)
 	if !ok {
 		return fmt.Errorf("unexpected type %T for check node deleted handler", action.Data())
 	}
@@ -47,7 +46,7 @@ func (h *checkNodeDeletedHandler) Handle(ctx context.Context, action *castai.Clu
 	log := h.log.WithFields(logrus.Fields{
 		"node_name":      req.NodeName,
 		"node_id":        req.NodeID,
-		"type":           reflect.TypeOf(action.Data().(*castai.ActionCheckNodeDeleted)).String(),
+		"type":           reflect.TypeOf(action.Data().(*types.ActionCheckNodeDeleted)).String(),
 		actionIDLogField: action.ID,
 	})
 	log.Info("checking if node is deleted")
@@ -63,7 +62,7 @@ func (h *checkNodeDeletedHandler) Handle(ctx context.Context, action *castai.Clu
 			return nil
 		}
 
-		currentNodeID, ok := n.Labels[castai.LabelNodeID]
+		currentNodeID, ok := n.Labels[labelNodeID]
 		if !ok {
 			log.Info("node doesn't have castai node id label")
 		}

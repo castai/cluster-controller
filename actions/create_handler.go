@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 
+	actiontypes "github.com/castai/cluster-controller/actions/types"
 	jsonpatch "github.com/evanphx/json-patch"
 	"github.com/sirupsen/logrus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -14,8 +15,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
-
-	"github.com/castai/cluster-controller/castai"
 )
 
 type createHandler struct {
@@ -30,8 +29,8 @@ func newCreateHandler(log logrus.FieldLogger, client dynamic.Interface) ActionHa
 	}
 }
 
-func (h *createHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
-	req, ok := action.Data().(*castai.ActionCreate)
+func (h *createHandler) Handle(ctx context.Context, action *actiontypes.ClusterAction) error {
+	req, ok := action.Data().(*actiontypes.ActionCreate)
 	if !ok {
 		return newUnexpectedTypeErr(action.Data(), req)
 	}

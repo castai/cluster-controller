@@ -11,6 +11,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/http2"
 
+	"github.com/castai/cluster-controller/actions"
+	"github.com/castai/cluster-controller/actions/types"
 	"github.com/castai/cluster-controller/config"
 )
 
@@ -21,13 +23,10 @@ const (
 )
 
 type Client interface {
-	GetActions(ctx context.Context, k8sVersion string) ([]*ClusterAction, error)
-	AckAction(ctx context.Context, actionID string, req *AckClusterActionRequest) error
 	SendLogs(ctx context.Context, req *LogEvent) error
-	SendAKSInitData(ctx context.Context, req *AKSInitDataRequest) error
 }
 
-func NewClient(log *logrus.Logger, rest *resty.Client, clusterID string) Client {
+func NewClient(log *logrus.Logger, rest *resty.Client, clusterID string) *client {
 	return &client{
 		log:       log,
 		rest:      rest,
@@ -92,7 +91,10 @@ type client struct {
 	clusterID string
 }
 
-func (c *client) SendAKSInitData(ctx context.Context, req *AKSInitDataRequest) error {
+// client must satisfy actions.Client.
+var _ actions.Client = new(client)
+
+func (c *client) SendAKSInitData(ctx context.Context, req *types.AKSInitDataRequest) error {
 	resp, err := c.rest.R().
 		SetBody(req).
 		SetContext(ctx).
@@ -106,6 +108,13 @@ func (c *client) SendAKSInitData(ctx context.Context, req *AKSInitDataRequest) e
 	}
 
 	return nil
+}
+
+type LogEvent struct {
+	Level   string        `json:"level"`
+	Time    time.Time     `json:"time"`
+	Message string        `json:"message"`
+	Fields  logrus.Fields `json:"fields"`
 }
 
 func (c *client) SendLogs(ctx context.Context, req *LogEvent) error {
@@ -134,8 +143,8 @@ func (c *client) SendLogs(ctx context.Context, req *LogEvent) error {
 	return nil
 }
 
-func (c *client) GetActions(ctx context.Context, k8sVersion string) ([]*ClusterAction, error) {
-	res := &GetClusterActionsResponse{}
+func (c *client) GetActions(ctx context.Context, k8sVersion string) ([]*types.ClusterAction, error) {
+	res := &types.GetClusterActionsResponse{}
 	resp, err := c.rest.R().
 		SetContext(ctx).
 		SetResult(res).
@@ -150,7 +159,7 @@ func (c *client) GetActions(ctx context.Context, k8sVersion string) ([]*ClusterA
 	return res.Items, nil
 }
 
-func (c *client) AckAction(ctx context.Context, actionID string, req *AckClusterActionRequest) error {
+func (c *client) AckAction(ctx context.Context, actionID string, req *types.AckClusterActionRequest) error {
 	resp, err := c.rest.R().
 		SetContext(ctx).
 		SetBody(req).
