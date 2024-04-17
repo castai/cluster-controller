@@ -19,10 +19,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/kubectl/pkg/drain"
 
 	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/internal/waitext"
 )
 
 const (
@@ -147,7 +149,7 @@ func (h *drainNodeHandler) taintNode(ctx context.Context, node *v1.Node) error {
 		return nil
 	}
 
-	err := patchNode(ctx, h.clientset, node, func(n *v1.Node) {
+	err := patchNode(ctx, h.log, h.clientset, node, func(n *v1.Node) {
 		n.Spec.Unschedulable = true
 	})
 	if err != nil {
@@ -226,7 +228,7 @@ func (h *drainNodeHandler) sendPodsRequests(ctx context.Context, pods []v1.Pod, 
 
 func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.FieldLogger, node *v1.Node) ([]v1.Pod, error) {
 	var pods *v1.PodList
-	if err := backoff.Retry(func() error {
+	listNodePodsImpl := waitext.WithTransientRetriesCtx(func(ctx context.Context) error {
 		p, err := h.clientset.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
 			FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": node.Name}).String(),
 		})
@@ -235,7 +237,11 @@ func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.F
 		}
 		pods = p
 		return nil
-	}, defaultBackoff(ctx)); err != nil {
+	}, func(err error) {
+		log.Warnf("listing pods on node %s: %v", node.Name, err)
+	})
+
+	if err := wait.ExponentialBackoffWithContext(ctx, defaultBackoff(), listNodePodsImpl); err != nil {
 		return nil, fmt.Errorf("listing node %v pods: %w", node.Name, err)
 	}
 
