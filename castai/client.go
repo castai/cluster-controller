@@ -12,7 +12,6 @@ import (
 	"golang.org/x/net/http2"
 
 	"github.com/castai/cluster-controller/config"
-	"github.com/castai/cluster-controller/logexporter"
 )
 
 const (
@@ -21,23 +20,25 @@ const (
 	headerKubernetesVersion = "X-K8s-Version"
 )
 
-type Client interface {
+// ActionsClient lists functions used by actions package.
+// TODO: move interface into actions package.
+type ActionsClient interface {
 	GetActions(ctx context.Context, k8sVersion string) ([]*ClusterAction, error)
 	AckAction(ctx context.Context, actionID string, req *AckClusterActionRequest) error
 	SendAKSInitData(ctx context.Context, req *AKSInitDataRequest) error
 }
 
-type client struct {
+// Client talks to Cast AI. It can poll and acknowledge actions
+// and also inject logs.
+type Client struct {
 	log       *logrus.Logger
 	rest      *resty.Client
 	clusterID string
 }
 
-// client must satisfy logexporter.Sender.
-var _ logexporter.Sender = new(client)
-
-func NewClient(log *logrus.Logger, rest *resty.Client, clusterID string) *client {
-	return &client{
+// NewClient returns new Client for communicating with Cast AI.
+func NewClient(log *logrus.Logger, rest *resty.Client, clusterID string) *Client {
+	return &Client{
 		log:       log,
 		rest:      rest,
 		clusterID: clusterID,
@@ -82,20 +83,19 @@ func createHTTPTransport() (*http.Transport, error) {
 	t2, err := http2.ConfigureTransports(t1)
 	if err != nil {
 		return nil, fmt.Errorf("failed to configure HTTP2 transport: %w", err)
-	} else {
-		// Adding timeout settings to the http2 transport to prevent bad tcp connection hanging the requests for too long
-		// Doc: https://pkg.go.dev/golang.org/x/net/http2#Transport
-		//  - ReadIdleTimeout is the time before a ping is sent when no frame has been received from a connection
-		//  - PingTimeout is the time before the TCP connection being closed if a Ping response is not received
-		// So in total, if a TCP connection goes bad, it would take the combined time before the TCP connection is closed
-		t2.ReadIdleTimeout = 30 * time.Second
-		t2.PingTimeout = 15 * time.Second
 	}
+	// Adding timeout settings to the http2 transport to prevent bad tcp connection hanging the requests for too long
+	// Doc: https://pkg.go.dev/golang.org/x/net/http2#Transport
+	//  - ReadIdleTimeout is the time before a ping is sent when no frame has been received from a connection
+	//  - PingTimeout is the time before the TCP connection being closed if a Ping response is not received
+	// So in total, if a TCP connection goes bad, it would take the combined time before the TCP connection is closed
+	t2.ReadIdleTimeout = 30 * time.Second
+	t2.PingTimeout = 15 * time.Second
 
 	return t1, nil
 }
 
-func (c *client) SendAKSInitData(ctx context.Context, req *AKSInitDataRequest) error {
+func (c *Client) SendAKSInitData(ctx context.Context, req *AKSInitDataRequest) error {
 	resp, err := c.rest.R().
 		SetBody(req).
 		SetContext(ctx).
@@ -111,19 +111,19 @@ func (c *client) SendAKSInitData(ctx context.Context, req *AKSInitDataRequest) e
 	return nil
 }
 
-func (c *client) SendLog(ctx context.Context, entry *logexporter.Entry) error {
+func (c *Client) SendLog(ctx context.Context, e *logEntry) error {
 	// Server expects fields values to be strings. If they're not it fails with BAD_REQUEST/400.
 	// Alternatively we could use "google/protobuf/any.proto" on server side but ATM it doesn't work.
-	for k, v := range entry.Fields {
+	for k, v := range e.Fields {
 		switch v.(type) {
 		case string:
 		// do nothing
 		default:
-			entry.Fields[k] = fmt.Sprint(v) // Force into string
+			e.Fields[k] = fmt.Sprint(v) // Force into string
 		}
 	}
 	resp, err := c.rest.R().
-		SetBody(entry).
+		SetBody(e).
 		SetContext(ctx).
 		Post(fmt.Sprintf("/v1/kubernetes/clusters/%s/actions/logs", c.clusterID))
 
@@ -137,7 +137,7 @@ func (c *client) SendLog(ctx context.Context, entry *logexporter.Entry) error {
 	return nil
 }
 
-func (c *client) GetActions(ctx context.Context, k8sVersion string) ([]*ClusterAction, error) {
+func (c *Client) GetActions(ctx context.Context, k8sVersion string) ([]*ClusterAction, error) {
 	res := &GetClusterActionsResponse{}
 	resp, err := c.rest.R().
 		SetContext(ctx).
@@ -153,7 +153,7 @@ func (c *client) GetActions(ctx context.Context, k8sVersion string) ([]*ClusterA
 	return res.Items, nil
 }
 
-func (c *client) AckAction(ctx context.Context, actionID string, req *AckClusterActionRequest) error {
+func (c *Client) AckAction(ctx context.Context, actionID string, req *AckClusterActionRequest) error {
 	resp, err := c.rest.R().
 		SetContext(ctx).
 		SetBody(req).

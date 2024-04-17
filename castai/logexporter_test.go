@@ -1,4 +1,4 @@
-package logexporter
+package castai
 
 import (
 	"context"
@@ -16,35 +16,34 @@ func TestMain(m *testing.M) {
 }
 
 func TestLogExporter(t *testing.T) {
-	it := require.New(t)
 	logger, hook := test.NewNullLogger()
 	defer hook.Reset()
 
 	sender := &mockSender{}
-	e := New(nil, sender)
+	e := NewLogExporter(nil, sender)
 	logger.AddHook(e)
 	log := logger.WithFields(logrus.Fields{
 		"cluster_id": "test-cluster",
 	})
-
-	log.Log(logrus.ErrorLevel, "failed to add node")
-	log.Log(logrus.DebugLevel, "sending logs")
+	log.Log(logrus.ErrorLevel, "foo")
+	log.Log(logrus.DebugLevel, "bar")
 	e.Wait()
 
-	it.Len(sender.Entries, 1)
-	it.Equal(sender.Entries[0].Message, "failed to add node")
-	it.Equal(sender.Entries[0].Level, "error")
-	it.Equal(sender.Entries[0].Fields, logrus.Fields{"cluster_id": "test-cluster"})
+	it := require.New(t)
+	it.Len(sender.entries, 1)
+	it.Equal(sender.entries[0].Message, "foo")
+	it.Equal(sender.entries[0].Level, "error")
+	it.Equal(sender.entries[0].Fields, logrus.Fields{"cluster_id": "test-cluster"})
 }
 
 type mockSender struct {
 	mu      sync.Mutex
-	Entries []*Entry
+	entries []*logEntry
 }
 
-func (s *mockSender) SendLog(_ context.Context, entry *Entry) error {
+func (s *mockSender) SendLog(_ context.Context, entry *logEntry) error {
 	s.mu.Lock()
-	s.Entries = append(s.Entries, entry)
+	s.entries = append(s.entries, entry)
 	s.mu.Unlock()
 	return nil
 }

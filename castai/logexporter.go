@@ -1,4 +1,4 @@
-package logexporter
+package castai
 
 import (
 	"context"
@@ -13,40 +13,39 @@ const (
 	sendTimeout = 15 * time.Second
 )
 
-type Exporter interface {
-	logrus.Hook
-	Wait()
-}
-
-type Sender interface {
-	SendLog(ctx context.Context, entry *Entry) error
-}
-
-type Entry struct {
+type logEntry struct {
 	Level   string        `json:"level"`
 	Time    time.Time     `json:"time"`
 	Message string        `json:"message"`
 	Fields  logrus.Fields `json:"fields"`
 }
 
-type exporter struct {
+type logSender interface {
+	SendLog(ctx context.Context, e *logEntry) error
+}
+
+// LogExporter hooks into logrus and sends logs to Mothership.
+type LogExporter struct {
 	logger *logrus.Logger
-	sender Sender
+	sender logSender
 	wg     sync.WaitGroup
 }
 
 // exporter must satisfy logrus.Hook.
-var _ logrus.Hook = new(exporter)
+var _ logrus.Hook = new(LogExporter)
 
-func New(logger *logrus.Logger, sender Sender) *exporter {
-	return &exporter{
+// NewLogExporter returns new exporter that can be hooked into logrus
+// to inject logs into Cast AI.
+func NewLogExporter(logger *logrus.Logger, sender logSender) *LogExporter {
+	return &LogExporter{
 		logger: logger,
 		sender: sender,
 		wg:     sync.WaitGroup{},
 	}
 }
 
-func (e *exporter) Levels() []logrus.Level {
+// Levels lists levels that tell logrus to trigger log injection.
+func (e *LogExporter) Levels() []logrus.Level {
 	return []logrus.Level{
 		logrus.ErrorLevel,
 		logrus.FatalLevel,
@@ -56,7 +55,8 @@ func (e *exporter) Levels() []logrus.Level {
 	}
 }
 
-func (e *exporter) Fire(entry *logrus.Entry) error {
+// Fire called by logrus with log entry that LogExporter sends out.
+func (e *LogExporter) Fire(entry *logrus.Entry) error {
 	e.wg.Add(1)
 
 	go func(entry *logrus.Entry) {
@@ -67,15 +67,16 @@ func (e *exporter) Fire(entry *logrus.Entry) error {
 	return nil
 }
 
-func (e *exporter) Wait() {
+// Wait lets all pending log sends to finish.
+func (e *LogExporter) Wait() {
 	e.wg.Wait()
 }
 
-func (e *exporter) sendLogEvent(log *logrus.Entry) {
+func (e *LogExporter) sendLogEvent(log *logrus.Entry) {
 	ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
 	defer cancel()
 
-	entry := &Entry{
+	logEntry := &logEntry{
 		Level:   log.Level.String(),
 		Time:    log.Time,
 		Message: log.Message,
@@ -84,7 +85,7 @@ func (e *exporter) sendLogEvent(log *logrus.Entry) {
 
 	b := backoff.WithContext(backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 3), ctx)
 	err := backoff.Retry(func() error {
-		return e.sender.SendLog(ctx, entry)
+		return e.sender.SendLog(ctx, logEntry)
 	}, b)
 
 	if err != nil {

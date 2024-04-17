@@ -7,7 +7,7 @@ import (
 	"github.com/castai/cluster-controller/castai"
 )
 
-var _ castai.Client = (*mockClient)(nil)
+var _ castai.ActionsClient = (*mockClient)(nil)
 
 func NewMockAPIClient(actions []*castai.ClusterAction) *mockClient {
 	return &mockClient{Actions: actions}

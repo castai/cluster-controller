@@ -33,7 +33,6 @@ import (
 	"github.com/castai/cluster-controller/config"
 	"github.com/castai/cluster-controller/health"
 	"github.com/castai/cluster-controller/helm"
-	"github.com/castai/cluster-controller/logexporter"
 	"github.com/castai/cluster-controller/version"
 )
 
@@ -75,7 +74,7 @@ func main() {
 	}
 	client := castai.NewClient(logger, cl, cfg.ClusterID)
 
-	e := logexporter.New(logger, client)
+	e := castai.NewLogExporter(logger, client)
 	logger.AddHook(e)
 	logrus.RegisterExitHandler(e.Wait)
 
@@ -91,7 +90,7 @@ func main() {
 
 func run(
 	ctx context.Context,
-	client castai.Client,
+	client castai.ActionsClient,
 	logger *logrus.Logger,
 	cfg config.Config,
 	binVersion *config.ClusterControllerVersion,

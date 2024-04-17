@@ -21,7 +21,7 @@ import (
 	"github.com/castai/cluster-controller/castai"
 )
 
-func newSendAKSInitDataHandler(log logrus.FieldLogger, client castai.Client) ActionHandler {
+func newSendAKSInitDataHandler(log logrus.FieldLogger, client castai.ActionsClient) ActionHandler {
 	return &sendAKSInitDataHandler{
 		log:    log,
 		client: client,
@@ -33,7 +33,7 @@ func newSendAKSInitDataHandler(log logrus.FieldLogger, client castai.Client) Act
 
 type sendAKSInitDataHandler struct {
 	log    logrus.FieldLogger
-	client castai.Client
+	client castai.ActionsClient
 
 	baseDir         string
 	cloudConfigPath string

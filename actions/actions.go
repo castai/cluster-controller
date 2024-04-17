@@ -55,7 +55,7 @@ func NewService(
 	k8sVersion string,
 	clientset *kubernetes.Clientset,
 	dynamicClient dynamic.Interface,
-	castaiClient castai.Client,
+	castaiClient castai.ActionsClient,
 	helmClient helm.Client,
 	healthCheck *health.HealthzProvider,
 ) Service {
@@ -89,7 +89,7 @@ func NewService(
 type service struct {
 	log          logrus.FieldLogger
 	cfg          Config
-	castAIClient castai.Client
+	castAIClient castai.ActionsClient
 
 	k8sVersion string
 
