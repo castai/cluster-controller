@@ -9,6 +9,12 @@ type NonTransientError struct {
 	Err error
 }
 
+func NewNonTransientError(err error) *NonTransientError {
+	return &NonTransientError{Err: err}
+}
+
+var _ error = &NonTransientError{}
+
 func (e *NonTransientError) Error() string {
 	return e.Err.Error()
 }

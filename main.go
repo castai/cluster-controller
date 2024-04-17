@@ -12,11 +12,11 @@ import (
 	"time"
 
 	"github.com/bombsimon/logrusr/v4"
-	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/net"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apiserver/pkg/server/healthz"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -33,6 +33,7 @@ import (
 	"github.com/castai/cluster-controller/config"
 	"github.com/castai/cluster-controller/health"
 	"github.com/castai/cluster-controller/helm"
+	"github.com/castai/cluster-controller/internal/waitext"
 	"github.com/castai/cluster-controller/version"
 )
 
@@ -335,13 +336,13 @@ func retrieveKubeConfig(log logrus.FieldLogger) (*rest.Config, error) {
 type kubeRetryTransport struct {
 	log           logrus.FieldLogger
 	next          http.RoundTripper
-	maxRetries    uint64
+	maxRetries    int
 	retryInterval time.Duration
 }
 
 func (rt *kubeRetryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	var resp *http.Response
-	err := backoff.RetryNotify(func() error {
+	roundTripImpl := waitext.WithTransientRetries(func() error {
 		var err error
 		resp, err = rt.next.RoundTrip(req)
 		if err != nil {
@@ -349,15 +350,15 @@ func (rt *kubeRetryTransport) RoundTrip(req *http.Request) (*http.Response, erro
 			if net.IsConnectionRefused(err) {
 				return err
 			}
-			return backoff.Permanent(err)
+			return waitext.NewNonTransientError(err)
 		}
 		return nil
-	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(rt.retryInterval), rt.maxRetries),
-		func(err error, duration time.Duration) {
-			if err != nil {
-				rt.log.Warnf("kube api server connection refused, will retry: %v", err)
-			}
-		})
+	}, func(err error) {
+		rt.log.Warnf("kube api server connection refused, will retry: %v", err)
+	})
+	boff := waitext.WithRetry(waitext.NewConstantBackoff(rt.retryInterval), rt.maxRetries)
+
+	err := wait.ExponentialBackoff(boff, roundTripImpl)
 	return resp, err
 }
 
