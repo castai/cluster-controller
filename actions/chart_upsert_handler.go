@@ -9,11 +9,11 @@ import (
 	"helm.sh/helm/v3/pkg/release"
 	helmdriver "helm.sh/helm/v3/pkg/storage/driver"
 
-	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/actions/types"
 	"github.com/castai/cluster-controller/helm"
 )
 
-func newChartUpsertHandler(log logrus.FieldLogger, helm helm.Client) ActionHandler {
+func newChartUpsertHandler(log logrus.FieldLogger, helm HelmClient) ActionHandler {
 	return &chartUpsertHandler{
 		log:  log,
 		helm: helm,
@@ -22,11 +22,11 @@ func newChartUpsertHandler(log logrus.FieldLogger, helm helm.Client) ActionHandl
 
 type chartUpsertHandler struct {
 	log  logrus.FieldLogger
-	helm helm.Client
+	helm HelmClient
 }
 
-func (c *chartUpsertHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
-	req, ok := action.Data().(*castai.ActionChartUpsert)
+func (c *chartUpsertHandler) Handle(ctx context.Context, action *types.ClusterAction) error {
+	req, ok := action.Data().(*types.ActionChartUpsert)
 	if !ok {
 		return fmt.Errorf("unexpected type %T for upsert chart handler", action.Data())
 	}
@@ -74,7 +74,7 @@ func (c *chartUpsertHandler) Handle(ctx context.Context, action *castai.ClusterA
 	return err
 }
 
-func (c *chartUpsertHandler) validateRequest(req *castai.ActionChartUpsert) error {
+func (c *chartUpsertHandler) validateRequest(req *types.ActionChartUpsert) error {
 	if req.ReleaseName == "" {
 		return errors.New("bad request: releaseName not provided")
 	}

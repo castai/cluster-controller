@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/castai/cluster-controller/actions/types"
+	actiontypes "github.com/castai/cluster-controller/actions/types"
 	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -12,8 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	apitypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
-
-	"github.com/castai/cluster-controller/castai"
 )
 
 type patchHandler struct {
@@ -28,8 +28,8 @@ func newPatchHandler(log logrus.FieldLogger, client dynamic.Interface) ActionHan
 	}
 }
 
-func (h *patchHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
-	req, ok := action.Data().(*castai.ActionPatch)
+func (h *patchHandler) Handle(ctx context.Context, action *actiontypes.ClusterAction) error {
+	req, ok := action.Data().(*types.ActionPatch)
 	if !ok {
 		return newUnexpectedTypeErr(action.Data(), req)
 	}

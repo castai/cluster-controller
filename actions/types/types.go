@@ -1,16 +1,12 @@
-package castai
+package types
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
-)
 
-const (
-	LabelNodeID = "provisioner.cast.ai/node-id"
+	"github.com/castai/cluster-controller/helm"
 )
 
 type GetClusterActionsResponse struct {
@@ -90,13 +86,6 @@ func (c *ClusterAction) Data() interface{} {
 		return c.ActionDelete
 	}
 	return nil
-}
-
-type LogEvent struct {
-	Level   string        `json:"level"`
-	Time    time.Time     `json:"time"`
-	Message string        `json:"message"`
-	Fields  logrus.Fields `json:"fields"`
 }
 
 type GroupVersionResource struct {
@@ -188,11 +177,6 @@ type ActionCheckNodeDeleted struct {
 
 type ActionCheckNodeStatus_Status string
 
-const (
-	ActionCheckNodeStatus_READY   ActionCheckNodeStatus_Status = "NodeStatus_READY"
-	ActionCheckNodeStatus_DELETED ActionCheckNodeStatus_Status = "NodeStatus_DELETED"
-)
-
 type ActionCheckNodeStatus struct {
 	NodeName           string                       `json:"nodeName"`
 	NodeID             string                       `json:"nodeId"`
@@ -204,7 +188,7 @@ type ActionChartUpsert struct {
 	Namespace       string            `json:"namespace"`
 	ReleaseName     string            `json:"releaseName"`
 	ValuesOverrides map[string]string `json:"valuesOverrides,omitempty"`
-	ChartSource     ChartSource       `json:"chartSource"`
+	ChartSource     helm.ChartSource  `json:"chartSource"`
 	CreateNamespace bool              `json:"createNamespace"`
 }
 
@@ -217,25 +201,6 @@ type ActionChartRollback struct {
 	Namespace   string `json:"namespace"`
 	ReleaseName string `json:"releaseName"`
 	Version     string `json:"version"`
-}
-
-type ChartSource struct {
-	RepoURL string `json:"repoUrl"`
-	Name    string `json:"name"`
-	Version string `json:"version"`
-}
-
-func (c *ChartSource) Validate() error {
-	if c.Name == "" {
-		return errors.New("chart name is not set")
-	}
-	if c.RepoURL == "" {
-		return errors.New("chart repoURL is not set")
-	}
-	if c.Version == "" {
-		return errors.New("chart version is not set")
-	}
-	return nil
 }
 
 type AKSInitDataRequest struct {

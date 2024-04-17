@@ -6,23 +6,20 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/castai/cluster-controller/castai"
 )
 
-func TestIntegration_ChartLoader(t *testing.T) {
+func TestIntegration_loadRemoteChart(t *testing.T) {
 	r := require.New(t)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	chart := &castai.ChartSource{
+	chart := &ChartSource{
 		RepoURL: "https://castai.github.io/helm-charts",
 		Name:    "castai-cluster-controller",
 		Version: "0.4.3",
 	}
 
-	loader := NewChartLoader()
-	c, err := loader.Load(ctx, chart)
+	c, err := loadRemoteChart(ctx, chart)
 	r.NoError(err)
 	r.Equal(chart.Name, c.Name())
 	r.Equal(chart.Version, c.Metadata.Version)

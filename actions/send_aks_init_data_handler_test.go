@@ -2,14 +2,13 @@ package actions
 
 import (
 	"context"
-	"github.com/google/uuid"
 	"testing"
+
+	"github.com/castai/cluster-controller/actions/types"
+	"github.com/google/uuid"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
-
-	"github.com/castai/cluster-controller/castai"
-	"github.com/castai/cluster-controller/castai/mock"
 )
 
 func TestAKSInitDataHandler(t *testing.T) {
@@ -17,7 +16,7 @@ func TestAKSInitDataHandler(t *testing.T) {
 	log := logrus.New()
 	log.SetLevel(logrus.DebugLevel)
 
-	client := mock.NewMockAPIClient(nil)
+	client := newMockAPIClient(nil)
 	h := sendAKSInitDataHandler{
 		log:             log,
 		client:          client,
@@ -25,9 +24,9 @@ func TestAKSInitDataHandler(t *testing.T) {
 		baseDir:         "../testdata/aks",
 	}
 
-	action := &castai.ClusterAction{
+	action := &types.ClusterAction{
 		ID:                    uuid.New().String(),
-		ActionSendAKSInitData: &castai.ActionSendAKSInitData{},
+		ActionSendAKSInitData: &types.ActionSendAKSInitData{},
 	}
 	ctx := context.Background()
 	err := h.Handle(ctx, action)

@@ -5,13 +5,12 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/castai/cluster-controller/actions/types"
 	"github.com/sirupsen/logrus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
-
-	"github.com/castai/cluster-controller/castai"
 )
 
 type deleteHandler struct {
@@ -26,8 +25,8 @@ func newDeleteHandler(log logrus.FieldLogger, client dynamic.Interface) ActionHa
 	}
 }
 
-func (h *deleteHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
-	req, ok := action.Data().(*castai.ActionDelete)
+func (h *deleteHandler) Handle(ctx context.Context, action *types.ClusterAction) error {
+	req, ok := action.Data().(*types.ActionDelete)
 	if !ok {
 		return newUnexpectedTypeErr(action.Data(), req)
 	}

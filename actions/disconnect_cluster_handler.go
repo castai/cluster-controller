@@ -3,9 +3,9 @@ package actions
 import (
 	"context"
 	"fmt"
-	"github.com/castai/cluster-controller/castai"
 	"reflect"
 
+	"github.com/castai/cluster-controller/actions/types"
 	"github.com/sirupsen/logrus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,7 +24,7 @@ type disconnectClusterHandler struct {
 	client kubernetes.Interface
 }
 
-func (c *disconnectClusterHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+func (c *disconnectClusterHandler) Handle(ctx context.Context, action *types.ClusterAction) error {
 	ns := "castai-agent"
 	_, err := c.client.CoreV1().Namespaces().Get(ctx, ns, metav1.GetOptions{})
 	if err != nil {
@@ -40,7 +40,7 @@ func (c *disconnectClusterHandler) Handle(ctx context.Context, action *castai.Cl
 		return err
 	}
 	log := c.log.WithFields(logrus.Fields{
-		"type":           reflect.TypeOf(action.Data().(*castai.ActionDisconnectCluster)).String(),
+		"type":           reflect.TypeOf(action.Data().(*types.ActionDisconnectCluster)).String(),
 		actionIDLogField: action.ID,
 	})
 

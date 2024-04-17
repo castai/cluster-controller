@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/castai/cluster-controller/actions/types"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -14,8 +15,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/castai/cluster-controller/castai"
 )
 
 func Test_newCreateHandler(t *testing.T) {
@@ -25,29 +24,29 @@ func Test_newCreateHandler(t *testing.T) {
 
 	tests := map[string]struct {
 		objs      []runtime.Object
-		action    *castai.ClusterAction
+		action    *types.ClusterAction
 		convertFn func(i map[string]interface{}) client.Object
 		err       error
 		want      *appsv1.Deployment
 	}{
 		"should return error when action is of a different type": {
-			action: &castai.ClusterAction{
-				ActionDeleteNode: &castai.ActionDeleteNode{},
+			action: &types.ClusterAction{
+				ActionDeleteNode: &types.ActionDeleteNode{},
 			},
-			err: newUnexpectedTypeErr(&castai.ActionDeleteNode{}, &castai.ActionCreate{}),
+			err: newUnexpectedTypeErr(&types.ActionDeleteNode{}, &types.ActionCreate{}),
 		},
 		"should return error when object is not provided": {
-			action: &castai.ClusterAction{
-				ActionCreate: &castai.ActionCreate{
-					GroupVersionResource: castai.GroupVersionResource{},
+			action: &types.ClusterAction{
+				ActionCreate: &types.ActionCreate{
+					GroupVersionResource: types.GroupVersionResource{},
 				},
 			},
 			err: errors.New("no object provided"),
 		},
 		"should create new deployment": {
-			action: &castai.ClusterAction{
-				ActionCreate: &castai.ActionCreate{
-					GroupVersionResource: castai.GroupVersionResource{
+			action: &types.ClusterAction{
+				ActionCreate: &types.ActionCreate{
+					GroupVersionResource: types.GroupVersionResource{
 						Group:    appsv1.SchemeGroupVersion.Group,
 						Version:  appsv1.SchemeGroupVersion.Version,
 						Resource: "deployments",
@@ -63,9 +62,9 @@ func Test_newCreateHandler(t *testing.T) {
 			},
 		},
 		"should patch already existing resource": {
-			action: &castai.ClusterAction{
-				ActionCreate: &castai.ActionCreate{
-					GroupVersionResource: castai.GroupVersionResource{
+			action: &types.ClusterAction{
+				ActionCreate: &types.ActionCreate{
+					GroupVersionResource: types.GroupVersionResource{
 						Group:    appsv1.SchemeGroupVersion.Group,
 						Version:  appsv1.SchemeGroupVersion.Version,
 						Resource: "deployments",
