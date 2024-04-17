@@ -80,7 +80,7 @@ func (h *patchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 			"capacity":    req.Capacity,
 		}).Infof("patching node, labels=%v, taints=%v, annotations=%v, unschedulable=%v", req.Labels, req.Taints, req.Annotations, unschedulable)
 
-		err = patchNode(ctx, h.clientset, node, func(n *v1.Node) {
+		err = patchNode(ctx, h.log, h.clientset, node, func(n *v1.Node) {
 			n.Labels = patchNodeMapField(n.Labels, req.Labels)
 			n.Annotations = patchNodeMapField(n.Annotations, req.Annotations)
 			n.Spec.Taints = patchTaints(n.Spec.Taints, req.Taints)
