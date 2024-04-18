@@ -7,12 +7,17 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/sirupsen/logrus"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/castai"
 	"github.com/castai/cluster-controller/csr"
+	"github.com/castai/cluster-controller/internal/waitext"
+)
+
+const (
+	approveCSRTimeout = 4 * time.Minute
 )
 
 func newApproveCSRHandler(log logrus.FieldLogger, clientset kubernetes.Interface) ActionHandler {
@@ -53,16 +58,14 @@ func (h *approveCSRHandler) Handle(ctx context.Context, action *castai.ClusterAc
 		return nil
 	}
 
-	b := backoff.WithContext(
-		newApproveCSRExponentialBackoff(),
-		ctx,
-	)
-	return backoff.RetryNotify(func() error {
+	ctx, cancel := context.WithTimeout(ctx, approveCSRTimeout)
+	defer cancel()
+
+	b := newApproveCSRExponentialBackoff()
+	return waitext.RetryWithContext(ctx, b, func(ctx context.Context) error {
 		return h.handle(ctx, log, cert)
-	}, b, func(err error, duration time.Duration) {
-		if err != nil {
-			log.Warnf("csr approval failed, will retry: %v", err)
-		}
+	}, func(err error) {
+		log.Warnf("csr approval failed, will retry: %v", err)
 	})
 }
 
@@ -122,25 +125,23 @@ func (h *approveCSRHandler) getInitialNodeCSR(ctx context.Context, log logrus.Fi
 	var cert *csr.Certificate
 	var err error
 
-	logRetry := func(err error, _ time.Duration) {
-		log.Warnf("getting initial csr, will retry: %v", err)
-	}
-	b := backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 3)
-	err = backoff.RetryNotify(func() error {
+	// TODO: Shouldn't we pass ctx here, too?
+	b := waitext.WithRetry(waitext.DefaultExponentialBackoff(), 3)
+	err = waitext.Retry(b, func() error {
 		cert, err = poll()
 		if errors.Is(err, context.DeadlineExceeded) {
-			return backoff.Permanent(err)
+			return waitext.NewNonTransientError(err)
 		}
 		return err
-	}, b, logRetry)
+	}, func(err error) {
+		log.Warnf("getting initial csr, will retry: %v", err)
+	})
 
 	return cert, err
 }
 
-func newApproveCSRExponentialBackoff() *backoff.ExponentialBackOff {
-	b := backoff.NewExponentialBackOff()
-	b.Multiplier = 2
-	b.MaxElapsedTime = 4 * time.Minute
-	b.Reset()
+func newApproveCSRExponentialBackoff() wait.Backoff {
+	b := waitext.DefaultExponentialBackoff()
+	b.Factor = 2
 	return b
 }
