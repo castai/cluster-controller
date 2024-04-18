@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -231,7 +232,7 @@ func TestApproveCSRExponentialBackoff(t *testing.T) {
 	b := newApproveCSRExponentialBackoff()
 	var sum time.Duration
 	for i := 0; i < 10; i++ {
-		tmp := b.NextBackOff()
+		tmp := b.Step()
 		sum += tmp
 	}
 	r.Truef(100 < sum.Seconds(), "actual elapsed seconds %s", sum.Seconds())
