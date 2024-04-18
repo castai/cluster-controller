@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/castai/cluster-controller/castai"
@@ -21,7 +22,7 @@ func TestIntegration_ChartLoader(t *testing.T) {
 		Version: "0.4.3",
 	}
 
-	loader := NewChartLoader()
+	loader := NewChartLoader(logrus.New())
 	c, err := loader.Load(ctx, chart)
 	r.NoError(err)
 	r.Equal(chart.Name, c.Name())
