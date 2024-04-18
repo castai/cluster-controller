@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -16,10 +15,11 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/internal/waitext"
 )
 
 type deleteNodeConfig struct {
-	deleteRetries       uint64
+	deleteRetries       int
 	deleteRetryWait     time.Duration
 	podsTerminationWait time.Duration
 }
@@ -63,8 +63,8 @@ func (h *deleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 	})
 	log.Info("deleting kubernetes node")
 
-	b := backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(h.cfg.deleteRetryWait), h.cfg.deleteRetries), ctx)
-	err := backoff.Retry(func() error {
+	b := waitext.WithRetry(waitext.NewConstantBackoff(h.cfg.deleteRetryWait), h.cfg.deleteRetries)
+	err := waitext.RetryWithContext(ctx, b, func(ctx context.Context) error {
 		current, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
@@ -87,19 +87,20 @@ func (h *deleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 			return nil
 		}
 		return err
-	}, b)
+	}, func(err error) {
+		h.log.Warnf("error deleting kubernetes node, will retry: %v", err)
+	})
 
 	if errors.Is(err, errNodeMismatch) {
 		return nil
 	}
-
 	if err != nil {
 		return fmt.Errorf("error removing node %w", err)
 	}
 
-	podsListing := backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(h.cfg.podsTerminationWait), h.cfg.deleteRetries), ctx)
+	podsListingBackoff := waitext.WithRetry(waitext.NewConstantBackoff(h.cfg.podsTerminationWait), h.cfg.deleteRetries)
 	var pods []v1.Pod
-	err = backoff.Retry(func() error {
+	err = waitext.RetryWithContext(ctx, podsListingBackoff, func(ctx context.Context) error {
 		podList, err := h.clientset.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
 			FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": req.NodeName}).String(),
 		})
@@ -108,9 +109,9 @@ func (h *deleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 		}
 		pods = podList.Items
 		return nil
-
-	}, podsListing)
-
+	}, func(err error) {
+		h.log.Warnf("error listing pods, will retry: %v", err)
+	})
 	if err != nil {
 		return fmt.Errorf("listing node pods %w", err)
 	}
@@ -128,8 +129,8 @@ func (h *deleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 	}
 
 	// Cleanup of pods for which node has been removed. It should take a few seconds but added retry in case of network errors.
-	podsWait := backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(h.cfg.podsTerminationWait), h.cfg.deleteRetries), ctx)
-	return backoff.Retry(func() error {
+	podsWaitBackoff := waitext.WithRetry(waitext.NewConstantBackoff(h.cfg.podsTerminationWait), h.cfg.deleteRetries)
+	return waitext.RetryWithContext(ctx, podsWaitBackoff, func(ctx context.Context) error {
 		pods, err := h.clientset.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
 			FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": req.NodeName}).String(),
 		})
@@ -140,5 +141,7 @@ func (h *deleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 			return fmt.Errorf("waiting for %d pods to be terminated on node %v", len(pods.Items), req.NodeName)
 		}
 		return nil
-	}, podsWait)
+	}, func(err error) {
+		h.log.Warnf("error waiting for pods termination, will retry: %v", err)
+	})
 }
