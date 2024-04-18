@@ -4,7 +4,6 @@ go 1.21
 
 require (
 	github.com/bombsimon/logrusr/v4 v4.0.0
-	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/evanphx/json-patch v5.7.0+incompatible
 	github.com/go-resty/resty/v2 v2.5.0
 	github.com/golang/mock v1.6.0
