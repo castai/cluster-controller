@@ -5,35 +5,40 @@ package helm
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
+	"github.com/sirupsen/logrus"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/cli"
 	"helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/repo"
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/internal/waitext"
 )
 
 type ChartLoader interface {
 	Load(ctx context.Context, c *castai.ChartSource) (*chart.Chart, error)
 }
 
-func NewChartLoader() ChartLoader {
-	return &remoteChartLoader{}
+func NewChartLoader(log logrus.FieldLogger) ChartLoader {
+	return &remoteChartLoader{log: log}
 }
 
 // remoteChartLoader fetches chart from remote source by given url.
 type remoteChartLoader struct {
+	log logrus.FieldLogger
 }
 
 func (cl *remoteChartLoader) Load(ctx context.Context, c *castai.ChartSource) (*chart.Chart, error) {
 	var res *chart.Chart
-	err := backoff.Retry(func() error {
+
+	err := waitext.RetryWithContext(ctx, defaultBackoff(), func(ctx context.Context) error {
 		var archiveURL string
 		if strings.HasSuffix(c.RepoURL, ".tgz") {
 			archiveURL = c.RepoURL
@@ -52,7 +57,12 @@ func (cl *remoteChartLoader) Load(ctx context.Context, c *castai.ChartSource) (*
 		if err != nil {
 			return err
 		}
-		defer archiveResp.Body.Close()
+		defer func(Body io.ReadCloser) {
+			err := Body.Close()
+			if err != nil {
+				cl.log.Warnf("loading chart from archive - failed to close response body: %v", err)
+			}
+		}(archiveResp.Body)
 
 		ch, err := loader.LoadArchive(archiveResp.Body)
 		if err != nil {
@@ -60,7 +70,9 @@ func (cl *remoteChartLoader) Load(ctx context.Context, c *castai.ChartSource) (*
 		}
 		res = ch
 		return nil
-	}, defaultBackoff(ctx))
+	}, func(err error) {
+		cl.log.Warnf("error loading chart from archive, will retry: %v", err)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -86,8 +98,8 @@ func (cl *remoteChartLoader) fetchArchive(ctx context.Context, archiveURL string
 	return archiveResp, nil
 }
 
-func defaultBackoff(ctx context.Context) backoff.BackOffContext {
-	return backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(1*time.Second), 5), ctx)
+func defaultBackoff() wait.Backoff {
+	return waitext.WithRetry(waitext.NewConstantBackoff(1*time.Second), 5)
 }
 
 func (cl *remoteChartLoader) downloadHelmIndex(repoURL string) (*repo.IndexFile, error) {
