@@ -77,8 +77,6 @@ func Retry(backoff wait.Backoff, operation func() error, errNotify func(error)) 
 	}, errNotify)
 }
 
-// TODO: Executes AT least once (unless context is already cancelled)
-
 // RetryWithContext executes an operation with retries following these semantics:
 // - If operation
 // Times of retry
