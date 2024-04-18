@@ -75,7 +75,7 @@ func WithJitter(backoff wait.Backoff, randomizationFactor float64) wait.Backoff 
 func Retry(backoff wait.Backoff, operation func() error, errNotify func(error)) error {
 	return retryCore(context.Background(), backoff, func(_ context.Context) error {
 		return operation()
-	}, errNotify)
+	}, errNotify, false)
 }
 
 // RetryWithContext executes an operation with retries following these semantics:
@@ -87,21 +87,40 @@ func Retry(backoff wait.Backoff, operation func() error, errNotify func(error)) 
 //   - If operation returns an error that is NonTransientError, the operation is not retried and underlying error is unwrapped
 //
 // The operation will not be retried anymore if
+//
 //   - backoff.Steps reaches 0
+//
 //   - the context is cancelled
 //
-// # The end result is the final error observed when calling operation() or nil if successful or context.Err() if the context was cancelled
-//
-// if retryNotify is passed, it is called when making retries
+// The end result is the final error observed when calling operation() or nil if successful or context.Err() if the context was cancelled.
+// If retryNotify is passed, it is called when making retries.
 // Caveat: this function is similar to wait.ExponentialBackoff but has some important behavior differences like at-least-one execution and retryable errors
 func RetryWithContext(ctx context.Context, backoff wait.Backoff, operation func(context.Context) error, retryNotify func(error)) error {
-	return retryCore(ctx, backoff, operation, retryNotify)
+	return retryCore(ctx, backoff, operation, retryNotify, false)
 }
 
-func retryCore(ctx context.Context, backoff wait.Backoff, operation func(context.Context) error, retryNotify func(error)) error {
+// RetryForever acts as RetryWithContext but ignores the max retries set on backoff.
+// Use with care: The provided context should have a deadline to avoid an infinite loop.
+func RetryForever(ctx context.Context, backoff wait.Backoff, operation func(context.Context) error, retryNotify func(error)) error {
+	return retryCore(ctx, backoff, operation, retryNotify, true)
+}
+
+func retryCore(ctx context.Context, backoff wait.Backoff, operation func(context.Context) error, retryNotify func(error), runForever bool) error {
+	//lastErr := operation(ctx)
+	//if lastErr == nil {
+	//	return nil
+	//}
+
 	var lastErr error
 
 	for {
+		//select {
+		//case <-ctx.Done():
+		//	return ctx.Err()
+		//case <-time.After(waitInterval):
+		//}
+		//
+		// TODO: check here and execute once before
 		lastErr = operation(ctx)
 
 		// Happy path
@@ -119,7 +138,7 @@ func retryCore(ctx context.Context, backoff wait.Backoff, operation func(context
 		// Transient error path
 
 		// Check if we have a retry path at all
-		if backoff.Steps <= 1 {
+		if backoff.Steps <= 1 && !runForever {
 			// Don't do anything if we won't retry (steps would reach <= 0 on backoff.Step())
 			break
 		}

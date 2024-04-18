@@ -62,7 +62,7 @@ func TestRetryCore(t *testing.T) {
 			err := retryCore(context.Background(), wait.Backoff{Steps: 0}, func(_ context.Context) error {
 				called = true
 				return nil
-			}, nil)
+			}, nil, false)
 			r.NoError(err)
 			r.True(called)
 		})
@@ -95,7 +95,7 @@ func TestRetryCore(t *testing.T) {
 				indexWaitTimes++
 
 				return errors.New("dummy")
-			}, nil)
+			}, nil, false)
 
 			r.Error(err)
 			r.Equal(expectedTotalExecutions, actualExecutions)
@@ -109,7 +109,7 @@ func TestRetryCore(t *testing.T) {
 				func(ctx context.Context) error {
 					timesCalled++
 					return fmt.Errorf("boom %d", timesCalled)
-				}, nil)
+				}, nil, false)
 
 			r.Equal(expectedErrMessage, err.Error())
 		})
@@ -122,7 +122,7 @@ func TestRetryCore(t *testing.T) {
 					r.False(called)
 					called = true
 					return NewNonTransientError(expectedErr)
-				}, nil)
+				}, nil, false)
 
 			r.ErrorIs(err, expectedErr)
 		})
@@ -134,7 +134,7 @@ func TestRetryCore(t *testing.T) {
 				return errors.New("dummy")
 			}, func(err error) {
 				r.Error(err)
-			})
+			}, false)
 			r.Error(err)
 		})
 
@@ -142,7 +142,7 @@ func TestRetryCore(t *testing.T) {
 			err := retryCore(context.Background(), WithRetry(NewConstantBackoff(10*time.Millisecond), 2),
 				func(_ context.Context) error {
 					return errors.New("dummy")
-				}, nil)
+				}, nil, false)
 			r.Error(err)
 		})
 	})
@@ -156,7 +156,7 @@ func TestRetryCore(t *testing.T) {
 			go func() {
 				err = retryCore(ctx, WithRetry(NewConstantBackoff(100*time.Millisecond), 1000), func(ctx context.Context) error {
 					return errors.New("dummy")
-				}, nil)
+				}, nil, false)
 				done <- true
 			}()
 
@@ -173,10 +173,29 @@ func TestRetryCore(t *testing.T) {
 			err := retryCore(ctx, WithRetry(NewConstantBackoff(10*time.Millisecond), 1), func(ctx context.Context) error {
 				called = true
 				return errors.New("dummy")
-			}, nil)
+			}, nil, false)
 
 			r.ErrorIs(err, context.Canceled)
 			r.True(called)
+		})
+
+		t.Run("When ran forever, relies on context to complete", func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			go func() {
+				time.Sleep(200 * time.Millisecond)
+				cancel()
+			}()
+
+			var executed uint64 = 0
+			// Backoff says we should run only twice but in this case Steps should be ignored since we run "forever"
+			// This means at the end we should get the context cancelled error and not the inner error
+			err := retryCore(ctx, WithRetry(NewConstantBackoff(1*time.Millisecond), 1), func(ctx context.Context) error {
+				executed++
+				return errors.New("dummy")
+			}, nil, true)
+
+			r.ErrorIs(err, context.Canceled)
+			r.Positive(executed)
 		})
 	})
 }

@@ -272,12 +272,12 @@ func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.F
 }
 
 func (h *drainNodeHandler) waitNodePodsTerminated(ctx context.Context, log logrus.FieldLogger, node *v1.Node) error {
-	return waitext.RetryWithContext(ctx,
+	return waitext.RetryForever(ctx,
 		waitext.NewConstantBackoff(h.cfg.podsTerminationWaitRetryDelay),
 		func(ctx context.Context) error {
 			pods, err := h.listNodePodsToEvict(ctx, log, node)
 			if err != nil {
-				return fmt.Errorf("waiting for node %q pods to be terminated: %w", node.Name, err)
+				return fmt.Errorf("listing %q pods to be terminated: %w", node.Name, err)
 			}
 			if len(pods) > 0 {
 				return fmt.Errorf("waiting for %d pods to be terminated on node %v", len(pods), node.Name)
@@ -329,7 +329,7 @@ func (h *drainNodeHandler) evictPod(ctx context.Context, pod v1.Pod, groupVersio
 		// Other errors - retry.
 		return err
 	}
-	err := waitext.RetryWithContext(ctx, b, action, func(err error) {
+	err := waitext.RetryForever(ctx, b, action, func(err error) {
 		h.log.Warnf("evict pod %s on node %s in namespace %s, will retry: %v", pod.Name, pod.Spec.NodeName, pod.Namespace, err)
 	})
 	if err != nil {
