@@ -106,21 +106,9 @@ func RetryForever(ctx context.Context, backoff wait.Backoff, operation func(cont
 }
 
 func retryCore(ctx context.Context, backoff wait.Backoff, operation func(context.Context) error, retryNotify func(error), runForever bool) error {
-	//lastErr := operation(ctx)
-	//if lastErr == nil {
-	//	return nil
-	//}
-
 	var lastErr error
 
 	for {
-		//select {
-		//case <-ctx.Done():
-		//	return ctx.Err()
-		//case <-time.After(waitInterval):
-		//}
-		//
-		// TODO: check here and execute once before
 		lastErr = operation(ctx)
 
 		// Happy path
