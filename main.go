@@ -33,7 +33,6 @@ import (
 	"github.com/castai/cluster-controller/config"
 	"github.com/castai/cluster-controller/health"
 	"github.com/castai/cluster-controller/helm"
-	ctrlog "github.com/castai/cluster-controller/log"
 	"github.com/castai/cluster-controller/version"
 )
 
@@ -73,13 +72,9 @@ func main() {
 		log.Fatalf("failed to create castai client: %v", err)
 
 	}
-	client := castai.NewClient(
-		logger,
-		cl,
-		cfg.ClusterID,
-	)
+	client := castai.NewClient(logger, cl, cfg.ClusterID)
 
-	e := ctrlog.NewExporter(logger, client)
+	e := castai.NewLogExporter(logger, client)
 	logger.AddHook(e)
 	logrus.RegisterExitHandler(e.Wait)
 
@@ -95,7 +90,7 @@ func main() {
 
 func run(
 	ctx context.Context,
-	client castai.Client,
+	client castai.ActionsClient,
 	logger *logrus.Logger,
 	cfg config.Config,
 	binVersion *config.ClusterControllerVersion,

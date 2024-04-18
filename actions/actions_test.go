@@ -33,7 +33,7 @@ func TestActions(t *testing.T) {
 		ClusterID:        uuid.New().String(),
 	}
 
-	newTestService := func(handler ActionHandler, client castai.Client) *service {
+	newTestService := func(handler ActionHandler, client castai.ActionsClient) *service {
 		svc := NewService(
 			log,
 			cfg,
