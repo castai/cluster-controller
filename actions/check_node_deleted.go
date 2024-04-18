@@ -10,7 +10,6 @@ import (
 	"github.com/sirupsen/logrus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/castai"
@@ -54,7 +53,8 @@ func (h *checkNodeDeletedHandler) Handle(ctx context.Context, action *castai.Clu
 	log.Info("checking if node is deleted")
 
 	boff := waitext.WithRetry(waitext.NewConstantBackoff(h.cfg.retryWait), h.cfg.retries)
-	handleImpl := waitext.WithTransientRetries(func() error {
+
+	return waitext.RetryWithContext(ctx, boff, func(ctx context.Context) error {
 		n, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
 			return nil
@@ -85,7 +85,5 @@ func (h *checkNodeDeletedHandler) Handle(ctx context.Context, action *castai.Clu
 		return err
 	}, func(err error) {
 		log.Warnf("node deletion check failed, will retry: %v", err)
-	}).WithContext()
-
-	return wait.ExponentialBackoffWithContext(ctx, boff, handleImpl)
+	})
 }

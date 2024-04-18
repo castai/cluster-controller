@@ -36,14 +36,12 @@ func patchNode(ctx context.Context, log logrus.FieldLogger, clientset kubernetes
 		return fmt.Errorf("creating patch for node: %w", err)
 	}
 
-	patchImpl := waitext.WithTransientRetriesCtx(func(ctx context.Context) error {
+	err = waitext.RetryWithContext(ctx, defaultBackoff(), func(ctx context.Context) error {
 		_, err = clientset.CoreV1().Nodes().Patch(ctx, node.Name, apitypes.StrategicMergePatchType, patch, metav1.PatchOptions{})
 		return err
 	}, func(err error) {
 		log.Warnf("patch node, will retry: %v", err)
 	})
-
-	err = wait.ExponentialBackoffWithContext(ctx, defaultBackoff(), patchImpl)
 	if err != nil {
 		return fmt.Errorf("patching node: %w", err)
 	}
@@ -52,7 +50,7 @@ func patchNode(ctx context.Context, log logrus.FieldLogger, clientset kubernetes
 }
 
 func patchNodeStatus(ctx context.Context, log logrus.FieldLogger, clientset kubernetes.Interface, name string, patch []byte) error {
-	patchNodeImpl := waitext.WithTransientRetriesCtx(func(ctx context.Context) error {
+	err := waitext.RetryWithContext(ctx, defaultBackoff(), func(ctx context.Context) error {
 		_, err := clientset.CoreV1().Nodes().PatchStatus(ctx, name, patch)
 		if k8serrors.IsForbidden(err) {
 			// permissions might be of older version that can't patch node/status
@@ -64,7 +62,6 @@ func patchNodeStatus(ctx context.Context, log logrus.FieldLogger, clientset kube
 		log.Warnf("patch node status, will retry: %v", err)
 	})
 
-	err := wait.ExponentialBackoffWithContext(ctx, defaultBackoff(), patchNodeImpl)
 	if err != nil {
 		return fmt.Errorf("patch status: %w", err)
 	}
@@ -81,7 +78,9 @@ func getNodeForPatching(ctx context.Context, log logrus.FieldLogger, clientset k
 	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	getNodeImpl := waitext.WithTransientRetriesCtx(func(ctx context.Context) error {
+	boff := waitext.DefaultExponentialBackoff()
+
+	err := waitext.RetryWithContext(timeoutCtx, boff, func(ctx context.Context) error {
 		var err error
 		node, err = clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 		if err != nil {
@@ -91,9 +90,6 @@ func getNodeForPatching(ctx context.Context, log logrus.FieldLogger, clientset k
 	}, func(err error) {
 		log.Warnf("getting node, will retry: %v", err)
 	})
-	boff := waitext.DefaultExponentialBackoff()
-
-	err := wait.ExponentialBackoffWithContext(timeoutCtx, boff, getNodeImpl)
 	if err != nil {
 		return nil, err
 	}

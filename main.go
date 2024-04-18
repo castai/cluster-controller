@@ -16,7 +16,6 @@ import (
 	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/net"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apiserver/pkg/server/healthz"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -342,7 +341,10 @@ type kubeRetryTransport struct {
 
 func (rt *kubeRetryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	var resp *http.Response
-	roundTripImpl := waitext.WithTransientRetries(func() error {
+
+	boff := waitext.WithRetry(waitext.NewConstantBackoff(rt.retryInterval), rt.maxRetries)
+
+	err := waitext.Retry(boff, func() error {
 		var err error
 		resp, err = rt.next.RoundTrip(req)
 		if err != nil {
@@ -356,9 +358,6 @@ func (rt *kubeRetryTransport) RoundTrip(req *http.Request) (*http.Response, erro
 	}, func(err error) {
 		rt.log.Warnf("kube api server connection refused, will retry: %v", err)
 	})
-	boff := waitext.WithRetry(waitext.NewConstantBackoff(rt.retryInterval), rt.maxRetries)
-
-	err := wait.ExponentialBackoff(boff, roundTripImpl)
 	return resp, err
 }
 

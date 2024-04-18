@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
@@ -134,8 +133,8 @@ func (s *service) doWork(ctx context.Context) error {
 	)
 
 	boff := waitext.WithRetry(waitext.NewConstantBackoff(5*time.Second), 3)
-	getActionsImpl := waitext.WithTransientRetriesCtx(func(ctx context.Context) error {
-		iteration++
+
+	errR := waitext.RetryWithContext(ctx, boff, func(ctx context.Context) error {
 		actions, err = s.castAIClient.GetActions(ctx, s.k8sVersion)
 		if err != nil {
 			s.log.Errorf("polling actions: get action request failed: iteration: %v %v", iteration, err)
@@ -146,7 +145,7 @@ func (s *service) doWork(ctx context.Context) error {
 		s.log.Warnf("polling actions failed, will retry: %v", err)
 	})
 
-	if errR := wait.ExponentialBackoffWithContext(ctx, boff, getActionsImpl); errR != nil {
+	if errR != nil {
 		return fmt.Errorf("polling actions: %w", err)
 	}
 
@@ -246,7 +245,9 @@ func (s *service) ackAction(ctx context.Context, action *castai.ClusterAction, h
 		"type":           actionType.String(),
 	}).Info("ack action")
 
-	ackActionImpl := waitext.WithTransientRetriesCtx(func(ctx context.Context) error {
+	boff := waitext.WithRetry(waitext.NewConstantBackoff(s.cfg.AckRetryWait), s.cfg.AckRetriesCount)
+
+	return waitext.RetryWithContext(ctx, boff, func(ctx context.Context) error {
 		ctx, cancel := context.WithTimeout(ctx, s.cfg.AckTimeout)
 		defer cancel()
 		return s.castAIClient.AckAction(ctx, action.ID, &castai.AckClusterActionRequest{
@@ -255,8 +256,6 @@ func (s *service) ackAction(ctx context.Context, action *castai.ClusterAction, h
 	}, func(err error) {
 		s.log.Debugf("ack failed, will retry: %v", err)
 	})
-	boff := waitext.WithRetry(waitext.NewConstantBackoff(s.cfg.AckRetryWait), s.cfg.AckRetriesCount)
-	return wait.ExponentialBackoffWithContext(ctx, boff, ackActionImpl)
 }
 
 func getHandlerError(err error) *string {
