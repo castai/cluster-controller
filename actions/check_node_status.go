@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -16,6 +15,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/internal/waitext"
 )
 
 func newCheckNodeStatusHandler(log logrus.FieldLogger, clientset kubernetes.Interface) ActionHandler {
@@ -64,8 +64,9 @@ func (h *checkNodeStatusHandler) checkNodeDeleted(ctx context.Context, log *logr
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
 	defer cancel()
-	b := backoff.WithContext(backoff.NewExponentialBackOff(), ctx)
-	return backoff.Retry(func() error {
+
+	b := waitext.DefaultExponentialBackoff()
+	return waitext.RetryWithContext(ctx, b, func(ctx context.Context) error {
 		n, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
 			return nil
@@ -90,16 +91,18 @@ func (h *checkNodeStatusHandler) checkNodeDeleted(ctx context.Context, log *logr
 				return nil
 			}
 			if currentNodeID == req.NodeID {
-				return backoff.Permanent(errors.New("node is not deleted"))
+				return waitext.NewNonTransientError(errors.New("node is not deleted"))
 			}
 		}
 
 		if n != nil {
-			return backoff.Permanent(errors.New("node is not deleted"))
+			return waitext.NewNonTransientError(errors.New("node is not deleted"))
 		}
 
 		return err
-	}, b)
+	}, func(err error) {
+		h.log.Warnf("check node %s status failed, will retry: %v", req.NodeName, err)
+	})
 }
 
 func (h *checkNodeStatusHandler) checkNodeReady(ctx context.Context, log *logrus.Entry, req *castai.ActionCheckNodeStatus) error {
