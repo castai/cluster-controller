@@ -1,6 +1,7 @@
 package waitext
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -47,13 +48,13 @@ func NewConstantBackoff(interval time.Duration) wait.Backoff {
 
 // WithRetry creates a new backoff that has all the same settings as the input except for backoff.Steps
 // This will cause it to retry when passed to wait.ExponentialBackoff
-// Combine with TODO to enable transient retries
+// Combine with RetryWithContext or Retry
 func WithRetry(backoff wait.Backoff, times int) wait.Backoff {
 	return wait.Backoff{
 		Duration: backoff.Duration,
 		Factor:   backoff.Factor,
 		Jitter:   backoff.Jitter,
-		Steps:    times,
+		Steps:    times + 1, // Initial execution should not count as retry so we add it as a step
 		Cap:      backoff.Cap,
 	}
 }
@@ -70,67 +71,59 @@ func WithJitter(backoff wait.Backoff, randomizationFactor float64) wait.Backoff 
 	}
 }
 
-func WithLogging(cond wait.ConditionFunc) wait.ConditionFunc {
-	return func() (done bool, err error) {
-
-		done, err = cond()
-		if err != nil {
-			// Log
-		}
-		return
-	}
-}
-
-// WithTransientRetryCndFn follows the semantics of WithTransientRetries but for wait.ConditionFunc
-func WithTransientRetryCndFn(cond wait.ConditionFunc, errNotify func(error)) wait.ConditionFunc {
-	return func() (done bool, err error) {
-		done, err = cond()
-		if err != nil {
-			var nonTransientError *NonTransientError
-			if errors.As(err, &nonTransientError) {
-				// We don't call errNotify here since we don't expect retry
-				return false, nonTransientError.Unwrap()
-			}
-
-			if errNotify != nil {
-				errNotify(err)
-			}
-
-			// We don't surface the error here as the convention for wait.ConditionFunc is that any error should stop retries
-			// (and we assume the operation wanted a retry since it did not return NonTransientError)
-			return false, nil
-		}
-
-		return done, nil
-	}
-}
-
-// WithTransientRetries converts operation to a wait.ConditionFunc with the following semantics:
-// - if no error is returned, operation is done
-// - if an error is returned, and it is instance of NonTransientError, it is surfaced immediately and operation should not be retried
-// - for other errors, call errNotify (if not nil) and swallow the error but signal to caller than operation was not successful
-// Note that wait.ExponentialBackoff controls the overall retry behavior and what to return when all retry attempts are exceeded.
-func WithTransientRetries(operation func() error, errNotify func(error)) wait.ConditionFunc {
-	return WithTransientRetryCndFn(func() (bool, error) {
-		err := operation()
-		return err == nil, err
+func Retry(backoff wait.Backoff, operation func() error, errNotify func(error)) error {
+	return retryCore(context.Background(), backoff, func(_ context.Context) error {
+		return operation()
 	}, errNotify)
 }
 
-func WithRetries(cond wait.ConditionFunc) wait.ConditionFunc {
-	// Retry up to Step times
-	return func() (done bool, err error) {
-		done, err = cond()
-		if err != nil {
-			if errors.As(err, &NonTransientError{}) {
-				return false, err // TODO
-			}
+// TODO: Executes AT least once (unless context is already cancelled)
 
-			// Log?
+// RetryWithContext executes an operation with retries following these semantics:
+// - If operation
+// Times of retry
+func RetryWithContext(ctx context.Context, backoff wait.Backoff, operation func(context.Context) error, retryNotify func(error)) error {
+	return retryCore(ctx, backoff, operation, retryNotify)
+}
 
-			// We do not propagate the error here because it would cause calls to wait.ExponentialBackoff() to stop retrying
-			return false, nil
+func retryCore(ctx context.Context, backoff wait.Backoff, operation func(context.Context) error, retryNotify func(error)) error {
+	var lastErr error
+
+	for {
+		lastErr = operation(ctx)
+
+		// Happy path
+		if lastErr == nil {
+			return nil
 		}
-		return done, err
+
+		// Not-so-happy path
+		var nonTransientError *NonTransientError
+		if errors.As(lastErr, &nonTransientError) {
+			// We don't call retryNotify here since we won't retry
+			return nonTransientError.Unwrap()
+		}
+
+		// Transient error path
+
+		// Check if we have a retry path at all
+		if backoff.Steps <= 1 {
+			// Don't do anything if we won't retry (steps would reach 0 on backoff.Step())
+			break
+		}
+
+		// Handle retry
+		if retryNotify != nil {
+			retryNotify(lastErr)
+		}
+
+		waitInterval := backoff.Step() // This updates backoff.Steps internally
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(waitInterval):
+		}
 	}
+
+	return lastErr
 }
