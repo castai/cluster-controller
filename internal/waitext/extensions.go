@@ -71,6 +71,7 @@ func WithJitter(backoff wait.Backoff, randomizationFactor float64) wait.Backoff 
 	}
 }
 
+// Retry acts as RetryWithContext but with context.Background()
 func Retry(backoff wait.Backoff, operation func() error, errNotify func(error)) error {
 	return retryCore(context.Background(), backoff, func(_ context.Context) error {
 		return operation()
@@ -78,8 +79,21 @@ func Retry(backoff wait.Backoff, operation func() error, errNotify func(error)) 
 }
 
 // RetryWithContext executes an operation with retries following these semantics:
-// - If operation
-// Times of retry
+//
+//   - The operation is executed at least once (even if context is cancelled)
+//
+//   - If operation returns an error that is _not_ NonTransientError, the operation might be retried (see below for more info when)
+//
+//   - If operation returns an error that is NonTransientError, the operation is not retried and underlying error is unwrapped
+//
+// The operation will not be retried anymore if
+//   - backoff.Steps reaches 0
+//   - the context is cancelled
+//
+// # The end result is the final error observed when calling operation() or nil if successful or context.Err() if the context was cancelled
+//
+// if retryNotify is passed, it is called when making retries
+// Caveat: this function is similar to wait.ExponentialBackoff but has some important behavior differences like at-least-one execution and retryable errors
 func RetryWithContext(ctx context.Context, backoff wait.Backoff, operation func(context.Context) error, retryNotify func(error)) error {
 	return retryCore(ctx, backoff, operation, retryNotify)
 }
@@ -106,16 +120,17 @@ func retryCore(ctx context.Context, backoff wait.Backoff, operation func(context
 
 		// Check if we have a retry path at all
 		if backoff.Steps <= 1 {
-			// Don't do anything if we won't retry (steps would reach 0 on backoff.Step())
+			// Don't do anything if we won't retry (steps would reach <= 0 on backoff.Step())
 			break
 		}
 
-		// Handle retry
+		// Notify about expected retry
 		if retryNotify != nil {
 			retryNotify(lastErr)
 		}
 
 		waitInterval := backoff.Step() // This updates backoff.Steps internally
+
 		select {
 		case <-ctx.Done():
 			return ctx.Err()

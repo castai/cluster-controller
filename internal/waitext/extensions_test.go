@@ -91,7 +91,7 @@ func TestRetryCore(t *testing.T) {
 				lastExec = now
 
 				// We give some tolerance as we can't be precise to the nanosecond here
-				r.InDelta(expectedWaitTimes[indexWaitTimes], waitTime, float64(5*time.Millisecond))
+				r.InDelta(expectedWaitTimes[indexWaitTimes], waitTime, float64(2*time.Millisecond))
 				indexWaitTimes++
 
 				return errors.New("dummy")
