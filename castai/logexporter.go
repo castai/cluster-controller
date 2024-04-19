@@ -5,8 +5,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/sirupsen/logrus"
+
+	"github.com/castai/cluster-controller/internal/waitext"
 )
 
 const (
@@ -83,10 +84,12 @@ func (e *LogExporter) sendLogEvent(log *logrus.Entry) {
 		Fields:  log.Data,
 	}
 
-	b := backoff.WithContext(backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 3), ctx)
-	err := backoff.Retry(func() error {
+	b := waitext.WithMaxRetries(waitext.DefaultExponentialBackoff(), 3)
+	err := waitext.RetryWithContext(ctx, b, func(ctx context.Context) error {
 		return e.sender.SendLog(ctx, logEntry)
-	}, b)
+	}, func(err error) {
+		e.logger.Debugf("failed to send logs, will retry: %s", err)
+	})
 
 	if err != nil {
 		e.logger.Debugf("sending logs: %v", err)
