@@ -22,7 +22,7 @@ import (
 	"k8s.io/kubectl/pkg/drain"
 
 	"github.com/castai/cluster-controller/castai"
-	"github.com/castai/cluster-controller/internal/waitext"
+	"github.com/castai/cluster-controller/waitext"
 )
 
 const (

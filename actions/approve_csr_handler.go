@@ -13,7 +13,7 @@ import (
 
 	"github.com/castai/cluster-controller/castai"
 	"github.com/castai/cluster-controller/csr"
-	"github.com/castai/cluster-controller/internal/waitext"
+	"github.com/castai/cluster-controller/waitext"
 )
 
 const (

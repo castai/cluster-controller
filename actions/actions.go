@@ -17,7 +17,7 @@ import (
 	"github.com/castai/cluster-controller/castai"
 	"github.com/castai/cluster-controller/health"
 	"github.com/castai/cluster-controller/helm"
-	"github.com/castai/cluster-controller/internal/waitext"
+	"github.com/castai/cluster-controller/waitext"
 )
 
 const (

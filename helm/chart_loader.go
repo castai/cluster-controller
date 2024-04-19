@@ -19,7 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 
 	"github.com/castai/cluster-controller/castai"
-	"github.com/castai/cluster-controller/internal/waitext"
+	"github.com/castai/cluster-controller/waitext"
 )
 
 const (

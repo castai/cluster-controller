@@ -7,7 +7,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/castai/cluster-controller/internal/waitext"
+	"github.com/castai/cluster-controller/waitext"
 )
 
 const (

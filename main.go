@@ -32,8 +32,8 @@ import (
 	"github.com/castai/cluster-controller/config"
 	"github.com/castai/cluster-controller/health"
 	"github.com/castai/cluster-controller/helm"
-	"github.com/castai/cluster-controller/internal/waitext"
 	"github.com/castai/cluster-controller/version"
+	"github.com/castai/cluster-controller/waitext"
 )
 
 // These should be set via `go build` during a release.
