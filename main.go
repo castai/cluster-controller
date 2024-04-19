@@ -342,7 +342,7 @@ type kubeRetryTransport struct {
 func (rt *kubeRetryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	var resp *http.Response
 
-	boff := waitext.WithRetry(waitext.NewConstantBackoff(rt.retryInterval), rt.maxRetries)
+	boff := waitext.WithMaxRetries(waitext.NewConstantBackoff(rt.retryInterval), rt.maxRetries)
 
 	err := waitext.Retry(boff, func() error {
 		var err error

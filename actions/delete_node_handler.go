@@ -63,7 +63,7 @@ func (h *deleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 	})
 	log.Info("deleting kubernetes node")
 
-	b := waitext.WithRetry(waitext.NewConstantBackoff(h.cfg.deleteRetryWait), h.cfg.deleteRetries)
+	b := waitext.WithMaxRetries(waitext.NewConstantBackoff(h.cfg.deleteRetryWait), h.cfg.deleteRetries)
 	err := waitext.RetryWithContext(ctx, b, func(ctx context.Context) error {
 		current, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
 		if err != nil {
@@ -98,7 +98,7 @@ func (h *deleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 		return fmt.Errorf("error removing node %w", err)
 	}
 
-	podsListingBackoff := waitext.WithRetry(waitext.NewConstantBackoff(h.cfg.podsTerminationWait), h.cfg.deleteRetries)
+	podsListingBackoff := waitext.WithMaxRetries(waitext.NewConstantBackoff(h.cfg.podsTerminationWait), h.cfg.deleteRetries)
 	var pods []v1.Pod
 	err = waitext.RetryWithContext(ctx, podsListingBackoff, func(ctx context.Context) error {
 		podList, err := h.clientset.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
@@ -129,7 +129,7 @@ func (h *deleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 	}
 
 	// Cleanup of pods for which node has been removed. It should take a few seconds but added retry in case of network errors.
-	podsWaitBackoff := waitext.WithRetry(waitext.NewConstantBackoff(h.cfg.podsTerminationWait), h.cfg.deleteRetries)
+	podsWaitBackoff := waitext.WithMaxRetries(waitext.NewConstantBackoff(h.cfg.podsTerminationWait), h.cfg.deleteRetries)
 	return waitext.RetryWithContext(ctx, podsWaitBackoff, func(ctx context.Context) error {
 		pods, err := h.clientset.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
 			FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": req.NodeName}).String(),

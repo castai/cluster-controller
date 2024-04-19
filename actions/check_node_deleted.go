@@ -52,7 +52,7 @@ func (h *checkNodeDeletedHandler) Handle(ctx context.Context, action *castai.Clu
 	})
 	log.Info("checking if node is deleted")
 
-	boff := waitext.WithRetry(waitext.NewConstantBackoff(h.cfg.retryWait), h.cfg.retries)
+	boff := waitext.WithMaxRetries(waitext.NewConstantBackoff(h.cfg.retryWait), h.cfg.retries)
 
 	return waitext.RetryWithContext(ctx, boff, func(ctx context.Context) error {
 		n, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})

@@ -272,7 +272,7 @@ func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.F
 }
 
 func (h *drainNodeHandler) waitNodePodsTerminated(ctx context.Context, log logrus.FieldLogger, node *v1.Node) error {
-	return waitext.RetryForever(ctx,
+	return waitext.RetryWithContext(ctx,
 		waitext.NewConstantBackoff(h.cfg.podsTerminationWaitRetryDelay),
 		func(ctx context.Context) error {
 			pods, err := h.listNodePodsToEvict(ctx, log, node)
@@ -329,7 +329,7 @@ func (h *drainNodeHandler) evictPod(ctx context.Context, pod v1.Pod, groupVersio
 		// Other errors - retry.
 		return err
 	}
-	err := waitext.RetryForever(ctx, b, action, func(err error) {
+	err := waitext.RetryWithContext(ctx, b, action, func(err error) {
 		h.log.Warnf("evict pod %s on node %s in namespace %s, will retry: %v", pod.Name, pod.Spec.NodeName, pod.Namespace, err)
 	})
 	if err != nil {
@@ -340,7 +340,7 @@ func (h *drainNodeHandler) evictPod(ctx context.Context, pod v1.Pod, groupVersio
 }
 
 func (h *drainNodeHandler) deletePod(ctx context.Context, options metav1.DeleteOptions, pod v1.Pod) error {
-	b := waitext.WithRetry(waitext.NewConstantBackoff(h.cfg.podDeleteRetryDelay), h.cfg.podDeleteRetries)
+	b := waitext.WithMaxRetries(waitext.NewConstantBackoff(h.cfg.podDeleteRetryDelay), h.cfg.podDeleteRetries)
 	action := func(ctx context.Context) error {
 		err := h.clientset.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, options)
 		if err != nil {

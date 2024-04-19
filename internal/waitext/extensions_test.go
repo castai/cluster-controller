@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -21,13 +22,13 @@ func TestNewConstantBackoff(t *testing.T) {
 	}
 }
 
-func TestWithRetry(t *testing.T) {
+func TestWithMaxRetries(t *testing.T) {
 	r := require.New(t)
 
 	retries := 10
 	expectedTotalExecutions := 1 + 10 // Initial is not counted as retry
 
-	backoff := WithRetry(DefaultExponentialBackoff(), retries)
+	backoff := WithMaxRetries(DefaultExponentialBackoff(), retries)
 
 	r.Equal(expectedTotalExecutions, backoff.Steps)
 }
@@ -53,6 +54,18 @@ func TestExponentialBackoff(t *testing.T) {
 	r.Equal(maxInterval, backoff.Cap)
 }
 
+func TestDefaultExponentialBackoff(t *testing.T) {
+	r := require.New(t)
+
+	val := DefaultExponentialBackoff()
+
+	r.Equal(math.MaxInt32, val.Steps, "Steps should be the maximum possible value to simulate increasing forever")
+	r.Equal(DefaultInitialInterval, val.Duration)
+	r.Equal(DefaultMultiplier, val.Factor)
+	r.Equal(DefaultRandomizationFactor, val.Jitter)
+	r.Equal(DefaultMaxInterval, val.Cap)
+}
+
 func TestRetryCore(t *testing.T) {
 	r := require.New(t)
 
@@ -62,7 +75,7 @@ func TestRetryCore(t *testing.T) {
 			err := retryCore(context.Background(), wait.Backoff{Steps: 0}, func(_ context.Context) error {
 				called = true
 				return nil
-			}, nil, false)
+			}, nil)
 			r.NoError(err)
 			r.True(called)
 		})
@@ -70,7 +83,7 @@ func TestRetryCore(t *testing.T) {
 		t.Run("Respects backoff and retry count", func(t *testing.T) {
 			retries := 4
 			expectedTotalExecutions := 1 + retries
-			backoff := WithRetry(NewExponentialBackoff(10*time.Millisecond, 2, 0), retries)
+			backoff := WithMaxRetries(NewExponentialBackoff(10*time.Millisecond, 2, 0), retries)
 			// There is no "initial" wait so 0 index simulates zero.
 			// The rest are calculated as interval * factor^(ix) without jitter for simplicity
 			expectedWaitTimes := []time.Duration{
@@ -95,7 +108,7 @@ func TestRetryCore(t *testing.T) {
 				indexWaitTimes++
 
 				return errors.New("dummy")
-			}, nil, false)
+			}, nil)
 
 			r.Error(err)
 			r.Equal(expectedTotalExecutions, actualExecutions)
@@ -105,11 +118,11 @@ func TestRetryCore(t *testing.T) {
 			timesCalled := 0
 			expectedErrMessage := "boom 3"
 
-			err := retryCore(context.Background(), WithRetry(NewConstantBackoff(10*time.Millisecond), 2),
+			err := retryCore(context.Background(), WithMaxRetries(NewConstantBackoff(10*time.Millisecond), 2),
 				func(ctx context.Context) error {
 					timesCalled++
 					return fmt.Errorf("boom %d", timesCalled)
-				}, nil, false)
+				}, nil)
 
 			r.Equal(expectedErrMessage, err.Error())
 		})
@@ -117,12 +130,12 @@ func TestRetryCore(t *testing.T) {
 		t.Run("Does not retry instances of NonTransientError", func(t *testing.T) {
 			expectedErr := errors.New("dummy")
 			called := false
-			err := retryCore(context.Background(), WithRetry(NewConstantBackoff(10*time.Millisecond), 10),
+			err := retryCore(context.Background(), WithMaxRetries(NewConstantBackoff(10*time.Millisecond), 10),
 				func(ctx context.Context) error {
 					r.False(called)
 					called = true
 					return NewNonTransientError(expectedErr)
-				}, nil, false)
+				}, nil)
 
 			r.ErrorIs(err, expectedErr)
 		})
@@ -130,19 +143,19 @@ func TestRetryCore(t *testing.T) {
 
 	t.Run("Notify callback tests", func(t *testing.T) {
 		t.Run("Notify is passed and called", func(t *testing.T) {
-			err := retryCore(context.Background(), WithRetry(NewConstantBackoff(10*time.Millisecond), 2), func(_ context.Context) error {
+			err := retryCore(context.Background(), WithMaxRetries(NewConstantBackoff(10*time.Millisecond), 2), func(_ context.Context) error {
 				return errors.New("dummy")
 			}, func(err error) {
 				r.Error(err)
-			}, false)
+			})
 			r.Error(err)
 		})
 
 		t.Run("Notify is not passed, no panic", func(t *testing.T) {
-			err := retryCore(context.Background(), WithRetry(NewConstantBackoff(10*time.Millisecond), 2),
+			err := retryCore(context.Background(), WithMaxRetries(NewConstantBackoff(10*time.Millisecond), 2),
 				func(_ context.Context) error {
 					return errors.New("dummy")
-				}, nil, false)
+				}, nil)
 			r.Error(err)
 		})
 	})
@@ -154,9 +167,9 @@ func TestRetryCore(t *testing.T) {
 			var err error
 			done := make(chan bool)
 			go func() {
-				err = retryCore(ctx, WithRetry(NewConstantBackoff(100*time.Millisecond), 1000), func(ctx context.Context) error {
+				err = retryCore(ctx, WithMaxRetries(NewConstantBackoff(100*time.Millisecond), 1000), func(ctx context.Context) error {
 					return errors.New("dummy")
-				}, nil, false)
+				}, nil)
 				done <- true
 			}()
 
@@ -170,10 +183,10 @@ func TestRetryCore(t *testing.T) {
 			cancel()
 
 			called := false
-			err := retryCore(ctx, WithRetry(NewConstantBackoff(10*time.Millisecond), 1), func(ctx context.Context) error {
+			err := retryCore(ctx, WithMaxRetries(NewConstantBackoff(10*time.Millisecond), 1), func(ctx context.Context) error {
 				called = true
 				return errors.New("dummy")
-			}, nil, false)
+			}, nil)
 
 			r.ErrorIs(err, context.Canceled)
 			r.True(called)
@@ -189,10 +202,10 @@ func TestRetryCore(t *testing.T) {
 			var executed uint64 = 0
 			// Backoff says we should run only twice but in this case Steps should be ignored since we run "forever"
 			// This means at the end we should get the context cancelled error and not the inner error
-			err := retryCore(ctx, WithRetry(NewConstantBackoff(1*time.Millisecond), 1), func(ctx context.Context) error {
+			err := retryCore(ctx, NewConstantBackoff(1*time.Millisecond), func(ctx context.Context) error {
 				executed++
 				return errors.New("dummy")
-			}, nil, true)
+			}, nil)
 
 			r.ErrorIs(err, context.Canceled)
 			r.Positive(executed)

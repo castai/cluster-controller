@@ -132,7 +132,7 @@ func (s *service) doWork(ctx context.Context) error {
 		iteration int
 	)
 
-	boff := waitext.WithRetry(waitext.NewConstantBackoff(5*time.Second), 3)
+	boff := waitext.WithMaxRetries(waitext.NewConstantBackoff(5*time.Second), 3)
 
 	errR := waitext.RetryWithContext(ctx, boff, func(ctx context.Context) error {
 		actions, err = s.castAIClient.GetActions(ctx, s.k8sVersion)
@@ -245,7 +245,7 @@ func (s *service) ackAction(ctx context.Context, action *castai.ClusterAction, h
 		"type":           actionType.String(),
 	}).Info("ack action")
 
-	boff := waitext.WithRetry(waitext.NewConstantBackoff(s.cfg.AckRetryWait), s.cfg.AckRetriesCount)
+	boff := waitext.WithMaxRetries(waitext.NewConstantBackoff(s.cfg.AckRetryWait), s.cfg.AckRetriesCount)
 
 	return waitext.RetryWithContext(ctx, boff, func(ctx context.Context) error {
 		ctx, cancel := context.WithTimeout(ctx, s.cfg.AckTimeout)

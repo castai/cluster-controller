@@ -126,7 +126,7 @@ func (h *approveCSRHandler) getInitialNodeCSR(ctx context.Context, log logrus.Fi
 	var err error
 
 	// TODO: Shouldn't we pass ctx here, too?
-	b := waitext.WithRetry(waitext.DefaultExponentialBackoff(), 3)
+	b := waitext.WithMaxRetries(waitext.DefaultExponentialBackoff(), 3)
 	err = waitext.Retry(b, func() error {
 		cert, err = poll()
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -143,5 +143,6 @@ func (h *approveCSRHandler) getInitialNodeCSR(ctx context.Context, log logrus.Fi
 func newApproveCSRExponentialBackoff() wait.Backoff {
 	b := waitext.DefaultExponentialBackoff()
 	b.Factor = 2
+	b.Steps = 10
 	return b
 }

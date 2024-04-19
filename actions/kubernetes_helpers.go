@@ -94,8 +94,9 @@ func getNodeForPatching(ctx context.Context, log logrus.FieldLogger, clientset k
 		return nil, err
 	}
 	return node, nil
+
 }
 
 func defaultBackoff() wait.Backoff {
-	return waitext.WithRetry(waitext.NewConstantBackoff(500*time.Millisecond), 5)
+	return waitext.WithMaxRetries(waitext.NewConstantBackoff(500*time.Millisecond), 5)
 }

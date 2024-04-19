@@ -99,7 +99,7 @@ func (cl *remoteChartLoader) fetchArchive(ctx context.Context, archiveURL string
 }
 
 func defaultBackoff() wait.Backoff {
-	return waitext.WithRetry(waitext.NewConstantBackoff(1*time.Second), 5)
+	return waitext.WithMaxRetries(waitext.NewConstantBackoff(1*time.Second), 5)
 }
 
 func (cl *remoteChartLoader) downloadHelmIndex(repoURL string) (*repo.IndexFile, error) {

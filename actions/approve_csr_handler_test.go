@@ -235,7 +235,7 @@ func TestApproveCSRExponentialBackoff(t *testing.T) {
 		tmp := b.Step()
 		sum += tmp
 	}
-	r.Truef(100 < sum.Seconds(), "actual elapsed seconds %s", sum.Seconds())
+	r.Truef(100 < sum.Seconds(), "actual elapsed seconds %v", sum.Seconds())
 }
 
 func getCSR() *certv1.CertificateSigningRequest {
