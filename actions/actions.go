@@ -127,9 +127,8 @@ func (s *service) doWork(ctx context.Context) error {
 	s.log.Info("polling actions")
 	start := time.Now()
 	var (
-		actions   []*castai.ClusterAction
-		err       error
-		iteration int
+		actions []*castai.ClusterAction
+		err     error
 	)
 
 	boff := waitext.WithMaxRetries(waitext.NewConstantBackoff(5*time.Second), 3)
@@ -137,7 +136,6 @@ func (s *service) doWork(ctx context.Context) error {
 	errR := waitext.RetryWithContext(ctx, boff, func(ctx context.Context) error {
 		actions, err = s.castAIClient.GetActions(ctx, s.k8sVersion)
 		if err != nil {
-			s.log.Errorf("polling actions: get action request failed: iteration: %v %v", iteration, err)
 			return err
 		}
 		return nil
