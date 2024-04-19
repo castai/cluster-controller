@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	certv1 "k8s.io/api/certificates/v1"
