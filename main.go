@@ -342,19 +342,19 @@ type kubeRetryTransport struct {
 func (rt *kubeRetryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	var resp *http.Response
 
-	boff := waitext.WithMaxRetries(waitext.NewConstantBackoff(rt.retryInterval), rt.maxRetries)
+	boff := waitext.NewConstantBackoff(rt.retryInterval)
 
-	err := waitext.Retry(boff, func() error {
+	err := waitext.Retry(boff, rt.maxRetries, func() (bool, error) {
 		var err error
 		resp, err = rt.next.RoundTrip(req)
 		if err != nil {
 			// Previously client-go contained logic to retry connection refused errors. See https://github.com/kubernetes/kubernetes/pull/88267/files
 			if net.IsConnectionRefused(err) {
-				return err
+				return true, err
 			}
-			return waitext.NewNonTransientError(err)
+			return false, err
 		}
-		return nil
+		return false, nil
 	}, func(err error) {
 		rt.log.Warnf("kube api server connection refused, will retry: %v", err)
 	})

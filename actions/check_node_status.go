@@ -66,43 +66,49 @@ func (h *checkNodeStatusHandler) checkNodeDeleted(ctx context.Context, log *logr
 	defer cancel()
 
 	b := waitext.DefaultExponentialBackoff()
-	return waitext.RetryWithContext(ctx, b, func(ctx context.Context) error {
-		n, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
-		if apierrors.IsNotFound(err) {
-			return nil
-		}
-
-		// If node is nil - deleted
-		// If label is present and doesn't match - node was reused - deleted
-		// If label is present and matches - node is not deleted
-		// If label is not present and node is not nil - node is not deleted (potentially corrupted state)
-
-		if n == nil {
-			return nil
-		}
-
-		currentNodeID, ok := n.Labels[castai.LabelNodeID]
-		if !ok {
-			log.Info("node doesn't have castai node id label")
-		}
-		if currentNodeID != "" {
-			if currentNodeID != req.NodeID {
-				log.Info("node name was reused. Original node is deleted")
-				return nil
+	return waitext.RetryWithContext(
+		ctx,
+		b,
+		waitext.Forever,
+		func(ctx context.Context) (bool, error) {
+			n, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
+			if apierrors.IsNotFound(err) {
+				return false, nil
 			}
-			if currentNodeID == req.NodeID {
-				return waitext.NewNonTransientError(errors.New("node is not deleted"))
+
+			// If node is nil - deleted
+			// If label is present and doesn't match - node was reused - deleted
+			// If label is present and matches - node is not deleted
+			// If label is not present and node is not nil - node is not deleted (potentially corrupted state)
+
+			if n == nil {
+				return false, nil
 			}
-		}
 
-		if n != nil {
-			return waitext.NewNonTransientError(errors.New("node is not deleted"))
-		}
+			currentNodeID, ok := n.Labels[castai.LabelNodeID]
+			if !ok {
+				log.Info("node doesn't have castai node id label")
+			}
+			if currentNodeID != "" {
+				if currentNodeID != req.NodeID {
+					log.Info("node name was reused. Original node is deleted")
+					return false, nil
+				}
+				if currentNodeID == req.NodeID {
+					return false, errors.New("node is not deleted")
+				}
+			}
 
-		return err
-	}, func(err error) {
-		h.log.Warnf("check node %s status failed, will retry: %v", req.NodeName, err)
-	})
+			if n != nil {
+				return false, errors.New("node is not deleted")
+			}
+
+			return true, err
+		},
+		func(err error) {
+			h.log.Warnf("check node %s status failed, will retry: %v", req.NodeName, err)
+		},
+	)
 }
 
 func (h *checkNodeStatusHandler) checkNodeReady(ctx context.Context, log *logrus.Entry, req *castai.ActionCheckNodeStatus) error {

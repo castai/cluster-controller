@@ -18,6 +18,10 @@ import (
 	"github.com/castai/cluster-controller/internal/waitext"
 )
 
+const (
+	defaultMaxRetriesK8SOperation = 5
+)
+
 func patchNode(ctx context.Context, log logrus.FieldLogger, clientset kubernetes.Interface, node *v1.Node, changeFn func(*v1.Node)) error {
 	oldData, err := json.Marshal(node)
 	if err != nil {
@@ -36,12 +40,18 @@ func patchNode(ctx context.Context, log logrus.FieldLogger, clientset kubernetes
 		return fmt.Errorf("creating patch for node: %w", err)
 	}
 
-	err = waitext.RetryWithContext(ctx, defaultBackoff(), func(ctx context.Context) error {
-		_, err = clientset.CoreV1().Nodes().Patch(ctx, node.Name, apitypes.StrategicMergePatchType, patch, metav1.PatchOptions{})
-		return err
-	}, func(err error) {
-		log.Warnf("patch node, will retry: %v", err)
-	})
+	err = waitext.RetryWithContext(
+		ctx,
+		defaultBackoff(),
+		defaultMaxRetriesK8SOperation,
+		func(ctx context.Context) (bool, error) {
+			_, err = clientset.CoreV1().Nodes().Patch(ctx, node.Name, apitypes.StrategicMergePatchType, patch, metav1.PatchOptions{})
+			return true, err
+		},
+		func(err error) {
+			log.Warnf("patch node, will retry: %v", err)
+		},
+	)
 	if err != nil {
 		return fmt.Errorf("patching node: %w", err)
 	}
@@ -50,17 +60,23 @@ func patchNode(ctx context.Context, log logrus.FieldLogger, clientset kubernetes
 }
 
 func patchNodeStatus(ctx context.Context, log logrus.FieldLogger, clientset kubernetes.Interface, name string, patch []byte) error {
-	err := waitext.RetryWithContext(ctx, defaultBackoff(), func(ctx context.Context) error {
-		_, err := clientset.CoreV1().Nodes().PatchStatus(ctx, name, patch)
-		if k8serrors.IsForbidden(err) {
-			// permissions might be of older version that can't patch node/status
-			log.WithField("node", name).WithError(err).Warn("skip patch node/status")
-			return nil
-		}
-		return err
-	}, func(err error) {
-		log.Warnf("patch node status, will retry: %v", err)
-	})
+	err := waitext.RetryWithContext(
+		ctx,
+		defaultBackoff(),
+		defaultMaxRetriesK8SOperation,
+		func(ctx context.Context) (bool, error) {
+			_, err := clientset.CoreV1().Nodes().PatchStatus(ctx, name, patch)
+			if k8serrors.IsForbidden(err) {
+				// permissions might be of older version that can't patch node/status
+				log.WithField("node", name).WithError(err).Warn("skip patch node/status")
+				return false, nil
+			}
+			return true, err
+		},
+		func(err error) {
+			log.Warnf("patch node status, will retry: %v", err)
+		},
+	)
 
 	if err != nil {
 		return fmt.Errorf("patch status: %w", err)
@@ -76,18 +92,24 @@ func getNodeForPatching(ctx context.Context, log logrus.FieldLogger, clientset k
 
 	var node *v1.Node
 
-	boff := waitext.WithMaxRetries(waitext.DefaultExponentialBackoff(), 5)
+	boff := waitext.DefaultExponentialBackoff()
 
-	err := waitext.RetryWithContext(ctx, boff, func(ctx context.Context) error {
-		var err error
-		node, err = clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
-		if err != nil {
-			return err
-		}
-		return nil
-	}, func(err error) {
-		log.Warnf("getting node, will retry: %v", err)
-	})
+	err := waitext.RetryWithContext(
+		ctx,
+		boff,
+		5,
+		func(ctx context.Context) (bool, error) {
+			var err error
+			node, err = clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+			if err != nil {
+				return true, err
+			}
+			return false, nil
+		},
+		func(err error) {
+			log.Warnf("getting node, will retry: %v", err)
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -96,5 +118,5 @@ func getNodeForPatching(ctx context.Context, log logrus.FieldLogger, clientset k
 }
 
 func defaultBackoff() wait.Backoff {
-	return waitext.WithMaxRetries(waitext.NewConstantBackoff(500*time.Millisecond), 5)
+	return waitext.NewConstantBackoff(500 * time.Millisecond)
 }

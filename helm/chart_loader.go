@@ -22,6 +22,10 @@ import (
 	"github.com/castai/cluster-controller/internal/waitext"
 )
 
+const (
+	defaultOperationRetries = 5
+)
+
 type ChartLoader interface {
 	Load(ctx context.Context, c *castai.ChartSource) (*chart.Chart, error)
 }
@@ -38,24 +42,24 @@ type remoteChartLoader struct {
 func (cl *remoteChartLoader) Load(ctx context.Context, c *castai.ChartSource) (*chart.Chart, error) {
 	var res *chart.Chart
 
-	err := waitext.RetryWithContext(ctx, defaultBackoff(), func(ctx context.Context) error {
+	err := waitext.RetryWithContext(ctx, defaultBackoff(), defaultOperationRetries, func(ctx context.Context) (bool, error) {
 		var archiveURL string
 		if strings.HasSuffix(c.RepoURL, ".tgz") {
 			archiveURL = c.RepoURL
 		} else {
 			index, err := cl.downloadHelmIndex(c.RepoURL)
 			if err != nil {
-				return err
+				return true, err
 			}
 			archiveURL, err = cl.chartURL(index, c.Name, c.Version)
 			if err != nil {
-				return err
+				return true, err
 			}
 		}
 
 		archiveResp, err := cl.fetchArchive(ctx, archiveURL)
 		if err != nil {
-			return err
+			return true, err
 		}
 		defer func(Body io.ReadCloser) {
 			err := Body.Close()
@@ -66,10 +70,10 @@ func (cl *remoteChartLoader) Load(ctx context.Context, c *castai.ChartSource) (*
 
 		ch, err := loader.LoadArchive(archiveResp.Body)
 		if err != nil {
-			return fmt.Errorf("loading chart from archive: %w", err)
+			return true, fmt.Errorf("loading chart from archive: %w", err)
 		}
 		res = ch
-		return nil
+		return false, nil
 	}, func(err error) {
 		cl.log.Warnf("error loading chart from archive, will retry: %v", err)
 	})
@@ -99,7 +103,7 @@ func (cl *remoteChartLoader) fetchArchive(ctx context.Context, archiveURL string
 }
 
 func defaultBackoff() wait.Backoff {
-	return waitext.WithMaxRetries(waitext.NewConstantBackoff(1*time.Second), 5)
+	return waitext.NewConstantBackoff(1 * time.Second)
 }
 
 func (cl *remoteChartLoader) downloadHelmIndex(repoURL string) (*repo.IndexFile, error) {

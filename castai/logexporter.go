@@ -84,9 +84,9 @@ func (e *LogExporter) sendLogEvent(log *logrus.Entry) {
 		Fields:  log.Data,
 	}
 
-	b := waitext.WithMaxRetries(waitext.DefaultExponentialBackoff(), 3)
-	err := waitext.RetryWithContext(ctx, b, func(ctx context.Context) error {
-		return e.sender.SendLog(ctx, logEntry)
+	b := waitext.DefaultExponentialBackoff()
+	err := waitext.RetryWithContext(ctx, b, 3, func(ctx context.Context) (bool, error) {
+		return true, e.sender.SendLog(ctx, logEntry)
 	}, func(err error) {
 		e.logger.Debugf("failed to send logs, will retry: %s", err)
 	})

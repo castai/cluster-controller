@@ -132,15 +132,15 @@ func (s *service) doWork(ctx context.Context) error {
 		iteration int
 	)
 
-	boff := waitext.WithMaxRetries(waitext.NewConstantBackoff(5*time.Second), 3)
+	boff := waitext.NewConstantBackoff(5 * time.Second)
 
-	errR := waitext.RetryWithContext(ctx, boff, func(ctx context.Context) error {
+	errR := waitext.RetryWithContext(ctx, boff, 3, func(ctx context.Context) (bool, error) {
 		iteration++
 		actions, err = s.castAIClient.GetActions(ctx, s.k8sVersion)
 		if err != nil {
-			return err
+			return true, err
 		}
-		return nil
+		return false, nil
 	}, func(err error) {
 		s.log.Errorf("polling actions: get action request failed: iteration: %v %v", iteration, err)
 	})
@@ -245,12 +245,12 @@ func (s *service) ackAction(ctx context.Context, action *castai.ClusterAction, h
 		"type":           actionType.String(),
 	}).Info("ack action")
 
-	boff := waitext.WithMaxRetries(waitext.NewConstantBackoff(s.cfg.AckRetryWait), s.cfg.AckRetriesCount)
+	boff := waitext.NewConstantBackoff(s.cfg.AckRetryWait)
 
-	return waitext.RetryWithContext(ctx, boff, func(ctx context.Context) error {
+	return waitext.RetryWithContext(ctx, boff, s.cfg.AckRetriesCount, func(ctx context.Context) (bool, error) {
 		ctx, cancel := context.WithTimeout(ctx, s.cfg.AckTimeout)
 		defer cancel()
-		return s.castAIClient.AckAction(ctx, action.ID, &castai.AckClusterActionRequest{
+		return true, s.castAIClient.AckAction(ctx, action.ID, &castai.AckClusterActionRequest{
 			Error: getHandlerError(handleErr),
 		})
 	}, func(err error) {

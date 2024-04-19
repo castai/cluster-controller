@@ -52,38 +52,44 @@ func (h *checkNodeDeletedHandler) Handle(ctx context.Context, action *castai.Clu
 	})
 	log.Info("checking if node is deleted")
 
-	boff := waitext.WithMaxRetries(waitext.NewConstantBackoff(h.cfg.retryWait), h.cfg.retries)
+	boff := waitext.NewConstantBackoff(h.cfg.retryWait)
 
-	return waitext.RetryWithContext(ctx, boff, func(ctx context.Context) error {
-		n, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
-		if apierrors.IsNotFound(err) {
-			return nil
-		}
-
-		if n == nil {
-			return nil
-		}
-
-		currentNodeID, ok := n.Labels[castai.LabelNodeID]
-		if !ok {
-			log.Info("node doesn't have castai node id label")
-		}
-		if currentNodeID != "" {
-			if currentNodeID != req.NodeID {
-				log.Info("node name was reused. Original node is deleted")
-				return nil
+	return waitext.RetryWithContext(
+		ctx,
+		boff,
+		h.cfg.retries,
+		func(ctx context.Context) (bool, error) {
+			n, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
+			if apierrors.IsNotFound(err) {
+				return false, nil
 			}
-			if currentNodeID == req.NodeID {
-				return waitext.NewNonTransientError(errors.New("node is not deleted"))
+
+			if n == nil {
+				return false, nil
 			}
-		}
 
-		if n != nil {
-			return waitext.NewNonTransientError(errors.New("node is not deleted"))
-		}
+			currentNodeID, ok := n.Labels[castai.LabelNodeID]
+			if !ok {
+				log.Info("node doesn't have castai node id label")
+			}
+			if currentNodeID != "" {
+				if currentNodeID != req.NodeID {
+					log.Info("node name was reused. Original node is deleted")
+					return false, nil
+				}
+				if currentNodeID == req.NodeID {
+					return false, errors.New("node is not deleted")
+				}
+			}
 
-		return err
-	}, func(err error) {
-		log.Warnf("node deletion check failed, will retry: %v", err)
-	})
+			if n != nil {
+				return false, errors.New("node is not deleted")
+			}
+
+			return true, err
+		},
+		func(err error) {
+			log.Warnf("node deletion check failed, will retry: %v", err)
+		},
+	)
 }

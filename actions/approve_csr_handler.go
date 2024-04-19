@@ -62,11 +62,17 @@ func (h *approveCSRHandler) Handle(ctx context.Context, action *castai.ClusterAc
 	defer cancel()
 
 	b := newApproveCSRExponentialBackoff()
-	return waitext.RetryWithContext(ctx, b, func(ctx context.Context) error {
-		return h.handle(ctx, log, cert)
-	}, func(err error) {
-		log.Warnf("csr approval failed, will retry: %v", err)
-	})
+	return waitext.RetryWithContext(
+		ctx,
+		b,
+		waitext.Forever,
+		func(ctx context.Context) (bool, error) {
+			return true, h.handle(ctx, log, cert)
+		},
+		func(err error) {
+			log.Warnf("csr approval failed, will retry: %v", err)
+		},
+	)
 }
 
 func (h *approveCSRHandler) handle(ctx context.Context, log logrus.FieldLogger, cert *csr.Certificate) (reterr error) {
@@ -125,17 +131,22 @@ func (h *approveCSRHandler) getInitialNodeCSR(ctx context.Context, log logrus.Fi
 	var cert *csr.Certificate
 	var err error
 
-	// TODO: Shouldn't we pass ctx here, too?
-	b := waitext.WithMaxRetries(waitext.DefaultExponentialBackoff(), 3)
-	err = waitext.Retry(b, func() error {
-		cert, err = poll()
-		if errors.Is(err, context.DeadlineExceeded) {
-			return waitext.NewNonTransientError(err)
-		}
-		return err
-	}, func(err error) {
-		log.Warnf("getting initial csr, will retry: %v", err)
-	})
+	b := waitext.DefaultExponentialBackoff()
+	err = waitext.RetryWithContext(
+		ctx,
+		b,
+		3,
+		func(ctx context.Context) (bool, error) {
+			cert, err = poll()
+			if errors.Is(err, context.DeadlineExceeded) {
+				return false, err
+			}
+			return true, err
+		},
+		func(err error) {
+			log.Warnf("getting initial csr, will retry: %v", err)
+		},
+	)
 
 	return cert, err
 }
@@ -143,6 +154,5 @@ func (h *approveCSRHandler) getInitialNodeCSR(ctx context.Context, log logrus.Fi
 func newApproveCSRExponentialBackoff() wait.Backoff {
 	b := waitext.DefaultExponentialBackoff()
 	b.Factor = 2
-	b.Steps = 10
 	return b
 }
