@@ -72,15 +72,13 @@ func getNodeForPatching(ctx context.Context, log logrus.FieldLogger, clientset k
 	// on GKE we noticed that sometimes the node is not found, even though it is in the cluster
 	// as a result was returned from watch. But subsequent get request returns not found.
 	// This is likely due to clientset's caching that's meant to alleviate API's load.
-	// So we give enough time for cache to sync.
+	// So we give enough time for cache to sync - ~10s max.
 
 	var node *v1.Node
-	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
 
-	boff := waitext.DefaultExponentialBackoff()
+	boff := waitext.WithMaxRetries(waitext.DefaultExponentialBackoff(), 5)
 
-	err := waitext.RetryWithContext(timeoutCtx, boff, func(ctx context.Context) error {
+	err := waitext.RetryWithContext(ctx, boff, func(ctx context.Context) error {
 		var err error
 		node, err = clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 		if err != nil {
