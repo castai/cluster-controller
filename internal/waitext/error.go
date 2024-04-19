@@ -1,6 +1,6 @@
 package waitext
 
-// NonTransientError is used in conjuction with TODO
+// NonTransientError is used in conjuction with Retry or RetryWithContext
 // to allow the operation to signal that retrying is pointless
 // It works the same as PermanentError in github.com/cenkalti/backoff
 type NonTransientError struct {
