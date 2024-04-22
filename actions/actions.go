@@ -134,7 +134,7 @@ func (s *service) doWork(ctx context.Context) error {
 
 	boff := waitext.NewConstantBackoff(5 * time.Second)
 
-	errR := waitext.RetryWithContext(ctx, boff, 3, func(ctx context.Context) (bool, error) {
+	errR := waitext.Retry(ctx, boff, 3, func(ctx context.Context) (bool, error) {
 		iteration++
 		actions, err = s.castAIClient.GetActions(ctx, s.k8sVersion)
 		if err != nil {
@@ -247,7 +247,7 @@ func (s *service) ackAction(ctx context.Context, action *castai.ClusterAction, h
 
 	boff := waitext.NewConstantBackoff(s.cfg.AckRetryWait)
 
-	return waitext.RetryWithContext(ctx, boff, s.cfg.AckRetriesCount, func(ctx context.Context) (bool, error) {
+	return waitext.Retry(ctx, boff, s.cfg.AckRetriesCount, func(ctx context.Context) (bool, error) {
 		ctx, cancel := context.WithTimeout(ctx, s.cfg.AckTimeout)
 		defer cancel()
 		return true, s.castAIClient.AckAction(ctx, action.ID, &castai.AckClusterActionRequest{

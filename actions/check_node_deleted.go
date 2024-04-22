@@ -54,7 +54,7 @@ func (h *checkNodeDeletedHandler) Handle(ctx context.Context, action *castai.Clu
 
 	boff := waitext.NewConstantBackoff(h.cfg.retryWait)
 
-	return waitext.RetryWithContext(
+	return waitext.Retry(
 		ctx,
 		boff,
 		h.cfg.retries,

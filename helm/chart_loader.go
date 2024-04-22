@@ -42,7 +42,7 @@ type remoteChartLoader struct {
 func (cl *remoteChartLoader) Load(ctx context.Context, c *castai.ChartSource) (*chart.Chart, error) {
 	var res *chart.Chart
 
-	err := waitext.RetryWithContext(ctx, defaultBackoff(), defaultOperationRetries, func(ctx context.Context) (bool, error) {
+	err := waitext.Retry(ctx, defaultBackoff(), defaultOperationRetries, func(ctx context.Context) (bool, error) {
 		var archiveURL string
 		if strings.HasSuffix(c.RepoURL, ".tgz") {
 			archiveURL = c.RepoURL

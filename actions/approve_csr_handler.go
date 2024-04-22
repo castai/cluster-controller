@@ -62,7 +62,7 @@ func (h *approveCSRHandler) Handle(ctx context.Context, action *castai.ClusterAc
 	defer cancel()
 
 	b := newApproveCSRExponentialBackoff()
-	return waitext.RetryWithContext(
+	return waitext.Retry(
 		ctx,
 		b,
 		waitext.Forever,
@@ -132,7 +132,7 @@ func (h *approveCSRHandler) getInitialNodeCSR(ctx context.Context, log logrus.Fi
 	var err error
 
 	b := waitext.DefaultExponentialBackoff()
-	err = waitext.RetryWithContext(
+	err = waitext.Retry(
 		ctx,
 		b,
 		3,

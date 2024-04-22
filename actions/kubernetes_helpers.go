@@ -40,7 +40,7 @@ func patchNode(ctx context.Context, log logrus.FieldLogger, clientset kubernetes
 		return fmt.Errorf("creating patch for node: %w", err)
 	}
 
-	err = waitext.RetryWithContext(
+	err = waitext.Retry(
 		ctx,
 		defaultBackoff(),
 		defaultMaxRetriesK8SOperation,
@@ -60,7 +60,7 @@ func patchNode(ctx context.Context, log logrus.FieldLogger, clientset kubernetes
 }
 
 func patchNodeStatus(ctx context.Context, log logrus.FieldLogger, clientset kubernetes.Interface, name string, patch []byte) error {
-	err := waitext.RetryWithContext(
+	err := waitext.Retry(
 		ctx,
 		defaultBackoff(),
 		defaultMaxRetriesK8SOperation,
@@ -94,7 +94,7 @@ func getNodeForPatching(ctx context.Context, log logrus.FieldLogger, clientset k
 
 	boff := waitext.DefaultExponentialBackoff()
 
-	err := waitext.RetryWithContext(
+	err := waitext.Retry(
 		ctx,
 		boff,
 		5,

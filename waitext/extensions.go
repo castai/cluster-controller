@@ -53,14 +53,7 @@ func NewConstantBackoff(interval time.Duration) wait.Backoff {
 	}
 }
 
-// Retry acts as RetryWithContext but with context.Background()
-func Retry(backoff wait.Backoff, retries int, operation func() (bool, error), errNotify func(error)) error {
-	return retryCore(context.Background(), backoff, retries, func(_ context.Context) (bool, error) {
-		return operation()
-	}, errNotify)
-}
-
-// RetryWithContext executes an operation with retries following these semantics:
+// Retry executes an operation with retries following these semantics:
 //
 //   - The operation is executed at least once (even if context is cancelled)
 //
@@ -77,11 +70,7 @@ func Retry(backoff wait.Backoff, retries int, operation func() (bool, error), er
 // The end result is the final error observed when calling operation() or nil if successful or context.Err() if the context was cancelled.
 // If retryNotify is passed, it is called when making retries.
 // Caveat: this function is similar to wait.ExponentialBackoff but has some important behavior differences like at-least-one execution and retryable errors
-func RetryWithContext(ctx context.Context, backoff wait.Backoff, retries int, operation func(context.Context) (bool, error), retryNotify func(error)) error {
-	return retryCore(ctx, backoff, retries, operation, retryNotify)
-}
-
-func retryCore(ctx context.Context, backoff wait.Backoff, retries int, operation func(context.Context) (bool, error), retryNotify func(error)) error {
+func Retry(ctx context.Context, backoff wait.Backoff, retries int, operation func(context.Context) (bool, error), retryNotify func(error)) error {
 	var lastErr error
 	var shouldRetry bool
 

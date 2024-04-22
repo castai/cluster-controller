@@ -344,7 +344,7 @@ func (rt *kubeRetryTransport) RoundTrip(req *http.Request) (*http.Response, erro
 
 	boff := waitext.NewConstantBackoff(rt.retryInterval)
 
-	err := waitext.Retry(boff, rt.maxRetries, func() (bool, error) {
+	err := waitext.Retry(context.Background(), boff, rt.maxRetries, func(_ context.Context) (bool, error) {
 		var err error
 		resp, err = rt.next.RoundTrip(req)
 		if err != nil {

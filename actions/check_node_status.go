@@ -66,7 +66,7 @@ func (h *checkNodeStatusHandler) checkNodeDeleted(ctx context.Context, log *logr
 	defer cancel()
 
 	b := waitext.DefaultExponentialBackoff()
-	return waitext.RetryWithContext(
+	return waitext.Retry(
 		ctx,
 		b,
 		waitext.Forever,
