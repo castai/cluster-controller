@@ -16,7 +16,6 @@ import (
 	"helm.sh/helm/v3/pkg/cli"
 	"helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/repo"
-	"k8s.io/apimachinery/pkg/util/wait"
 
 	"github.com/castai/cluster-controller/castai"
 	"github.com/castai/cluster-controller/waitext"
@@ -42,41 +41,47 @@ type remoteChartLoader struct {
 func (cl *remoteChartLoader) Load(ctx context.Context, c *castai.ChartSource) (*chart.Chart, error) {
 	var res *chart.Chart
 
-	err := waitext.Retry(ctx, defaultBackoff(), defaultOperationRetries, func(ctx context.Context) (bool, error) {
-		var archiveURL string
-		if strings.HasSuffix(c.RepoURL, ".tgz") {
-			archiveURL = c.RepoURL
-		} else {
-			index, err := cl.downloadHelmIndex(c.RepoURL)
+	err := waitext.Retry(
+		ctx,
+		waitext.NewConstantBackoff(1*time.Second),
+		defaultOperationRetries,
+		func(ctx context.Context) (bool, error) {
+			var archiveURL string
+			if strings.HasSuffix(c.RepoURL, ".tgz") {
+				archiveURL = c.RepoURL
+			} else {
+				index, err := cl.downloadHelmIndex(c.RepoURL)
+				if err != nil {
+					return true, err
+				}
+				archiveURL, err = cl.chartURL(index, c.Name, c.Version)
+				if err != nil {
+					return true, err
+				}
+			}
+
+			archiveResp, err := cl.fetchArchive(ctx, archiveURL)
 			if err != nil {
 				return true, err
 			}
-			archiveURL, err = cl.chartURL(index, c.Name, c.Version)
-			if err != nil {
-				return true, err
-			}
-		}
+			defer func(Body io.ReadCloser) {
+				err := Body.Close()
+				if err != nil {
+					cl.log.Warnf("loading chart from archive - failed to close response body: %v", err)
+				}
+			}(archiveResp.Body)
 
-		archiveResp, err := cl.fetchArchive(ctx, archiveURL)
-		if err != nil {
-			return true, err
-		}
-		defer func(Body io.ReadCloser) {
-			err := Body.Close()
+			ch, err := loader.LoadArchive(archiveResp.Body)
 			if err != nil {
-				cl.log.Warnf("loading chart from archive - failed to close response body: %v", err)
+				return true, fmt.Errorf("loading chart from archive: %w", err)
 			}
-		}(archiveResp.Body)
-
-		ch, err := loader.LoadArchive(archiveResp.Body)
-		if err != nil {
-			return true, fmt.Errorf("loading chart from archive: %w", err)
-		}
-		res = ch
-		return false, nil
-	}, func(err error) {
-		cl.log.Warnf("error loading chart from archive, will retry: %v", err)
-	})
+			res = ch
+			return false, nil
+		},
+		func(err error) {
+			cl.log.Warnf("error loading chart from archive, will retry: %v", err)
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -100,10 +105,6 @@ func (cl *remoteChartLoader) fetchArchive(ctx context.Context, archiveURL string
 		return nil, fmt.Errorf("expected archive %s fetch status %d, got %d", archiveURL, http.StatusOK, archiveResp.StatusCode)
 	}
 	return archiveResp, nil
-}
-
-func defaultBackoff() wait.Backoff {
-	return waitext.NewConstantBackoff(1 * time.Second)
 }
 
 func (cl *remoteChartLoader) downloadHelmIndex(repoURL string) (*repo.IndexFile, error) {
