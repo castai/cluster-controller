@@ -9,10 +9,10 @@ import (
 )
 
 const (
-	DefaultInitialInterval     = 500 * time.Millisecond
-	DefaultRandomizationFactor = 0.5
-	DefaultMultiplier          = 1.5
-	DefaultMaxInterval         = 60 * time.Second
+	defaultInitialInterval     = 500 * time.Millisecond
+	defaultRandomizationFactor = 0.5
+	defaultMultiplier          = 1.5
+	defaultMaxInterval         = 60 * time.Second
 
 	// Forever should be used to simulate infinite retries or backoff increase.
 	// Usually it's wise to have a context with timeout to avoid an infinite loop.
@@ -35,10 +35,10 @@ func NewExponentialBackoff(initialInterval time.Duration, factor float64, maxInt
 // Defaults should match ExponentialBackoff in github.com/cenkalti/backoff
 func DefaultExponentialBackoff() wait.Backoff {
 	return wait.Backoff{
-		Duration: DefaultInitialInterval,
-		Factor:   DefaultMultiplier,
-		Jitter:   DefaultRandomizationFactor,
-		Cap:      DefaultMaxInterval,
+		Duration: defaultInitialInterval,
+		Factor:   defaultMultiplier,
+		Jitter:   defaultRandomizationFactor,
+		Cap:      defaultMaxInterval,
 		Steps:    Forever,
 	}
 }

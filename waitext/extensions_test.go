@@ -39,10 +39,10 @@ func TestDefaultExponentialBackoff(t *testing.T) {
 
 	val := DefaultExponentialBackoff()
 
-	r.Equal(DefaultInitialInterval, val.Duration)
-	r.Equal(DefaultMultiplier, val.Factor)
-	r.Equal(DefaultRandomizationFactor, val.Jitter)
-	r.Equal(DefaultMaxInterval, val.Cap)
+	r.Equal(defaultInitialInterval, val.Duration)
+	r.Equal(defaultMultiplier, val.Factor)
+	r.Equal(defaultRandomizationFactor, val.Jitter)
+	r.Equal(defaultMaxInterval, val.Cap)
 }
 
 func TestRetryCore(t *testing.T) {
