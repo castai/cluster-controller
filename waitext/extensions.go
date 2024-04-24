@@ -19,18 +19,6 @@ const (
 	Forever = math.MaxInt32
 )
 
-// NewExponentialBackoff creates a backoff that increases the delay between each step based on a factor.
-// If maxInterval is positive, then the wait duration will not exceed its value while increasing.
-// Essentially at step N the wait is min(initialInterval*factor^(N-1), maxInterval)
-func NewExponentialBackoff(initialInterval time.Duration, factor float64, maxInterval time.Duration) wait.Backoff {
-	return wait.Backoff{
-		Duration: initialInterval,
-		Factor:   factor,
-		Cap:      maxInterval,
-		Steps:    Forever,
-	}
-}
-
 // DefaultExponentialBackoff creates an exponential backoff with sensible default values.
 // Defaults should match ExponentialBackoff in github.com/cenkalti/backoff
 func DefaultExponentialBackoff() wait.Backoff {

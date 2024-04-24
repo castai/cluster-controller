@@ -21,19 +21,6 @@ func TestNewConstantBackoff(t *testing.T) {
 	}
 }
 
-func TestExponentialBackoff(t *testing.T) {
-	r := require.New(t)
-
-	interval := 100 * time.Millisecond
-	factor := 10.0
-	maxInterval := 1 * time.Second
-	backoff := NewExponentialBackoff(interval, factor, maxInterval)
-
-	r.Equal(interval, backoff.Duration)
-	r.Equal(factor, backoff.Factor)
-	r.Equal(maxInterval, backoff.Cap)
-}
-
 func TestDefaultExponentialBackoff(t *testing.T) {
 	r := require.New(t)
 
@@ -63,7 +50,11 @@ func TestRetry(t *testing.T) {
 		t.Run("Respects backoff and retry count", func(t *testing.T) {
 			retries := 4
 			expectedTotalExecutions := 1 + retries
-			backoff := NewExponentialBackoff(10*time.Millisecond, 2, 0)
+			backoff := DefaultExponentialBackoff()
+			backoff.Duration = 10 * time.Millisecond
+			backoff.Factor = 2
+			backoff.Jitter = 0
+
 			// There is no "initial" wait so 0 index simulates zero.
 			// The rest are calculated as interval * factor^(ix) without jitter for simplicity
 			expectedWaitTimes := []time.Duration{
