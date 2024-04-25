@@ -2,6 +2,7 @@ package waitext
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"time"
 
@@ -55,7 +56,12 @@ func NewConstantBackoff(interval time.Duration) wait.Backoff {
 //
 //   - the context is cancelled
 //
-// The end result is the final error observed when calling operation() or nil if successful or context.Err() if the context was cancelled.
+// The end result is:
+//
+//   - nil if operation was successful at least once
+//   - last encountered error from operation if retries are exhausted
+//   - a multi-error if context is cancelled that contains - the ctx.Err(), context.Cause() and last encountered error from the operation
+//
 // If retryNotify is passed, it is called when making retries.
 // Caveat: this function is similar to wait.ExponentialBackoff but has some important behavior differences like at-least-one execution and retryable errors
 func Retry(ctx context.Context, backoff wait.Backoff, retries int, operation func(context.Context) (bool, error), retryNotify func(error)) error {
@@ -78,7 +84,7 @@ func Retry(ctx context.Context, backoff wait.Backoff, retries int, operation fun
 		waitInterval := backoff.Step()
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return fmt.Errorf("context finished with err (%w); cause (%w); last encountered error from operation (%w)", ctx.Err(), context.Cause(ctx), lastErr)
 		case <-time.After(waitInterval):
 		}
 

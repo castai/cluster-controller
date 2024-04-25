@@ -146,20 +146,25 @@ func TestRetry(t *testing.T) {
 
 	t.Run("Context tests", func(t *testing.T) {
 		t.Run("On context cancel, stops", func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancelCause(context.Background())
 
-			var err error
+			innerError := errors.New("from operation")
+			cancelCause := errors.New("cancel cause err")
+			var overallReturnedErr error
+
 			done := make(chan bool)
 			go func() {
-				err = Retry(ctx, NewConstantBackoff(100*time.Millisecond), 1000, func(ctx context.Context) (bool, error) {
-					return true, errors.New("dummy")
+				overallReturnedErr = Retry(ctx, NewConstantBackoff(100*time.Millisecond), 1000, func(ctx context.Context) (bool, error) {
+					return true, innerError
 				}, nil)
 				done <- true
 			}()
 
-			cancel()
+			cancel(cancelCause)
 			<-done
-			r.ErrorIs(err, context.Canceled, "Expected context cancelled to be propagated")
+			r.ErrorIs(overallReturnedErr, context.Canceled, "Expected context cancelled to be propagated")
+			r.ErrorIs(overallReturnedErr, innerError, "Expected inner error by operation be propagated")
+			r.ErrorIs(overallReturnedErr, cancelCause, "Expected cancel cause error to be propagated")
 		})
 
 		t.Run("Operation is called at least once, even if context is cancelled", func(t *testing.T) {
