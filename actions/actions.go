@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -18,6 +17,7 @@ import (
 	"github.com/castai/cluster-controller/castai"
 	"github.com/castai/cluster-controller/health"
 	"github.com/castai/cluster-controller/helm"
+	"github.com/castai/cluster-controller/waitext"
 )
 
 const (
@@ -132,16 +132,19 @@ func (s *service) doWork(ctx context.Context) error {
 		iteration int
 	)
 
-	b := backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), 3), ctx)
-	errR := backoff.Retry(func() error {
+	boff := waitext.NewConstantBackoff(5 * time.Second)
+
+	errR := waitext.Retry(ctx, boff, 3, func(ctx context.Context) (bool, error) {
 		iteration++
 		actions, err = s.castAIClient.GetActions(ctx, s.k8sVersion)
 		if err != nil {
-			s.log.Errorf("polling actions: get action request failed: iteration: %v %v", iteration, err)
-			return err
+			return true, err
 		}
-		return nil
-	}, b)
+		return false, nil
+	}, func(err error) {
+		s.log.Errorf("polling actions: get action request failed: iteration: %v %v", iteration, err)
+	})
+
 	if errR != nil {
 		return fmt.Errorf("polling actions: %w", err)
 	}
@@ -242,21 +245,16 @@ func (s *service) ackAction(ctx context.Context, action *castai.ClusterAction, h
 		"type":           actionType.String(),
 	}).Info("ack action")
 
-	return backoff.RetryNotify(func() error {
+	boff := waitext.NewConstantBackoff(s.cfg.AckRetryWait)
+
+	return waitext.Retry(ctx, boff, s.cfg.AckRetriesCount, func(ctx context.Context) (bool, error) {
 		ctx, cancel := context.WithTimeout(ctx, s.cfg.AckTimeout)
 		defer cancel()
-		return s.castAIClient.AckAction(ctx, action.ID, &castai.AckClusterActionRequest{
+		return true, s.castAIClient.AckAction(ctx, action.ID, &castai.AckClusterActionRequest{
 			Error: getHandlerError(handleErr),
 		})
-	}, backoff.WithContext(
-		backoff.WithMaxRetries(
-			backoff.NewConstantBackOff(s.cfg.AckRetryWait), uint64(s.cfg.AckRetriesCount),
-		),
-		ctx,
-	), func(err error, duration time.Duration) {
-		if err != nil {
-			s.log.Debugf("ack failed, will retry: %v", err)
-		}
+	}, func(err error) {
+		s.log.Debugf("ack failed, will retry: %v", err)
 	})
 }
 

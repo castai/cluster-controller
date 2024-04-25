@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/bombsimon/logrusr/v4"
-	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,6 +33,7 @@ import (
 	"github.com/castai/cluster-controller/health"
 	"github.com/castai/cluster-controller/helm"
 	"github.com/castai/cluster-controller/version"
+	"github.com/castai/cluster-controller/waitext"
 )
 
 // These should be set via `go build` during a release.
@@ -118,7 +118,7 @@ func run(
 	restConfigLeader.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(float32(cfg.KubeClient.QPS), cfg.KubeClient.Burst)
 	restConfigDynamic.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(float32(cfg.KubeClient.QPS), cfg.KubeClient.Burst)
 
-	helmClient := helm.NewClient(logger, helm.NewChartLoader(), restconfig)
+	helmClient := helm.NewClient(logger, helm.NewChartLoader(logger), restconfig)
 
 	clientset, err := kubernetes.NewForConfig(restconfig)
 	if err != nil {
@@ -335,29 +335,29 @@ func retrieveKubeConfig(log logrus.FieldLogger) (*rest.Config, error) {
 type kubeRetryTransport struct {
 	log           logrus.FieldLogger
 	next          http.RoundTripper
-	maxRetries    uint64
+	maxRetries    int
 	retryInterval time.Duration
 }
 
 func (rt *kubeRetryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	var resp *http.Response
-	err := backoff.RetryNotify(func() error {
+
+	boff := waitext.NewConstantBackoff(rt.retryInterval)
+
+	err := waitext.Retry(context.Background(), boff, rt.maxRetries, func(_ context.Context) (bool, error) {
 		var err error
 		resp, err = rt.next.RoundTrip(req)
 		if err != nil {
 			// Previously client-go contained logic to retry connection refused errors. See https://github.com/kubernetes/kubernetes/pull/88267/files
 			if net.IsConnectionRefused(err) {
-				return err
+				return true, err
 			}
-			return backoff.Permanent(err)
+			return false, err
 		}
-		return nil
-	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(rt.retryInterval), rt.maxRetries),
-		func(err error, duration time.Duration) {
-			if err != nil {
-				rt.log.Warnf("kube api server connection refused, will retry: %v", err)
-			}
-		})
+		return false, nil
+	}, func(err error) {
+		rt.log.Warnf("kube api server connection refused, will retry: %v", err)
+	})
 	return resp, err
 }
 

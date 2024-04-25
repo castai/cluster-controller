@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
@@ -23,6 +22,7 @@ import (
 	"k8s.io/kubectl/pkg/drain"
 
 	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/waitext"
 )
 
 const (
@@ -32,7 +32,7 @@ const (
 
 type drainNodeConfig struct {
 	podsDeleteTimeout             time.Duration
-	podDeleteRetries              uint64
+	podDeleteRetries              int
 	podDeleteRetryDelay           time.Duration
 	podEvictRetryDelay            time.Duration
 	podsTerminationWaitRetryDelay time.Duration
@@ -147,7 +147,7 @@ func (h *drainNodeHandler) taintNode(ctx context.Context, node *v1.Node) error {
 		return nil
 	}
 
-	err := patchNode(ctx, h.clientset, node, func(n *v1.Node) {
+	err := patchNode(ctx, h.log, h.clientset, node, func(n *v1.Node) {
 		n.Spec.Unschedulable = true
 	})
 	if err != nil {
@@ -226,16 +226,25 @@ func (h *drainNodeHandler) sendPodsRequests(ctx context.Context, pods []v1.Pod, 
 
 func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.FieldLogger, node *v1.Node) ([]v1.Pod, error) {
 	var pods *v1.PodList
-	if err := backoff.Retry(func() error {
-		p, err := h.clientset.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
-			FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": node.Name}).String(),
-		})
-		if err != nil {
-			return err
-		}
-		pods = p
-		return nil
-	}, defaultBackoff(ctx)); err != nil {
+	err := waitext.Retry(
+		ctx,
+		defaultBackoff(),
+		defaultMaxRetriesK8SOperation,
+		func(ctx context.Context) (bool, error) {
+			p, err := h.clientset.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
+				FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": node.Name}).String(),
+			})
+			if err != nil {
+				return true, err
+			}
+			pods = p
+			return false, nil
+		},
+		func(err error) {
+			log.Warnf("listing pods on node %s: %v", node.Name, err)
+		},
+	)
+	if err != nil {
 		return nil, fmt.Errorf("listing node %v pods: %w", node.Name, err)
 	}
 
@@ -269,23 +278,31 @@ func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.F
 }
 
 func (h *drainNodeHandler) waitNodePodsTerminated(ctx context.Context, log logrus.FieldLogger, node *v1.Node) error {
-	return backoff.Retry(func() error {
-		pods, err := h.listNodePodsToEvict(ctx, log, node)
-		if err != nil {
-			return fmt.Errorf("waiting for node %q pods to be terminated: %w", node.Name, err)
-		}
-		if len(pods) > 0 {
-			return fmt.Errorf("waiting for %d pods to be terminated on node %v", len(pods), node.Name)
-		}
-		return nil
-	}, backoff.WithContext(backoff.NewConstantBackOff(h.cfg.podsTerminationWaitRetryDelay), ctx))
+	return waitext.Retry(
+		ctx,
+		waitext.NewConstantBackoff(h.cfg.podsTerminationWaitRetryDelay),
+		waitext.Forever,
+		func(ctx context.Context) (bool, error) {
+			pods, err := h.listNodePodsToEvict(ctx, log, node)
+			if err != nil {
+				return true, fmt.Errorf("listing %q pods to be terminated: %w", node.Name, err)
+			}
+			if len(pods) > 0 {
+				return true, fmt.Errorf("waiting for %d pods to be terminated on node %v", len(pods), node.Name)
+			}
+			return false, nil
+		},
+		func(err error) {
+			h.log.Warnf("waiting for pod termination on node %v, will retry: %v", node.Name, err)
+		},
+	)
 }
 
 // evictPod from the k8s node. Error handling is based on eviction api documentation:
 // https://kubernetes.io/docs/tasks/administer-cluster/safely-drain-node/#the-eviction-api
 func (h *drainNodeHandler) evictPod(ctx context.Context, pod v1.Pod, groupVersion schema.GroupVersion) error {
-	b := backoff.WithContext(backoff.NewConstantBackOff(h.cfg.podEvictRetryDelay), ctx) // nolint:gomnd
-	action := func() error {
+	b := waitext.NewConstantBackoff(h.cfg.podEvictRetryDelay)
+	action := func(ctx context.Context) (bool, error) {
 		var err error
 		if groupVersion == policyv1.SchemeGroupVersion {
 			err = h.clientset.PolicyV1().Evictions(pod.Namespace).Evict(ctx, &policyv1.Eviction{
@@ -310,44 +327,51 @@ func (h *drainNodeHandler) evictPod(ctx context.Context, pod v1.Pod, groupVersio
 		if err != nil {
 			// Pod is not found - ignore.
 			if apierrors.IsNotFound(err) {
-				return nil
+				return false, nil
 			}
 
 			// Pod is misconfigured - stop retry.
 			if apierrors.IsInternalError(err) {
-				return backoff.Permanent(err)
+				return false, err
 			}
 		}
 
 		// Other errors - retry.
-		return err
+		return true, err
 	}
-	if err := backoff.Retry(action, b); err != nil {
+	err := waitext.Retry(ctx, b, waitext.Forever, action, func(err error) {
+		h.log.Warnf("evict pod %s on node %s in namespace %s, will retry: %v", pod.Name, pod.Spec.NodeName, pod.Namespace, err)
+	})
+	if err != nil {
 		return fmt.Errorf("evicting pod %s in namespace %s: %w", pod.Name, pod.Namespace, err)
+
 	}
 	return nil
 }
 
 func (h *drainNodeHandler) deletePod(ctx context.Context, options metav1.DeleteOptions, pod v1.Pod) error {
-	b := backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(h.cfg.podDeleteRetryDelay), h.cfg.podDeleteRetries), ctx) // nolint:gomnd
-	action := func() error {
+	b := waitext.NewConstantBackoff(h.cfg.podDeleteRetryDelay)
+	action := func(ctx context.Context) (bool, error) {
 		err := h.clientset.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, options)
 		if err != nil {
 			// Pod is not found - ignore.
 			if apierrors.IsNotFound(err) {
-				return nil
+				return false, nil
 			}
 
 			// Pod is misconfigured - stop retry.
 			if apierrors.IsInternalError(err) {
-				return backoff.Permanent(err)
+				return false, err
 			}
 		}
 
 		// Other errors - retry.
-		return err
+		return true, err
 	}
-	if err := backoff.Retry(action, b); err != nil {
+	err := waitext.Retry(ctx, b, h.cfg.podDeleteRetries, action, func(err error) {
+		h.log.Warnf("deleting pod %s on node %s in namespace %s, will retry: %v", pod.Name, pod.Spec.NodeName, pod.Namespace, err)
+	})
+	if err != nil {
 		return fmt.Errorf("deleting pod %s in namespace %s: %w", pod.Name, pod.Namespace, err)
 	}
 	return nil

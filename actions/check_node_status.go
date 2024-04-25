@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -16,6 +15,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/waitext"
 )
 
 func newCheckNodeStatusHandler(log logrus.FieldLogger, clientset kubernetes.Interface) ActionHandler {
@@ -64,42 +64,51 @@ func (h *checkNodeStatusHandler) checkNodeDeleted(ctx context.Context, log *logr
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
 	defer cancel()
-	b := backoff.WithContext(backoff.NewExponentialBackOff(), ctx)
-	return backoff.Retry(func() error {
-		n, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
-		if apierrors.IsNotFound(err) {
-			return nil
-		}
 
-		// If node is nil - deleted
-		// If label is present and doesn't match - node was reused - deleted
-		// If label is present and matches - node is not deleted
-		// If label is not present and node is not nil - node is not deleted (potentially corrupted state)
-
-		if n == nil {
-			return nil
-		}
-
-		currentNodeID, ok := n.Labels[castai.LabelNodeID]
-		if !ok {
-			log.Info("node doesn't have castai node id label")
-		}
-		if currentNodeID != "" {
-			if currentNodeID != req.NodeID {
-				log.Info("node name was reused. Original node is deleted")
-				return nil
+	b := waitext.DefaultExponentialBackoff()
+	return waitext.Retry(
+		ctx,
+		b,
+		waitext.Forever,
+		func(ctx context.Context) (bool, error) {
+			n, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
+			if apierrors.IsNotFound(err) {
+				return false, nil
 			}
-			if currentNodeID == req.NodeID {
-				return backoff.Permanent(errors.New("node is not deleted"))
+
+			// If node is nil - deleted
+			// If label is present and doesn't match - node was reused - deleted
+			// If label is present and matches - node is not deleted
+			// If label is not present and node is not nil - node is not deleted (potentially corrupted state)
+
+			if n == nil {
+				return false, nil
 			}
-		}
 
-		if n != nil {
-			return backoff.Permanent(errors.New("node is not deleted"))
-		}
+			currentNodeID, ok := n.Labels[castai.LabelNodeID]
+			if !ok {
+				log.Info("node doesn't have castai node id label")
+			}
+			if currentNodeID != "" {
+				if currentNodeID != req.NodeID {
+					log.Info("node name was reused. Original node is deleted")
+					return false, nil
+				}
+				if currentNodeID == req.NodeID {
+					return false, errors.New("node is not deleted")
+				}
+			}
 
-		return err
-	}, b)
+			if n != nil {
+				return false, errors.New("node is not deleted")
+			}
+
+			return true, err
+		},
+		func(err error) {
+			h.log.Warnf("check node %s status failed, will retry: %v", req.NodeName, err)
+		},
+	)
 }
 
 func (h *checkNodeStatusHandler) checkNodeReady(ctx context.Context, log *logrus.Entry, req *castai.ActionCheckNodeStatus) error {

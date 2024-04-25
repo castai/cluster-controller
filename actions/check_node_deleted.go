@@ -7,17 +7,17 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/sirupsen/logrus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/waitext"
 )
 
 type checkNodeDeletedConfig struct {
-	retries   uint64
+	retries   int
 	retryWait time.Duration
 }
 
@@ -52,35 +52,44 @@ func (h *checkNodeDeletedHandler) Handle(ctx context.Context, action *castai.Clu
 	})
 	log.Info("checking if node is deleted")
 
-	b := backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(h.cfg.retryWait), h.cfg.retries), ctx)
-	return backoff.Retry(func() error {
-		n, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
-		if apierrors.IsNotFound(err) {
-			return nil
-		}
+	boff := waitext.NewConstantBackoff(h.cfg.retryWait)
 
-		if n == nil {
-			return nil
-		}
-
-		currentNodeID, ok := n.Labels[castai.LabelNodeID]
-		if !ok {
-			log.Info("node doesn't have castai node id label")
-		}
-		if currentNodeID != "" {
-			if currentNodeID != req.NodeID {
-				log.Info("node name was reused. Original node is deleted")
-				return nil
+	return waitext.Retry(
+		ctx,
+		boff,
+		h.cfg.retries,
+		func(ctx context.Context) (bool, error) {
+			n, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
+			if apierrors.IsNotFound(err) {
+				return false, nil
 			}
-			if currentNodeID == req.NodeID {
-				return backoff.Permanent(errors.New("node is not deleted"))
+
+			if n == nil {
+				return false, nil
 			}
-		}
 
-		if n != nil {
-			return backoff.Permanent(errors.New("node is not deleted"))
-		}
+			currentNodeID, ok := n.Labels[castai.LabelNodeID]
+			if !ok {
+				log.Info("node doesn't have castai node id label")
+			}
+			if currentNodeID != "" {
+				if currentNodeID != req.NodeID {
+					log.Info("node name was reused. Original node is deleted")
+					return false, nil
+				}
+				if currentNodeID == req.NodeID {
+					return false, errors.New("node is not deleted")
+				}
+			}
 
-		return err
-	}, b)
+			if n != nil {
+				return false, errors.New("node is not deleted")
+			}
+
+			return true, err
+		},
+		func(err error) {
+			log.Warnf("node deletion check failed, will retry: %v", err)
+		},
+	)
 }
