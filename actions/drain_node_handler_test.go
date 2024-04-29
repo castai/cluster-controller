@@ -18,7 +18,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	ktest "k8s.io/client-go/testing"
 
-	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/types"
 )
 
 func TestDrainNodeHandler(t *testing.T) {
@@ -33,9 +33,9 @@ func TestDrainNodeHandler(t *testing.T) {
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 		prependEvictionReaction(t, clientset, true)
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDrainNode: &castai.ActionDrainNode{
+			ActionDrainNode: &types.ActionDrainNode{
 				NodeName:            "node1",
 				DrainTimeoutSeconds: 1,
 				Force:               true,
@@ -74,9 +74,9 @@ func TestDrainNodeHandler(t *testing.T) {
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 		prependEvictionReaction(t, clientset, true)
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDrainNode: &castai.ActionDrainNode{
+			ActionDrainNode: &types.ActionDrainNode{
 				NodeName:            "already-deleted-node",
 				DrainTimeoutSeconds: 1,
 				Force:               true,
@@ -103,9 +103,9 @@ func TestDrainNodeHandler(t *testing.T) {
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 		prependEvictionReaction(t, clientset, false)
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDrainNode: &castai.ActionDrainNode{
+			ActionDrainNode: &types.ActionDrainNode{
 				NodeName:            "node1",
 				DrainTimeoutSeconds: 1,
 				Force:               true,
@@ -136,9 +136,9 @@ func TestDrainNodeHandler(t *testing.T) {
 		podName := "pod1"
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDrainNode: &castai.ActionDrainNode{
+			ActionDrainNode: &types.ActionDrainNode{
 				NodeName:            "node1",
 				DrainTimeoutSeconds: 1,
 				Force:               true,
@@ -185,9 +185,9 @@ func TestDrainNodeHandler(t *testing.T) {
 		podName := "pod1"
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDrainNode: &castai.ActionDrainNode{
+			ActionDrainNode: &types.ActionDrainNode{
 				NodeName:            "node1",
 				DrainTimeoutSeconds: 1,
 				Force:               true,
@@ -227,9 +227,9 @@ func TestDrainNodeHandler(t *testing.T) {
 		podName := "pod1"
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDrainNode: &castai.ActionDrainNode{
+			ActionDrainNode: &types.ActionDrainNode{
 				NodeName:            "node1",
 				DrainTimeoutSeconds: 1,
 				Force:               true,
@@ -273,9 +273,9 @@ func TestGetDrainTimeout(t *testing.T) {
 
 	t.Run("drain timeout for new action should be the same like in request", func(t *testing.T) {
 		r := require.New(t)
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDrainNode: &castai.ActionDrainNode{
+			ActionDrainNode: &types.ActionDrainNode{
 				NodeName:            "node1",
 				DrainTimeoutSeconds: 100,
 				Force:               true,
@@ -293,9 +293,9 @@ func TestGetDrainTimeout(t *testing.T) {
 
 	t.Run("drain timeout for older action should be decreased by time since action creation", func(t *testing.T) {
 		r := require.New(t)
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDrainNode: &castai.ActionDrainNode{
+			ActionDrainNode: &types.ActionDrainNode{
 				NodeName:            "node1",
 				DrainTimeoutSeconds: 600,
 				Force:               true,
@@ -313,9 +313,9 @@ func TestGetDrainTimeout(t *testing.T) {
 
 	t.Run("drain timeout min wait timeout should be 0s", func(t *testing.T) {
 		r := require.New(t)
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDrainNode: &castai.ActionDrainNode{
+			ActionDrainNode: &types.ActionDrainNode{
 				NodeName:            "node1",
 				DrainTimeoutSeconds: 600,
 				Force:               true,

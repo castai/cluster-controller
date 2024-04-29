@@ -90,7 +90,7 @@ func main() {
 
 func run(
 	ctx context.Context,
-	client castai.ActionsClient,
+	client actions.Client,
 	logger *logrus.Logger,
 	cfg config.Config,
 	binVersion *config.ClusterControllerVersion,

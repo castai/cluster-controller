@@ -16,7 +16,7 @@ import (
 	"helm.sh/helm/v3/pkg/storage/driver"
 	"helm.sh/helm/v3/pkg/time"
 
-	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/types"
 )
 
 func TestClientInstall(t *testing.T) {
@@ -124,7 +124,7 @@ type testChartLoader struct {
 	chart *chart.Chart
 }
 
-func (t *testChartLoader) Load(_ context.Context, _ *castai.ChartSource) (*chart.Chart, error) {
+func (t *testChartLoader) Load(_ context.Context, _ *types.ChartSource) (*chart.Chart, error) {
 	return t.chart, nil
 }
 

@@ -3,16 +3,16 @@ package actions
 import (
 	"context"
 	"fmt"
-	"github.com/google/uuid"
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
-	"github.com/castai/cluster-controller/castai"
 	"github.com/castai/cluster-controller/helm"
 	mock_helm "github.com/castai/cluster-controller/helm/mock"
+	"github.com/castai/cluster-controller/types"
 )
 
 func TestChartUninstallHandler(t *testing.T) {
@@ -23,8 +23,8 @@ func TestChartUninstallHandler(t *testing.T) {
 
 	handler := newChartUninstallHandler(logrus.New(), helmMock)
 
-	t.Run("successfully uninstall chart", func(t *testing.T) {
-		action := &castai.ClusterAction{
+	t.Run("successfully uninstall chart", func(_ *testing.T) {
+		action := &types.ClusterAction{
 			ID:                   uuid.New().String(),
 			ActionChartUninstall: newUninstallAction(),
 		}
@@ -37,8 +37,8 @@ func TestChartUninstallHandler(t *testing.T) {
 		r.NoError(handler.Handle(ctx, action))
 	})
 
-	t.Run("error when uninstalling chart", func(t *testing.T) {
-		action := &castai.ClusterAction{
+	t.Run("error when uninstalling chart", func(_ *testing.T) {
+		action := &types.ClusterAction{
 			ID:                   uuid.New().String(),
 			ActionChartUninstall: newUninstallAction(),
 		}
@@ -52,8 +52,8 @@ func TestChartUninstallHandler(t *testing.T) {
 		r.Error(handler.Handle(ctx, action), someError)
 	})
 
-	t.Run("namespace is missing in uninstall action", func(t *testing.T) {
-		action := &castai.ClusterAction{
+	t.Run("namespace is missing in uninstall action", func(_ *testing.T) {
+		action := &types.ClusterAction{
 			ID:                   uuid.New().String(),
 			ActionChartUninstall: newUninstallAction(),
 		}
@@ -62,8 +62,8 @@ func TestChartUninstallHandler(t *testing.T) {
 		r.Error(handler.Handle(ctx, action))
 	})
 
-	t.Run("helm release is missing in uninstall action", func(t *testing.T) {
-		action := &castai.ClusterAction{
+	t.Run("helm release is missing in uninstall action", func(_ *testing.T) {
+		action := &types.ClusterAction{
 			ID:                   uuid.New().String(),
 			ActionChartUninstall: newUninstallAction(),
 		}
@@ -73,8 +73,8 @@ func TestChartUninstallHandler(t *testing.T) {
 	})
 }
 
-func newUninstallAction() *castai.ActionChartUninstall {
-	return &castai.ActionChartUninstall{
+func newUninstallAction() *types.ActionChartUninstall {
+	return &types.ActionChartUninstall{
 		Namespace:   "test",
 		ReleaseName: "new-release",
 	}

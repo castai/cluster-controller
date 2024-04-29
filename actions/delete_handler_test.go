@@ -14,7 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic/fake"
 
-	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/types"
 )
 
 func Test_newDeleteHandler(t *testing.T) {
@@ -25,21 +25,21 @@ func Test_newDeleteHandler(t *testing.T) {
 
 	tests := map[string]struct {
 		objs   []runtime.Object
-		action *castai.ClusterAction
+		action *types.ClusterAction
 		want   int
 		err    error
 	}{
 		"should return error when action is of a different type": {
-			action: &castai.ClusterAction{
-				ActionDeleteNode: &castai.ActionDeleteNode{},
+			action: &types.ClusterAction{
+				ActionDeleteNode: &types.ActionDeleteNode{},
 			},
-			err: newUnexpectedTypeErr(&castai.ActionDeleteNode{}, &castai.ActionDelete{}),
+			err: newUnexpectedTypeErr(&types.ActionDeleteNode{}, &types.ActionDelete{}),
 		},
 		"should skip if resource not found": {
-			action: &castai.ClusterAction{
-				ActionDelete: &castai.ActionDelete{
-					ID: castai.ObjectID{
-						GroupVersionResource: castai.GroupVersionResource{
+			action: &types.ClusterAction{
+				ActionDelete: &types.ActionDelete{
+					ID: types.ObjectID{
+						GroupVersionResource: types.GroupVersionResource{
 							Group:    appsv1.SchemeGroupVersion.Group,
 							Version:  appsv1.SchemeGroupVersion.Version,
 							Resource: "deployments",
@@ -55,10 +55,10 @@ func Test_newDeleteHandler(t *testing.T) {
 			want: 1,
 		},
 		"should delete deployment": {
-			action: &castai.ClusterAction{
-				ActionDelete: &castai.ActionDelete{
-					ID: castai.ObjectID{
-						GroupVersionResource: castai.GroupVersionResource{
+			action: &types.ClusterAction{
+				ActionDelete: &types.ActionDelete{
+					ID: types.ObjectID{
+						GroupVersionResource: types.GroupVersionResource{
 							Group:    appsv1.SchemeGroupVersion.Group,
 							Version:  appsv1.SchemeGroupVersion.Version,
 							Resource: "deployments",
@@ -76,10 +76,10 @@ func Test_newDeleteHandler(t *testing.T) {
 			want: 2,
 		},
 		"should delete resource without namespace": {
-			action: &castai.ClusterAction{
-				ActionDelete: &castai.ActionDelete{
-					ID: castai.ObjectID{
-						GroupVersionResource: castai.GroupVersionResource{
+			action: &types.ClusterAction{
+				ActionDelete: &types.ActionDelete{
+					ID: types.ObjectID{
+						GroupVersionResource: types.GroupVersionResource{
 							Group:    corev1.SchemeGroupVersion.Group,
 							Version:  corev1.SchemeGroupVersion.Version,
 							Resource: "nodes",

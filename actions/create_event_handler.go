@@ -10,14 +10,14 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/types"
 )
 
-func newCreateEventHandler(log logrus.FieldLogger, clientset kubernetes.Interface) ActionHandler {
+func newCreateEventHandler(log logrus.FieldLogger, clientset kubernetes.Interface) actionHandler {
 	return &createEventHandler{
 		log:       log,
 		clientset: clientset,
@@ -29,8 +29,8 @@ type createEventHandler struct {
 	clientset kubernetes.Interface
 }
 
-func (h *createEventHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
-	req, ok := action.Data().(*castai.ActionCreateEvent)
+func (h *createEventHandler) Handle(ctx context.Context, action *types.ClusterAction) error {
+	req, ok := action.Data().(*types.ActionCreateEvent)
 	if !ok {
 		return fmt.Errorf("unexpected type %T for create event handler", action.Data())
 	}
@@ -86,7 +86,7 @@ func (h *createEventHandler) Handle(ctx context.Context, action *castai.ClusterA
 
 		_, err = h.clientset.CoreV1().
 			Events(event.Namespace).
-			Patch(ctx, similarEvent.Name, types.StrategicMergePatchType, patch, metav1.PatchOptions{})
+			Patch(ctx, similarEvent.Name, k8stypes.StrategicMergePatchType, patch, metav1.PatchOptions{})
 		if err != nil && !errors.IsNotFound(err) {
 			return fmt.Errorf("patching event for ref %v: %w", req.ObjectRef, err)
 		}

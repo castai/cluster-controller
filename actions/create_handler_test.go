@@ -15,7 +15,7 @@ import (
 	"k8s.io/client-go/dynamic/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/types"
 )
 
 func Test_newCreateHandler(t *testing.T) {
@@ -25,29 +25,29 @@ func Test_newCreateHandler(t *testing.T) {
 
 	tests := map[string]struct {
 		objs      []runtime.Object
-		action    *castai.ClusterAction
+		action    *types.ClusterAction
 		convertFn func(i map[string]interface{}) client.Object
 		err       error
 		want      *appsv1.Deployment
 	}{
 		"should return error when action is of a different type": {
-			action: &castai.ClusterAction{
-				ActionDeleteNode: &castai.ActionDeleteNode{},
+			action: &types.ClusterAction{
+				ActionDeleteNode: &types.ActionDeleteNode{},
 			},
-			err: newUnexpectedTypeErr(&castai.ActionDeleteNode{}, &castai.ActionCreate{}),
+			err: newUnexpectedTypeErr(&types.ActionDeleteNode{}, &types.ActionCreate{}),
 		},
 		"should return error when object is not provided": {
-			action: &castai.ClusterAction{
-				ActionCreate: &castai.ActionCreate{
-					GroupVersionResource: castai.GroupVersionResource{},
+			action: &types.ClusterAction{
+				ActionCreate: &types.ActionCreate{
+					GroupVersionResource: types.GroupVersionResource{},
 				},
 			},
 			err: errors.New("no object provided"),
 		},
 		"should create new deployment": {
-			action: &castai.ClusterAction{
-				ActionCreate: &castai.ActionCreate{
-					GroupVersionResource: castai.GroupVersionResource{
+			action: &types.ClusterAction{
+				ActionCreate: &types.ActionCreate{
+					GroupVersionResource: types.GroupVersionResource{
 						Group:    appsv1.SchemeGroupVersion.Group,
 						Version:  appsv1.SchemeGroupVersion.Version,
 						Resource: "deployments",
@@ -63,9 +63,9 @@ func Test_newCreateHandler(t *testing.T) {
 			},
 		},
 		"should patch already existing resource": {
-			action: &castai.ClusterAction{
-				ActionCreate: &castai.ActionCreate{
-					GroupVersionResource: castai.GroupVersionResource{
+			action: &types.ClusterAction{
+				ActionCreate: &types.ActionCreate{
+					GroupVersionResource: types.GroupVersionResource{
 						Group:    appsv1.SchemeGroupVersion.Group,
 						Version:  appsv1.SchemeGroupVersion.Version,
 						Resource: "deployments",
@@ -75,7 +75,7 @@ func Test_newCreateHandler(t *testing.T) {
 					})),
 				},
 			},
-			objs: []runtime.Object{newDeployment(func(d *appsv1.Deployment) {})},
+			objs: []runtime.Object{newDeployment(func(_ *appsv1.Deployment) {})},
 			want: newDeployment(func(d *appsv1.Deployment) {
 				d.Labels = map[string]string{"changed": "true"}
 			}),

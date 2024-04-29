@@ -8,7 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
-	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/types"
 )
 
 func TestIntegration_ChartLoader(t *testing.T) {
@@ -16,7 +16,7 @@ func TestIntegration_ChartLoader(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	chart := &castai.ChartSource{
+	chart := &types.ChartSource{
 		RepoURL: "https://castai.github.io/helm-charts",
 		Name:    "castai-cluster-controller",
 		Version: "0.4.3",

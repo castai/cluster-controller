@@ -5,16 +5,15 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"k8s.io/apimachinery/pkg/fields"
-
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/types"
 )
 
 func TestDeleteNodeHandler(t *testing.T) {
@@ -31,9 +30,9 @@ func TestDeleteNodeHandler(t *testing.T) {
 		}
 		clientset := fake.NewSimpleClientset(node)
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDeleteNode: &castai.ActionDeleteNode{
+			ActionDeleteNode: &types.ActionDeleteNode{
 				NodeName: "node1",
 			},
 		}
@@ -62,9 +61,9 @@ func TestDeleteNodeHandler(t *testing.T) {
 		}
 		clientset := fake.NewSimpleClientset(node)
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDeleteNode: &castai.ActionDeleteNode{
+			ActionDeleteNode: &types.ActionDeleteNode{
 				NodeName: "already-deleted-node",
 			},
 		}
@@ -89,15 +88,15 @@ func TestDeleteNodeHandler(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: nodeName,
 				Labels: map[string]string{
-					castai.LabelNodeID: "node-id",
+					labelNodeID: "node-id",
 				},
 			},
 		}
 		clientset := fake.NewSimpleClientset(node)
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDeleteNode: &castai.ActionDeleteNode{
+			ActionDeleteNode: &types.ActionDeleteNode{
 				NodeName: "node1",
 				NodeID:   "another-node-id",
 			},
@@ -114,7 +113,7 @@ func TestDeleteNodeHandler(t *testing.T) {
 
 		existing, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
 		r.NoError(err)
-		existing.Labels[castai.LabelNodeID] = "node-id"
+		existing.Labels[labelNodeID] = "node-id"
 	})
 
 	t.Run("delete node with pods", func(t *testing.T) {
@@ -123,9 +122,9 @@ func TestDeleteNodeHandler(t *testing.T) {
 		podName := "pod1"
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDeleteNode: &castai.ActionDeleteNode{
+			ActionDeleteNode: &types.ActionDeleteNode{
 				NodeName: nodeName,
 			},
 		}
