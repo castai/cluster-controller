@@ -2,37 +2,36 @@ package actions
 
 import (
 	"context"
-	"github.com/google/uuid"
 	"testing"
 
+	"github.com/golang/mock/gomock"
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
-	"github.com/stretchr/testify/require"
 
-	"github.com/castai/cluster-controller/castai"
-	"github.com/castai/cluster-controller/castai/mock"
+	mock_actions "github.com/castai/cluster-controller/actions/mock"
+	"github.com/castai/cluster-controller/types"
 )
 
 func TestAKSInitDataHandler(t *testing.T) {
-	r := require.New(t)
 	log := logrus.New()
 	log.SetLevel(logrus.DebugLevel)
 
-	client := mock.NewMockAPIClient(nil)
+	mockCtrl := gomock.NewController(t)
+	client := mock_actions.NewMockClient(mockCtrl)
+	client.EXPECT().SendAKSInitData(gomock.Any(), gomock.Not(gomock.Len(0)), gomock.Not(gomock.Len(0)), gomock.Any()).Return(nil)
+
 	h := sendAKSInitDataHandler{
 		log:             log,
 		client:          client,
 		cloudConfigPath: "../testdata/aks/ovf-env.xml",
 		baseDir:         "../testdata/aks",
 	}
-
-	action := &castai.ClusterAction{
-		ID:                    uuid.New().String(),
-		ActionSendAKSInitData: &castai.ActionSendAKSInitData{},
-	}
 	ctx := context.Background()
-	err := h.Handle(ctx, action)
-
-	r.NoError(err)
-	r.NotEmpty(client.AKSInitDataReq.CloudConfigBase64)
-	r.NotEmpty(client.AKSInitDataReq.ProtectedSettingsBase64)
+	err := h.Handle(ctx, &types.ClusterAction{
+		ID:                    uuid.New().String(),
+		ActionSendAKSInitData: &types.ActionSendAKSInitData{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 }

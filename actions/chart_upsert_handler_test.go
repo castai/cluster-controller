@@ -2,18 +2,18 @@ package actions
 
 import (
 	"context"
-	"github.com/google/uuid"
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v3/pkg/release"
 	helmdriver "helm.sh/helm/v3/pkg/storage/driver"
 
-	"github.com/castai/cluster-controller/castai"
 	"github.com/castai/cluster-controller/helm"
 	mock_helm "github.com/castai/cluster-controller/helm/mock"
+	"github.com/castai/cluster-controller/types"
 )
 
 func TestChartUpsertHandler(t *testing.T) {
@@ -24,8 +24,8 @@ func TestChartUpsertHandler(t *testing.T) {
 
 	handler := newChartUpsertHandler(logrus.New(), helmMock)
 
-	t.Run("install chart given release is not found", func(t *testing.T) {
-		action := &castai.ClusterAction{
+	t.Run("install chart given release is not found", func(_ *testing.T) {
+		action := &types.ClusterAction{
 			ID:                uuid.New().String(),
 			ActionChartUpsert: chartUpsertAction(),
 		}
@@ -45,8 +45,8 @@ func TestChartUpsertHandler(t *testing.T) {
 		r.NoError(handler.Handle(ctx, action))
 	})
 
-	t.Run("upgrade chart given release is found", func(t *testing.T) {
-		action := &castai.ClusterAction{
+	t.Run("upgrade chart given release is found", func(_ *testing.T) {
+		action := &types.ClusterAction{
 			ID:                uuid.New().String(),
 			ActionChartUpsert: chartUpsertAction(),
 		}
@@ -75,8 +75,8 @@ func TestChartUpsertHandler(t *testing.T) {
 		r.NoError(handler.Handle(ctx, action))
 	})
 
-	t.Run("rollback previous release before upgrade", func(t *testing.T) {
-		action := &castai.ClusterAction{
+	t.Run("rollback previous release before upgrade", func(_ *testing.T) {
+		action := &types.ClusterAction{
 			ID:                uuid.New().String(),
 			ActionChartUpsert: chartUpsertAction(),
 		}
@@ -103,12 +103,12 @@ func TestChartUpsertHandler(t *testing.T) {
 	})
 }
 
-func chartUpsertAction() *castai.ActionChartUpsert {
-	return &castai.ActionChartUpsert{
+func chartUpsertAction() *types.ActionChartUpsert {
+	return &types.ActionChartUpsert{
 		Namespace:       "test",
 		ReleaseName:     "new-release",
 		ValuesOverrides: map[string]string{"image.tag": "1.0.0"},
-		ChartSource: castai.ChartSource{
+		ChartSource: types.ChartSource{
 			RepoURL: "https://my-charts.repo",
 			Name:    "super-chart",
 			Version: "1.5.0",

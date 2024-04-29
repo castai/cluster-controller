@@ -17,7 +17,7 @@ import (
 	"helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/repo"
 
-	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/types"
 	"github.com/castai/cluster-controller/waitext"
 )
 
@@ -26,7 +26,7 @@ const (
 )
 
 type ChartLoader interface {
-	Load(ctx context.Context, c *castai.ChartSource) (*chart.Chart, error)
+	Load(ctx context.Context, c *types.ChartSource) (*chart.Chart, error)
 }
 
 func NewChartLoader(log logrus.FieldLogger) ChartLoader {
@@ -38,7 +38,7 @@ type remoteChartLoader struct {
 	log logrus.FieldLogger
 }
 
-func (cl *remoteChartLoader) Load(ctx context.Context, c *castai.ChartSource) (*chart.Chart, error) {
+func (cl *remoteChartLoader) Load(ctx context.Context, c *types.ChartSource) (*chart.Chart, error) {
 	var res *chart.Chart
 
 	err := waitext.Retry(

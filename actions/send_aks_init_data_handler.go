@@ -18,10 +18,10 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/types"
 )
 
-func newSendAKSInitDataHandler(log logrus.FieldLogger, client castai.ActionsClient) ActionHandler {
+func newSendAKSInitDataHandler(log logrus.FieldLogger, client Client) actionHandler {
 	return &sendAKSInitDataHandler{
 		log:    log,
 		client: client,
@@ -33,13 +33,13 @@ func newSendAKSInitDataHandler(log logrus.FieldLogger, client castai.ActionsClie
 
 type sendAKSInitDataHandler struct {
 	log    logrus.FieldLogger
-	client castai.ActionsClient
+	client Client
 
 	baseDir         string
 	cloudConfigPath string
 }
 
-func (s *sendAKSInitDataHandler) Handle(ctx context.Context, _ *castai.ClusterAction) error {
+func (s *sendAKSInitDataHandler) Handle(ctx context.Context, _ *types.ClusterAction) error {
 	cloudConfig, err := s.readCloudConfigBase64(s.cloudConfigPath)
 	if err != nil {
 		return fmt.Errorf("reading cloud config: %w", err)
@@ -56,10 +56,7 @@ func (s *sendAKSInitDataHandler) Handle(ctx context.Context, _ *castai.ClusterAc
 	if err != nil {
 		return fmt.Errorf("protected settings decrypt failed: %w", err)
 	}
-	return s.client.SendAKSInitData(ctx, &castai.AKSInitDataRequest{
-		CloudConfigBase64:       string(cloudConfig),
-		ProtectedSettingsBase64: base64.StdEncoding.EncodeToString(protectedSettings),
-	})
+	return s.client.SendAKSInitData(ctx, string(cloudConfig), base64.StdEncoding.EncodeToString(protectedSettings), "")
 }
 
 // readCloudConfigBase64 extracts base64 encoded cloud config content from XML file.
@@ -82,7 +79,7 @@ func (s *sendAKSInitDataHandler) readCloudConfigBase64(cloudConfigPath string) (
 // findSettingsPath searches for custom script settings file path which contains encrypted init data env variables.
 func (s *sendAKSInitDataHandler) findSettingsPath(baseDir string) (string, error) {
 	var res string
-	err := filepath.WalkDir(baseDir, func(path string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(baseDir, func(path string, _ fs.DirEntry, err error) error {
 		if strings.Contains(path, "Microsoft.Azure.Extensions.CustomScript-") && strings.HasSuffix(path, "settings") {
 			res = path
 			return io.EOF

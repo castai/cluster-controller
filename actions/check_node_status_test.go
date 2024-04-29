@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
@@ -16,7 +15,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	k8stest "k8s.io/client-go/testing"
 
-	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/types"
 )
 
 func TestCheckStatus_Deleted(t *testing.T) {
@@ -30,7 +29,7 @@ func TestCheckStatus_Deleted(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: nodeName,
 				Labels: map[string]string{
-					castai.LabelNodeID: "old-node-id",
+					labelNodeID: "old-node-id",
 				},
 			},
 		}
@@ -41,11 +40,11 @@ func TestCheckStatus_Deleted(t *testing.T) {
 			clientset: clientset,
 		}
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
+			ActionCheckNodeStatus: &types.ActionCheckNodeStatus{
 				NodeName:   "node1",
-				NodeStatus: castai.ActionCheckNodeStatus_DELETED,
+				NodeStatus: types.ActionCheckNodeStatus_DELETED,
 				NodeID:     "old-node-id",
 			},
 		}
@@ -69,11 +68,11 @@ func TestCheckStatus_Deleted(t *testing.T) {
 			clientset: clientset,
 		}
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
+			ActionCheckNodeStatus: &types.ActionCheckNodeStatus{
 				NodeName:   "node1",
-				NodeStatus: castai.ActionCheckNodeStatus_DELETED,
+				NodeStatus: types.ActionCheckNodeStatus_DELETED,
 				NodeID:     "old-node-id",
 			},
 		}
@@ -91,11 +90,11 @@ func TestCheckStatus_Deleted(t *testing.T) {
 			clientset: clientset,
 		}
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
+			ActionCheckNodeStatus: &types.ActionCheckNodeStatus{
 				NodeName:   "node1",
-				NodeStatus: castai.ActionCheckNodeStatus_DELETED,
+				NodeStatus: types.ActionCheckNodeStatus_DELETED,
 				NodeID:     "old-node-id",
 			},
 		}
@@ -110,7 +109,7 @@ func TestCheckStatus_Deleted(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "node1",
 				Labels: map[string]string{
-					castai.LabelNodeID: "old-node-id",
+					labelNodeID: "old-node-id",
 				},
 			},
 		}
@@ -121,11 +120,11 @@ func TestCheckStatus_Deleted(t *testing.T) {
 			clientset: clientset,
 		}
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
+			ActionCheckNodeStatus: &types.ActionCheckNodeStatus{
 				NodeName:   "node1",
-				NodeStatus: castai.ActionCheckNodeStatus_DELETED,
+				NodeStatus: types.ActionCheckNodeStatus_DELETED,
 				NodeID:     "im-a-different-node",
 			},
 		}
@@ -157,11 +156,11 @@ func TestCheckStatus_Ready(t *testing.T) {
 		}()
 
 		timeout := int32(1)
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
+			ActionCheckNodeStatus: &types.ActionCheckNodeStatus{
 				NodeName:           "node1",
-				NodeStatus:         castai.ActionCheckNodeStatus_READY,
+				NodeStatus:         types.ActionCheckNodeStatus_READY,
 				WaitTimeoutSeconds: &timeout,
 			},
 		}
@@ -194,11 +193,11 @@ func TestCheckStatus_Ready(t *testing.T) {
 		}
 
 		timeout := int32(60)
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
+			ActionCheckNodeStatus: &types.ActionCheckNodeStatus{
 				NodeName:           "node1",
-				NodeStatus:         castai.ActionCheckNodeStatus_READY,
+				NodeStatus:         types.ActionCheckNodeStatus_READY,
 				WaitTimeoutSeconds: &timeout,
 			},
 		}
@@ -249,11 +248,11 @@ func TestCheckStatus_Ready(t *testing.T) {
 		}
 
 		timeout := int32(60)
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
+			ActionCheckNodeStatus: &types.ActionCheckNodeStatus{
 				NodeName:           "node1",
-				NodeStatus:         castai.ActionCheckNodeStatus_READY,
+				NodeStatus:         types.ActionCheckNodeStatus_READY,
 				WaitTimeoutSeconds: &timeout,
 			},
 		}
@@ -302,11 +301,11 @@ func TestCheckStatus_Ready(t *testing.T) {
 			clientset: clientset,
 		}
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
+			ActionCheckNodeStatus: &types.ActionCheckNodeStatus{
 				NodeName:   "node1",
-				NodeStatus: castai.ActionCheckNodeStatus_READY,
+				NodeStatus: types.ActionCheckNodeStatus_READY,
 			},
 		}
 
@@ -322,7 +321,7 @@ func TestCheckStatus_Ready(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: nodeName,
 				Labels: map[string]string{
-					castai.LabelNodeID: "old-node-id",
+					labelNodeID: "old-node-id",
 				},
 			},
 			Status: v1.NodeStatus{
@@ -342,11 +341,11 @@ func TestCheckStatus_Ready(t *testing.T) {
 		}
 
 		timeout := int32(60)
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
+			ActionCheckNodeStatus: &types.ActionCheckNodeStatus{
 				NodeName:           "node1",
-				NodeStatus:         castai.ActionCheckNodeStatus_READY,
+				NodeStatus:         types.ActionCheckNodeStatus_READY,
 				WaitTimeoutSeconds: &timeout,
 				NodeID:             "new-node-id",
 			},
@@ -371,7 +370,7 @@ func TestCheckStatus_Ready(t *testing.T) {
 
 			time.Sleep(1 * time.Second)
 			newNode := node.DeepCopy()
-			newNode.Labels[castai.LabelNodeID] = "new-node-id"
+			newNode.Labels[labelNodeID] = "new-node-id"
 
 			_, _ = clientset.CoreV1().Nodes().Create(context.Background(), newNode, metav1.CreateOptions{})
 

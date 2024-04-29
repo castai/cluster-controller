@@ -2,16 +2,16 @@ package actions
 
 import (
 	"context"
-	"github.com/google/uuid"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/types"
 )
 
 func TestCheckNodeDeletedHandler(t *testing.T) {
@@ -20,7 +20,7 @@ func TestCheckNodeDeletedHandler(t *testing.T) {
 	log := logrus.New()
 	log.SetLevel(logrus.DebugLevel)
 
-	t.Run("return error when node is not deleted", func(t *testing.T) {
+	t.Run("return error when node is not deleted", func(_ *testing.T) {
 		nodeName := "node1"
 		node := &v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
@@ -35,16 +35,16 @@ func TestCheckNodeDeletedHandler(t *testing.T) {
 			cfg:       checkNodeDeletedConfig{},
 		}
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID:                     uuid.New().String(),
-			ActionCheckNodeDeleted: &castai.ActionCheckNodeDeleted{NodeName: "node1"},
+			ActionCheckNodeDeleted: &types.ActionCheckNodeDeleted{NodeName: "node1"},
 		}
 
 		err := h.Handle(context.Background(), action)
 		r.EqualError(err, "node is not deleted")
 	})
 
-	t.Run("handle check successfully when node is not found", func(t *testing.T) {
+	t.Run("handle check successfully when node is not found", func(_ *testing.T) {
 		clientset := fake.NewSimpleClientset()
 
 		h := checkNodeDeletedHandler{
@@ -53,9 +53,9 @@ func TestCheckNodeDeletedHandler(t *testing.T) {
 			cfg:       checkNodeDeletedConfig{},
 		}
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID:                     uuid.New().String(),
-			ActionCheckNodeDeleted: &castai.ActionCheckNodeDeleted{NodeName: "node1"},
+			ActionCheckNodeDeleted: &types.ActionCheckNodeDeleted{NodeName: "node1"},
 		}
 
 		err := h.Handle(context.Background(), action)

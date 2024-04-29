@@ -21,7 +21,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/kubectl/pkg/drain"
 
-	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/types"
 	"github.com/castai/cluster-controller/waitext"
 )
 
@@ -40,7 +40,7 @@ type drainNodeConfig struct {
 	skipDeletedTimeoutSeconds     int
 }
 
-func newDrainNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface, castNamespace string) ActionHandler {
+func newDrainNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface, castNamespace string) actionHandler {
 	return &drainNodeHandler{
 		log:       log,
 		clientset: clientset,
@@ -58,7 +58,7 @@ func newDrainNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface,
 
 // getDrainTimeout returns drain timeout adjusted to action creation time.
 // the result is clamped between 0s and the requested timeout.
-func (h *drainNodeHandler) getDrainTimeout(action *castai.ClusterAction) time.Duration {
+func (h *drainNodeHandler) getDrainTimeout(action *types.ClusterAction) time.Duration {
 	timeSinceCreated := time.Since(action.CreatedAt)
 	drainTimeout := time.Duration(action.ActionDrainNode.DrainTimeoutSeconds) * time.Second
 
@@ -74,8 +74,8 @@ type drainNodeHandler struct {
 	cfg       drainNodeConfig
 }
 
-func (h *drainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
-	req, ok := action.Data().(*castai.ActionDrainNode)
+func (h *drainNodeHandler) Handle(ctx context.Context, action *types.ClusterAction) error {
+	req, ok := action.Data().(*types.ActionDrainNode)
 	if !ok {
 		return fmt.Errorf("unexpected type %T for drain handler", action.Data())
 	}
@@ -83,7 +83,7 @@ func (h *drainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	log := h.log.WithFields(logrus.Fields{
 		"node_name":      req.NodeName,
 		"node_id":        req.NodeID,
-		"action":         reflect.TypeOf(action.Data().(*castai.ActionDrainNode)).String(),
+		"action":         reflect.TypeOf(action.Data().(*types.ActionDrainNode)).String(),
 		actionIDLogField: action.ID,
 	})
 

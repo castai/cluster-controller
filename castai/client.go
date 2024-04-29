@@ -12,6 +12,7 @@ import (
 	"golang.org/x/net/http2"
 
 	"github.com/castai/cluster-controller/config"
+	"github.com/castai/cluster-controller/types"
 )
 
 const (
@@ -19,14 +20,6 @@ const (
 	headerUserAgent         = "User-Agent"
 	headerKubernetesVersion = "X-K8s-Version"
 )
-
-// ActionsClient lists functions used by actions package.
-// TODO: move interface into actions package.
-type ActionsClient interface {
-	GetActions(ctx context.Context, k8sVersion string) ([]*ClusterAction, error)
-	AckAction(ctx context.Context, actionID string, req *AckClusterActionRequest) error
-	SendAKSInitData(ctx context.Context, req *AKSInitDataRequest) error
-}
 
 // Client talks to Cast AI. It can poll and acknowledge actions
 // and also inject logs.
@@ -95,7 +88,12 @@ func createHTTPTransport() (*http.Transport, error) {
 	return t1, nil
 }
 
-func (c *Client) SendAKSInitData(ctx context.Context, req *AKSInitDataRequest) error {
+func (c *Client) SendAKSInitData(ctx context.Context, cloudConfigBase64, protectedSettingsBase64, architecture string) error {
+	req := &aksInitDataRequest{
+		CloudConfigBase64:       cloudConfigBase64,
+		ProtectedSettingsBase64: protectedSettingsBase64,
+		Architecture:            architecture,
+	}
 	resp, err := c.rest.R().
 		SetBody(req).
 		SetContext(ctx).
@@ -137,8 +135,8 @@ func (c *Client) SendLog(ctx context.Context, e *logEntry) error {
 	return nil
 }
 
-func (c *Client) GetActions(ctx context.Context, k8sVersion string) ([]*ClusterAction, error) {
-	res := &GetClusterActionsResponse{}
+func (c *Client) GetActions(ctx context.Context, k8sVersion string) ([]*types.ClusterAction, error) {
+	res := &getClusterActionsResponse{}
 	resp, err := c.rest.R().
 		SetContext(ctx).
 		SetResult(res).
@@ -153,7 +151,10 @@ func (c *Client) GetActions(ctx context.Context, k8sVersion string) ([]*ClusterA
 	return res.Items, nil
 }
 
-func (c *Client) AckAction(ctx context.Context, actionID string, req *AckClusterActionRequest) error {
+func (c *Client) AckAction(ctx context.Context, actionID string, errMessage *string) error {
+	req := &ackClusterActionRequest{
+		Error: errMessage,
+	}
 	resp, err := c.rest.R().
 		SetContext(ctx).
 		SetBody(req).

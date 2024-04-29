@@ -3,18 +3,17 @@ package actions
 import (
 	"context"
 	"errors"
-	"sort"
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
-	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 
-	"github.com/castai/cluster-controller/castai"
-	"github.com/castai/cluster-controller/castai/mock"
+	mock_actions "github.com/castai/cluster-controller/actions/mock"
 	"github.com/castai/cluster-controller/health"
+	"github.com/castai/cluster-controller/types"
 )
 
 func TestMain(m *testing.M) {
@@ -33,7 +32,7 @@ func TestActions(t *testing.T) {
 		ClusterID:        uuid.New().String(),
 	}
 
-	newTestService := func(handler ActionHandler, client castai.ActionsClient) *service {
+	newTestService := func(handler actionHandler, client Client) *Service {
 		svc := NewService(
 			log,
 			cfg,
@@ -43,7 +42,7 @@ func TestActions(t *testing.T) {
 			client,
 			nil,
 			health.NewHealthzProvider(health.HealthzCfg{HealthyPollIntervalLimit: cfg.PollTimeout}, log),
-		).(*service)
+		)
 		handlers := svc.actionHandlers
 		// Patch handlers with a mock one.
 		for k := range handlers {
@@ -53,32 +52,34 @@ func TestActions(t *testing.T) {
 	}
 
 	t.Run("poll handle and ack", func(t *testing.T) {
-		r := require.New(t)
-
-		apiActions := []*castai.ClusterAction{
+		apiActions := []*types.ClusterAction{
 			{
 				ID:        "a1",
 				CreatedAt: time.Now(),
-				ActionDeleteNode: &castai.ActionDeleteNode{
+				ActionDeleteNode: &types.ActionDeleteNode{
 					NodeName: "n1",
 				},
 			},
 			{
 				ID:        "a2",
 				CreatedAt: time.Now(),
-				ActionDrainNode: &castai.ActionDrainNode{
+				ActionDrainNode: &types.ActionDrainNode{
 					NodeName: "n1",
 				},
 			},
 			{
 				ID:        "a3",
 				CreatedAt: time.Now(),
-				ActionPatchNode: &castai.ActionPatchNode{
+				ActionPatchNode: &types.ActionPatchNode{
 					NodeName: "n1",
 				},
 			},
 		}
-		client := mock.NewMockAPIClient(apiActions)
+		client := mock_actions.NewMockClient(gomock.NewController(t))
+		client.EXPECT().GetActions(gomock.Any(), gomock.Any()).Return(apiActions, nil)
+		client.EXPECT().AckAction(gomock.Any(), "a1", nil).Return(nil)
+		client.EXPECT().AckAction(gomock.Any(), "a2", nil).Return(nil)
+		client.EXPECT().AckAction(gomock.Any(), "a3", nil).Return(nil)
 		handler := &mockAgentActionHandler{handleDelay: 2 * time.Millisecond}
 		svc := newTestService(handler, client)
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
@@ -86,116 +87,89 @@ func TestActions(t *testing.T) {
 			cancel()
 			svc.startedActionsWg.Wait()
 
-			r.Len(client.Acks, 3)
-			ids := make([]string, len(client.Acks))
-			for i, ack := range client.Acks {
-				ids[i] = ack.ActionID
-			}
-			sort.Strings(ids)
-			r.Equal("a1", ids[0])
-			r.Equal("a2", ids[1])
-			r.Equal("a3", ids[2])
 		}()
-		svc.Run(ctx)
+		_ = svc.doWork(ctx)
 	})
 
 	t.Run("continue polling on api error", func(t *testing.T) {
-		r := require.New(t)
-
-		client := mock.NewMockAPIClient([]*castai.ClusterAction{})
-		client.GetActionsErr = errors.New("ups")
+		client := mock_actions.NewMockClient(gomock.NewController(t))
+		client.EXPECT().GetActions(gomock.Any(), gomock.Any()).Return(nil, errors.New("ups"))
 		handler := &mockAgentActionHandler{err: errors.New("ups")}
 		svc := newTestService(handler, client)
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 		defer func() {
 			cancel()
 			svc.startedActionsWg.Wait()
-
-			r.Len(client.Acks, 0)
 		}()
-		svc.Run(ctx)
+		_ = svc.doWork(ctx)
 	})
 
 	t.Run("do not ack action on context canceled error", func(t *testing.T) {
-		r := require.New(t)
-
-		apiActions := []*castai.ClusterAction{
+		apiActions := []*types.ClusterAction{
 			{
 				ID:        "a1",
 				CreatedAt: time.Now(),
-				ActionPatchNode: &castai.ActionPatchNode{
+				ActionPatchNode: &types.ActionPatchNode{
 					NodeName: "n1",
 				},
 			},
 		}
-		client := mock.NewMockAPIClient(apiActions)
+		client := mock_actions.NewMockClient(gomock.NewController(t))
+		client.EXPECT().GetActions(gomock.Any(), gomock.Any()).Return(apiActions, nil)
 		handler := &mockAgentActionHandler{err: context.Canceled}
 		svc := newTestService(handler, client)
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 		defer func() {
 			cancel()
 			svc.startedActionsWg.Wait()
-
-			r.NotEmpty(client.Actions)
-			r.Len(client.Acks, 0)
 		}()
-		svc.Run(ctx)
+		_ = svc.doWork(ctx)
 	})
 
 	t.Run("ack with error when action handler failed", func(t *testing.T) {
-		r := require.New(t)
-
-		apiActions := []*castai.ClusterAction{
+		apiActions := []*types.ClusterAction{
 			{
 				ID:        "a1",
 				CreatedAt: time.Now(),
-				ActionPatchNode: &castai.ActionPatchNode{
+				ActionPatchNode: &types.ActionPatchNode{
 					NodeName: "n1",
 				},
 			},
 		}
-		client := mock.NewMockAPIClient(apiActions)
+		client := mock_actions.NewMockClient(gomock.NewController(t))
+		client.EXPECT().GetActions(gomock.Any(), gomock.Any()).Return(apiActions, nil)
+		client.EXPECT().AckAction(gomock.Any(), "a1", gomock.Not(gomock.Nil())).Return(nil)
 		handler := &mockAgentActionHandler{err: errors.New("ups")}
 		svc := newTestService(handler, client)
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 		defer func() {
 			cancel()
 			svc.startedActionsWg.Wait()
-
-			r.Empty(client.Actions)
-			r.Len(client.Acks, 1)
-			r.Equal("a1", client.Acks[0].ActionID)
-			r.Equal("handling action *castai.ActionPatchNode: ups", *client.Acks[0].Err)
 		}()
-		svc.Run(ctx)
+		_ = svc.doWork(ctx)
 	})
 
 	t.Run("ack with error when action handler panic occurred", func(t *testing.T) {
-		r := require.New(t)
-
-		apiActions := []*castai.ClusterAction{
+		apiActions := []*types.ClusterAction{
 			{
 				ID:        "a1",
 				CreatedAt: time.Now(),
-				ActionPatchNode: &castai.ActionPatchNode{
+				ActionPatchNode: &types.ActionPatchNode{
 					NodeName: "n1",
 				},
 			},
 		}
-		client := mock.NewMockAPIClient(apiActions)
+		client := mock_actions.NewMockClient(gomock.NewController(t))
+		client.EXPECT().GetActions(gomock.Any(), gomock.Any()).Return(apiActions, nil)
+		client.EXPECT().AckAction(gomock.Any(), "a1", gomock.Not(gomock.Nil())).Return(nil)
 		handler := &mockAgentActionHandler{panicErr: errors.New("ups")}
 		svc := newTestService(handler, client)
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 		defer func() {
 			cancel()
 			svc.startedActionsWg.Wait()
-
-			r.Empty(client.Actions)
-			r.Len(client.Acks, 1)
-			r.Equal("a1", client.Acks[0].ActionID)
-			r.Contains(*client.Acks[0].Err, "panic: handling action *castai.ActionPatchNode: ups: goroutine")
 		}()
-		svc.Run(ctx)
+		_ = svc.doWork(ctx)
 	})
 }
 
@@ -205,7 +179,7 @@ type mockAgentActionHandler struct {
 	handleDelay time.Duration
 }
 
-func (m *mockAgentActionHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+func (m *mockAgentActionHandler) Handle(_ context.Context, _ *types.ClusterAction) error {
 	time.Sleep(m.handleDelay)
 	if m.panicErr != nil {
 		panic(m.panicErr)

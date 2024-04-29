@@ -2,9 +2,9 @@ package actions
 
 import (
 	"context"
-	"github.com/google/uuid"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
@@ -12,7 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/types"
 )
 
 func TestDisconnectClusterHandler(t *testing.T) {
@@ -27,9 +27,9 @@ func TestDisconnectClusterHandler(t *testing.T) {
 	}
 	clientset := fake.NewSimpleClientset(node)
 
-	action := &castai.ClusterAction{
+	action := &types.ClusterAction{
 		ID:                      uuid.New().String(),
-		ActionDisconnectCluster: &castai.ActionDisconnectCluster{},
+		ActionDisconnectCluster: &types.ActionDisconnectCluster{},
 	}
 	handler := newDisconnectClusterHandler(logrus.New(), clientset)
 

@@ -12,28 +12,28 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/types"
 )
 
 func TestCreateEvent(t *testing.T) {
 	r := require.New(t)
-	id := types.UID(uuid.New().String())
+	id := k8stypes.UID(uuid.New().String())
 
 	tests := []struct {
 		name          string
-		action        *castai.ClusterAction
+		action        *types.ClusterAction
 		actionCount   int
 		object        runtime.Object
 		expectedEvent *corev1.Event
 	}{
 		{
 			name: "create single pod event",
-			action: &castai.ClusterAction{
+			action: &types.ClusterAction{
 				ID: uuid.New().String(),
-				ActionCreateEvent: &castai.ActionCreateEvent{
+				ActionCreateEvent: &types.ActionCreateEvent{
 					Reporter:  "autoscaler.cast.ai",
 					ObjectRef: podObjReference(testPod(id)),
 					EventTime: time.Now(),
@@ -57,9 +57,9 @@ func TestCreateEvent(t *testing.T) {
 		},
 		{
 			name: "create several pod events",
-			action: &castai.ClusterAction{
+			action: &types.ClusterAction{
 				ID: "",
-				ActionCreateEvent: &castai.ActionCreateEvent{
+				ActionCreateEvent: &types.ActionCreateEvent{
 					Reporter:  "provisioning.cast.ai",
 					ObjectRef: podObjReference(testPod(id)),
 					EventTime: time.Now(),
@@ -83,7 +83,7 @@ func TestCreateEvent(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
+		t.Run(test.name, func(_ *testing.T) {
 			clientSet := fake.NewSimpleClientset(test.object)
 			h := createEventHandler{
 				log:       logrus.New(),
@@ -115,7 +115,7 @@ func TestCreateEvent(t *testing.T) {
 	}
 }
 
-func testPod(id types.UID) *corev1.Pod {
+func testPod(id k8stypes.UID) *corev1.Pod {
 	return &corev1.Pod{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pod",

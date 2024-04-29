@@ -13,7 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/types"
 )
 
 func TestPatchNodeHandler(t *testing.T) {
@@ -22,7 +22,7 @@ func TestPatchNodeHandler(t *testing.T) {
 	log := logrus.New()
 	log.SetLevel(logrus.DebugLevel)
 
-	t.Run("patch successfully", func(t *testing.T) {
+	t.Run("patch successfully", func(_ *testing.T) {
 		nodeName := "node1"
 		node := &v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
@@ -56,9 +56,9 @@ func TestPatchNodeHandler(t *testing.T) {
 			clientset: clientset,
 		}
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionPatchNode: &castai.ActionPatchNode{
+			ActionPatchNode: &types.ActionPatchNode{
 				NodeName: "node1",
 				Labels: map[string]string{
 					"-l1": "",
@@ -68,7 +68,7 @@ func TestPatchNodeHandler(t *testing.T) {
 					"-a1": "",
 					"a2":  "",
 				},
-				Taints: []castai.NodeTaint{
+				Taints: []types.NodeTaint{
 					{
 						Key:    "t3",
 						Value:  "t3",
@@ -111,7 +111,7 @@ func TestPatchNodeHandler(t *testing.T) {
 		r.Equal(action.ActionPatchNode.Capacity["foo"], n.Status.Capacity["foo"])
 	})
 
-	t.Run("skip patch when node not found", func(t *testing.T) {
+	t.Run("skip patch when node not found", func(_ *testing.T) {
 		nodeName := "node1"
 		node := &v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
@@ -120,9 +120,9 @@ func TestPatchNodeHandler(t *testing.T) {
 		}
 		clientset := fake.NewSimpleClientset(node)
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionPatchNode: &castai.ActionPatchNode{
+			ActionPatchNode: &types.ActionPatchNode{
 				NodeName: "already-deleted-node",
 			},
 		}
@@ -138,7 +138,7 @@ func TestPatchNodeHandler(t *testing.T) {
 		r.NoError(err)
 	})
 
-	t.Run("cordoning node", func(t *testing.T) {
+	t.Run("cordoning node", func(_ *testing.T) {
 		nodeName := "node1"
 		node := &v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
@@ -155,9 +155,9 @@ func TestPatchNodeHandler(t *testing.T) {
 			clientset: clientset,
 		}
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionPatchNode: &castai.ActionPatchNode{
+			ActionPatchNode: &types.ActionPatchNode{
 				NodeName:      "node1",
 				Unschedulable: lo.ToPtr(true),
 			},

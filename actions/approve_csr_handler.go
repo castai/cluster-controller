@@ -11,8 +11,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/castai/cluster-controller/castai"
 	"github.com/castai/cluster-controller/csr"
+	"github.com/castai/cluster-controller/types"
 	"github.com/castai/cluster-controller/waitext"
 )
 
@@ -20,7 +20,7 @@ const (
 	approveCSRTimeout = 4 * time.Minute
 )
 
-func newApproveCSRHandler(log logrus.FieldLogger, clientset kubernetes.Interface) ActionHandler {
+func newApproveCSRHandler(log logrus.FieldLogger, clientset kubernetes.Interface) actionHandler {
 	return &approveCSRHandler{
 		log:                    log,
 		clientset:              clientset,
@@ -36,15 +36,15 @@ type approveCSRHandler struct {
 	csrFetchInterval       time.Duration
 }
 
-func (h *approveCSRHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
-	req, ok := action.Data().(*castai.ActionApproveCSR)
+func (h *approveCSRHandler) Handle(ctx context.Context, action *types.ClusterAction) error {
+	req, ok := action.Data().(*types.ActionApproveCSR)
 	if !ok {
 		return fmt.Errorf("unexpected type %T for approve csr handler", action.Data())
 	}
 	log := h.log.WithFields(logrus.Fields{
 		"node_name":      req.NodeName,
 		"node_id":        req.NodeID,
-		"type":           reflect.TypeOf(action.Data().(*castai.ActionApproveCSR)).String(),
+		"type":           reflect.TypeOf(action.Data().(*types.ActionApproveCSR)).String(),
 		actionIDLogField: action.ID,
 	})
 
@@ -67,7 +67,7 @@ func (h *approveCSRHandler) Handle(ctx context.Context, action *castai.ClusterAc
 		b,
 		waitext.Forever,
 		func(ctx context.Context) (bool, error) {
-			return true, h.handle(ctx, log, cert)
+			return true, h.handleCert(ctx, log, cert)
 		},
 		func(err error) {
 			log.Warnf("csr approval failed, will retry: %v", err)
@@ -75,7 +75,7 @@ func (h *approveCSRHandler) Handle(ctx context.Context, action *castai.ClusterAc
 	)
 }
 
-func (h *approveCSRHandler) handle(ctx context.Context, log logrus.FieldLogger, cert *csr.Certificate) (reterr error) {
+func (h *approveCSRHandler) handleCert(ctx context.Context, log logrus.FieldLogger, cert *csr.Certificate) (reterr error) {
 	// Since this new csr may be denied we need to delete it.
 	log.Debug("deleting old csr")
 	if err := csr.DeleteCertificate(ctx, h.clientset, cert); err != nil {
@@ -136,7 +136,7 @@ func (h *approveCSRHandler) getInitialNodeCSR(ctx context.Context, log logrus.Fi
 		ctx,
 		b,
 		3,
-		func(ctx context.Context) (bool, error) {
+		func(_ context.Context) (bool, error) {
 			cert, err = poll()
 			if errors.Is(err, context.DeadlineExceeded) {
 				return false, err

@@ -13,7 +13,7 @@ import (
 	apitypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 
-	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/types"
 )
 
 type patchHandler struct {
@@ -21,15 +21,15 @@ type patchHandler struct {
 	client dynamic.Interface
 }
 
-func newPatchHandler(log logrus.FieldLogger, client dynamic.Interface) ActionHandler {
+func newPatchHandler(log logrus.FieldLogger, client dynamic.Interface) actionHandler {
 	return &patchHandler{
 		log:    log,
 		client: client,
 	}
 }
 
-func (h *patchHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
-	req, ok := action.Data().(*castai.ActionPatch)
+func (h *patchHandler) Handle(ctx context.Context, action *types.ClusterAction) error {
+	req, ok := action.Data().(*types.ActionPatch)
 	if !ok {
 		return newUnexpectedTypeErr(action.Data(), req)
 	}
