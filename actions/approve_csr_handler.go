@@ -239,6 +239,13 @@ func (h *approveCSRHandler) StopAutoApprove() {
 	h.cancelAutoApprove = nil
 }
 
+func (h *approveCSRHandler) getCancelAutoApprove() context.CancelFunc {
+	h.m.Lock()
+	defer h.m.Unlock()
+
+	return h.cancelAutoApprove
+}
+
 func newApproveCSRExponentialBackoff() wait.Backoff {
 	b := waitext.DefaultExponentialBackoff()
 	b.Factor = 2

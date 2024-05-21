@@ -252,11 +252,11 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 		err := h.Handle(ctx, actionRunAutoApprove)
 		time.Sleep(time.Second)
 		r.NoError(err)
-		r.NotNil(h.cancelAutoApprove)
+		r.NotNil(h.getCancelAutoApprove())
 		err = h.Handle(ctx, actionStopAutoApprove)
 		time.Sleep(time.Second)
 		r.NoError(err)
-		r.Nil(h.cancelAutoApprove)
+		r.Nil(h.getCancelAutoApprove())
 	})
 
 	t.Run("watch error", func(t *testing.T) {
@@ -285,7 +285,7 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 		err := h.Handle(ctx, actionRunAutoApprove)
 		time.Sleep(time.Second)
 		r.Nil(err)
-		r.Nil(h.cancelAutoApprove)
+		r.Nil(h.getCancelAutoApprove())
 	})
 
 	t.Run("enable auto-approve + approve", func(t *testing.T) {
@@ -344,7 +344,7 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 		err := h.Handle(ctx, actionRunAutoApprove)
 		time.Sleep(time.Millisecond)
 		r.NoError(err)
-		r.NotNil(h.cancelAutoApprove)
+		r.NotNil(h.getCancelAutoApprove())
 		watcher.Add(csrRes)
 
 		select {
@@ -395,7 +395,7 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 		err := h.Handle(ctx, actionRunAutoApprove)
 		time.Sleep(time.Millisecond)
 		r.NoError(err)
-		r.NotNil(h.cancelAutoApprove)
+		r.NotNil(h.getCancelAutoApprove())
 		watcher.Add(csrRes)
 
 		select {
