@@ -324,7 +324,7 @@ func WatchAndApproveNodeCSR(ctx context.Context, log logrus.FieldLogger, client 
 				}).Debugf("WatchAndApproveNodeCSRV1: skipping csr: %v", err)
 				continue
 			}
-			if !isAutoAppoveAllowed(ctx, client, cn) {
+			if !isAutoApproveAllowed(ctx, client, cn) {
 				continue
 			}
 			csrResult.Name = cn
@@ -333,7 +333,7 @@ func WatchAndApproveNodeCSR(ctx context.Context, log logrus.FieldLogger, client 
 	}
 }
 
-func isAutoAppoveAllowed(ctx context.Context, client kubernetes.Interface, nodeName string) bool {
+func isAutoApproveAllowed(ctx context.Context, client kubernetes.Interface, nodeName string) bool {
 	n, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		return false
