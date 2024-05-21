@@ -54,9 +54,15 @@ func (h *approveCSRHandler) Handle(ctx context.Context, action *castai.ClusterAc
 
 	if req.AllowAutoApprove != nil && *req.AllowAutoApprove {
 		go h.RunAutoApprove(ctx)
+		if req.NodeName == "" {
+			return nil
+		}
 	}
 	if req.AllowAutoApprove != nil && !*req.AllowAutoApprove {
 		h.StopAutoApprove()
+		if req.NodeName == "" {
+			return nil
+		}
 	}
 
 	cert, err := h.getInitialNodeCSR(ctx, log, req.NodeName)
@@ -178,10 +184,7 @@ func (h *approveCSRHandler) RunAutoApprove(ctx context.Context) {
 	c := make(chan *csr.Certificate, 1)
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
-		return csr.WatchAndApproveNodeCSRV1Beta1(ctx, log, h.clientset, c)
-	})
-	g.Go(func() error {
-		return csr.WatchAndApproveNodeCSRV1(ctx, log, h.clientset, c)
+		return csr.WatchAndApproveNodeCSR(ctx, log, h.clientset, c)
 	})
 
 	g.Go(func() error {

@@ -224,6 +224,125 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 		err := h.Handle(ctx, actionApproveCSR)
 		r.EqualError(err, "getting initial csr: context deadline exceeded")
 	})
+
+	t.Run("enable-->disable auto-approve", func(t *testing.T) {
+		r := require.New(t)
+
+		client := fake.NewSimpleClientset()
+
+		boolTrue := true
+		boolFalse := false
+		actionRunAutoApprove := &castai.ClusterAction{
+			ActionApproveCSR: &castai.ActionApproveCSR{AllowAutoApprove: &boolTrue},
+			CreatedAt:        time.Time{},
+		}
+		actionStopAutoApprove := &castai.ClusterAction{
+			ActionApproveCSR: &castai.ActionApproveCSR{AllowAutoApprove: &boolFalse},
+			CreatedAt:        time.Time{},
+		}
+		h := &approveCSRHandler{
+			log:                    log,
+			clientset:              client,
+			csrFetchInterval:       100 * time.Millisecond,
+			initialCSRFetchTimeout: 1000 * time.Millisecond,
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		err := h.Handle(ctx, actionRunAutoApprove)
+		time.Sleep(time.Second)
+		r.NoError(err)
+		r.NotNil(h.cancelAutoApprove)
+		err = h.Handle(ctx, actionStopAutoApprove)
+		time.Sleep(time.Second)
+		r.NoError(err)
+		r.Nil(h.cancelAutoApprove)
+	})
+
+	t.Run("watch error", func(t *testing.T) {
+		r := require.New(t)
+		client := fake.NewSimpleClientset()
+		watcher := watch.NewFake()
+		defer watcher.Stop()
+
+		client.PrependWatchReactor("certificatesigningrequests", ktest.DefaultWatchReactor(watcher, fmt.Errorf("watch error")))
+
+		boolTrue := true
+		actionRunAutoApprove := &castai.ClusterAction{
+			ActionApproveCSR: &castai.ActionApproveCSR{AllowAutoApprove: &boolTrue},
+			CreatedAt:        time.Time{},
+		}
+
+		h := &approveCSRHandler{
+			log:                    log,
+			clientset:              client,
+			csrFetchInterval:       100 * time.Millisecond,
+			initialCSRFetchTimeout: 1000 * time.Millisecond,
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		err := h.Handle(ctx, actionRunAutoApprove)
+		time.Sleep(time.Second)
+		r.Nil(err)
+		r.Nil(h.cancelAutoApprove)
+	})
+
+	t.Run("enable auto-approve + approve", func(t *testing.T) {
+		r := require.New(t)
+
+		csrRes := getCSR()
+		ch := make(chan struct{})
+
+		client := fake.NewSimpleClientset(csrRes)
+		client.PrependReactor("update", "certificatesigningrequests", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
+			approved := csrRes.DeepCopy()
+			approved.Status.Conditions = []certv1.CertificateSigningRequestCondition{
+				{
+					Type:           certv1.CertificateApproved,
+					Reason:         csr.ReasonApproved,
+					Message:        "approved",
+					LastUpdateTime: metav1.Now(),
+					Status:         v1.ConditionTrue,
+				},
+			}
+			close(ch)
+			return true, approved, nil
+		})
+
+		watcher := watch.NewFake()
+		defer watcher.Stop()
+
+		client.PrependWatchReactor("certificatesigningrequests", ktest.DefaultWatchReactor(watcher, nil))
+
+		boolTrue := true
+		actionRunAutoApprove := &castai.ClusterAction{
+			ActionApproveCSR: &castai.ActionApproveCSR{AllowAutoApprove: &boolTrue},
+			CreatedAt:        time.Time{},
+		}
+
+		h := &approveCSRHandler{
+			log:                    log,
+			clientset:              client,
+			csrFetchInterval:       100 * time.Millisecond,
+			initialCSRFetchTimeout: 1000 * time.Millisecond,
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+
+		err := h.Handle(ctx, actionRunAutoApprove)
+		time.Sleep(time.Millisecond)
+		r.NoError(err)
+		r.NotNil(h.cancelAutoApprove)
+		watcher.Add(csrRes)
+
+		select {
+		case <-ch:
+		case <-ctx.Done():
+			r.Fail("timeout waiting for auto-approve")
+		}
+	})
 }
 
 func TestApproveCSRExponentialBackoff(t *testing.T) {

@@ -16,6 +16,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -207,13 +208,7 @@ func GetCertificateByNodeName(ctx context.Context, client kubernetes.Interface, 
 }
 
 func getNodeCSRV1(ctx context.Context, client kubernetes.Interface, nodeName string) (*Certificate, error) {
-	options := metav1.ListOptions{
-		FieldSelector: fields.SelectorFromSet(fields.Set{
-			"spec.signerName": certv1.KubeAPIServerClientKubeletSignerName,
-		}).String(),
-	}
-
-	csrList, err := client.CertificatesV1().CertificateSigningRequests().List(ctx, options)
+	csrList, err := client.CertificatesV1().CertificateSigningRequests().List(ctx, getOptions(certv1.KubeAPIServerClientKubeletSignerName))
 	if err != nil {
 		return nil, err
 	}
@@ -225,11 +220,11 @@ func getNodeCSRV1(ctx context.Context, client kubernetes.Interface, nodeName str
 
 	for _, csr := range csrList.Items {
 		csr := csr
-		found, err := isNodeCSR(csr.Name, csr.Spec.Request, nodeName)
+		sn, err := getSubjectCommonName(csr.Name, csr.Spec.Request)
 		if err != nil {
 			return nil, err
 		}
-		if found {
+		if sn == fmt.Sprintf("system:node:%s", nodeName) {
 			return &Certificate{V1: &csr}, nil
 		}
 	}
@@ -238,12 +233,8 @@ func getNodeCSRV1(ctx context.Context, client kubernetes.Interface, nodeName str
 }
 
 func getNodeCSRV1Beta1(ctx context.Context, client kubernetes.Interface, nodeName string) (*Certificate, error) {
-	fs := fields.SelectorFromSet(fields.Set{
-		"spec.signerName": certv1beta1.KubeAPIServerClientKubeletSignerName,
-	})
-	csrList, err := client.CertificatesV1beta1().CertificateSigningRequests().List(ctx, metav1.ListOptions{
-		FieldSelector: fs.String(),
-	})
+	csrList, err := client.CertificatesV1beta1().CertificateSigningRequests().
+		List(ctx, getOptions(certv1beta1.KubeAPIServerClientKubeletSignerName))
 	if err != nil {
 		return nil, err
 	}
@@ -253,15 +244,14 @@ func getNodeCSRV1Beta1(ctx context.Context, client kubernetes.Interface, nodeNam
 		return csrList.Items[i].GetCreationTimestamp().After(csrList.Items[j].GetCreationTimestamp().Time)
 	})
 
-	for _, item := range csrList.Items {
-		item := item
-		ok, err := isNodeCSR(item.Name, item.Spec.Request, nodeName)
+	for _, csr := range csrList.Items {
+		sn, err := getSubjectCommonName(csr.Name, csr.Spec.Request)
 		if err != nil {
 			return nil, err
 		}
-		if ok {
+		if sn == fmt.Sprintf("system:node:%s", nodeName) {
 			return &Certificate{
-				V1Beta1: &item,
+				V1Beta1: &csr,
 			}, nil
 		}
 	}
@@ -269,54 +259,16 @@ func getNodeCSRV1Beta1(ctx context.Context, client kubernetes.Interface, nodeNam
 	return nil, ErrNodeCertificateNotFound
 }
 
-func WatchAndApproveNodeCSRV1(ctx context.Context, log logrus.FieldLogger, client kubernetes.Interface, c chan *Certificate) error {
-	options := metav1.ListOptions{
-		FieldSelector: fields.SelectorFromSet(fields.Set{
-			"spec.signerName": certv1.KubeAPIServerClientKubeletSignerName,
-		}).String(),
-	}
-
-	w, err := client.CertificatesV1().CertificateSigningRequests().Watch(ctx, options)
+func WatchAndApproveNodeCSR(ctx context.Context, log logrus.FieldLogger, client kubernetes.Interface, c chan *Certificate) error {
+	var w watch.Interface
+	var err error
+	w, err = client.CertificatesV1().CertificateSigningRequests().Watch(ctx, getOptions(certv1.KubeAPIServerClientKubeletSignerName))
 	if err != nil {
-		return err
-	}
-	defer w.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case event, ok := <-w.ResultChan():
-			if !ok {
-				return nil
-			}
-			csr, ok := event.Object.(*certv1.CertificateSigningRequest)
-			if !ok {
-				continue
-			}
-			ok, err := isNodeCSR(csr.Name, csr.Spec.Request, "")
-			if err != nil {
-				log.WithField("csr", csr.Name).Debugf("WatchAndApproveNodeCSRV1: skipping csr: %v", err)
-				continue
-			}
-			if !ok {
-				continue
-			}
-			sendCertificate(ctx, c, &Certificate{V1: csr})
+		w, err = client.CertificatesV1beta1().CertificateSigningRequests().Watch(ctx, getOptions(certv1beta1.KubeAPIServerClientKubeletSignerName))
+		if err != nil {
+			return fmt.Errorf("fail to open v1 and v1beta watching client: %w", err)
 		}
 	}
-}
-func WatchAndApproveNodeCSRV1Beta1(ctx context.Context, log logrus.FieldLogger, client kubernetes.Interface, c chan *Certificate) error {
-	fs := fields.SelectorFromSet(fields.Set{
-		"spec.signerName": certv1beta1.KubeAPIServerClientKubeletSignerName,
-	})
-
-	w, err := client.CertificatesV1beta1().CertificateSigningRequests().Watch(ctx, metav1.ListOptions{
-		FieldSelector: fs.String(),
-	})
-	if err != nil {
-		return err
-	}
 	defer w.Stop()
 
 	for {
@@ -327,19 +279,32 @@ func WatchAndApproveNodeCSRV1Beta1(ctx context.Context, log logrus.FieldLogger, 
 			if !ok {
 				return nil
 			}
-			csr, ok := event.Object.(*certv1beta1.CertificateSigningRequest)
-			if !ok {
+
+			var name string
+			var request []byte
+			var csrResult *Certificate
+			switch csr := event.Object.(type) {
+			case *certv1.CertificateSigningRequest:
+				name = csr.Name
+				request = csr.Spec.Request
+				csrResult = &Certificate{V1: csr}
+			case *certv1beta1.CertificateSigningRequest:
+				name = csr.Name
+				request = csr.Spec.Request
+				csrResult = &Certificate{V1Beta1: csr}
+			default:
 				continue
 			}
-			ok, err := isNodeCSR(csr.Name, csr.Spec.Request, "")
+
+			_, err := getSubjectCommonName(name, request)
 			if err != nil {
-				log.WithField("csr", csr.Name).Debugf("WatchAndApproveNodeCSRV1Beta1: skipping csr: %v", err)
+				log.WithField("csr", name).Debugf("WatchAndApproveNodeCSRV1: skipping csr: %v", err)
 				continue
 			}
 			if !ok {
 				continue
 			}
-			sendCertificate(ctx, c, &Certificate{V1Beta1: csr})
+			sendCertificate(ctx, c, csrResult)
 		}
 	}
 }
@@ -348,25 +313,23 @@ func sendCertificate(ctx context.Context, c chan *Certificate, cert *Certificate
 	if cert.Approved() {
 		return
 	}
-	for {
-		select {
-		case c <- cert:
-		case <-ctx.Done():
-			return
-		}
+	select {
+	case c <- cert:
+	case <-ctx.Done():
+		return
 	}
 }
 
-func isNodeCSR(csrName string, csrRequest []byte, nodeName string) (bool, error) {
+func getSubjectCommonName(csrName string, csrRequest []byte) (string, error) {
 	if !strings.HasPrefix(csrName, "node-csr") {
-		return false, nil
+		return "", nil
 	}
 
 	certReq, err := parseCSR(csrRequest)
 	if err != nil {
-		return false, err
+		return "", err
 	}
-	return certReq.Subject.CommonName == fmt.Sprintf("system:node:%s", nodeName), nil
+	return certReq.Subject.CommonName, nil
 }
 
 // parseCSR is mostly needed to extract node name from cert subject common name.
@@ -376,4 +339,12 @@ func parseCSR(pemData []byte) (*x509.CertificateRequest, error) {
 		return nil, fmt.Errorf("PEM block type must be CERTIFICATE REQUEST")
 	}
 	return x509.ParseCertificateRequest(block.Bytes)
+}
+
+func getOptions(signer string) metav1.ListOptions {
+	return metav1.ListOptions{
+		FieldSelector: fields.SelectorFromSet(fields.Set{
+			"spec.signerName": signer,
+		}).String(),
+	}
 }
