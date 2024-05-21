@@ -18,6 +18,8 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/castai/cluster-controller/castai"
 )
 
 const (
@@ -33,6 +35,7 @@ var (
 type Certificate struct {
 	V1      *certv1.CertificateSigningRequest
 	V1Beta1 *certv1beta1.CertificateSigningRequest
+	Name    string
 }
 
 func (c *Certificate) Validate() error {
@@ -296,17 +299,41 @@ func WatchAndApproveNodeCSR(ctx context.Context, log logrus.FieldLogger, client 
 				continue
 			}
 
-			_, err := getSubjectCommonName(name, request)
+			cn, err := getSubjectCommonName(name, request)
 			if err != nil {
-				log.WithField("csr", name).Debugf("WatchAndApproveNodeCSRV1: skipping csr: %v", err)
+				log.WithFields(logrus.Fields{
+					"csr":       name,
+					"node_name": cn,
+				}).Debugf("WatchAndApproveNodeCSRV1: skipping csr: %v", err)
 				continue
 			}
-			if !ok {
+			if !isAutoAppoveAllowed(ctx, client, cn) {
 				continue
 			}
+			csrResult.Name = cn
 			sendCertificate(ctx, c, csrResult)
 		}
 	}
+}
+
+func isAutoAppoveAllowed(ctx context.Context, client kubernetes.Interface, nodeName string) bool {
+	n, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return false
+	}
+	managedBy, ok := n.Labels[castai.LabelManagedBy]
+	if !ok {
+		return false
+	}
+	if managedBy != castai.LabelValueManagedByCASTAI {
+		return false
+	}
+
+	if _, ok := n.Labels[castai.LabelAutoApproveCSR]; !ok {
+		return false
+	}
+
+	return true
 }
 
 func sendCertificate(ctx context.Context, c chan *Certificate, cert *Certificate) {

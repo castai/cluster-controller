@@ -196,9 +196,11 @@ func (h *approveCSRHandler) RunAutoApprove(ctx context.Context) {
 				if cert == nil || cert.Approved() {
 					continue
 				}
+				log := log.WithField("node_name", cert.Name)
+				log.Info("auto approving csr")
 				err := h.approve(ctx, log, cert)
 				if err != nil {
-					log.WithError(err).Error("failed to approve csr")
+					log.WithError(err).Errorf("failed to approve csr: %+v", cert)
 					continue
 				}
 			}
@@ -207,7 +209,7 @@ func (h *approveCSRHandler) RunAutoApprove(ctx context.Context) {
 
 	err := g.Wait()
 	if err != nil {
-		log.WithError(err).Errorf("auto approve csr: %v", err)
+		log.WithError(err).Errorf("auto approve csr finished: %v", err)
 	}
 }
 

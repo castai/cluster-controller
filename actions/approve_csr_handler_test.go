@@ -309,6 +309,67 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 			close(ch)
 			return true, approved, nil
 		})
+		client.PrependReactor("get", "nodes", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
+			return true, &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						castai.LabelManagedBy:      castai.LabelValueManagedByCASTAI,
+						castai.LabelAutoApproveCSR: time.Now().Format(time.RFC3339),
+					},
+				},
+			}, nil
+		})
+
+		watcher := watch.NewFake()
+		defer watcher.Stop()
+
+		client.PrependWatchReactor("certificatesigningrequests", ktest.DefaultWatchReactor(watcher, nil))
+
+		boolTrue := true
+		actionRunAutoApprove := &castai.ClusterAction{
+			ActionApproveCSR: &castai.ActionApproveCSR{AllowAutoApprove: &boolTrue},
+			CreatedAt:        time.Time{},
+		}
+
+		h := &approveCSRHandler{
+			log:                    log,
+			clientset:              client,
+			csrFetchInterval:       100 * time.Millisecond,
+			initialCSRFetchTimeout: 1000 * time.Millisecond,
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+
+		err := h.Handle(ctx, actionRunAutoApprove)
+		time.Sleep(time.Millisecond)
+		r.NoError(err)
+		r.NotNil(h.cancelAutoApprove)
+		watcher.Add(csrRes)
+
+		select {
+		case <-ch:
+		case <-ctx.Done():
+			r.Fail("timeout waiting for auto-approve")
+		}
+	})
+	t.Run("enable auto-approve + skip approve", func(t *testing.T) {
+		r := require.New(t)
+
+		csrRes := getCSR()
+		client := fake.NewSimpleClientset(csrRes)
+		ch := make(chan struct{})
+
+		client.PrependReactor("get", "nodes", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
+			close(ch)
+			return true, &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						castai.LabelManagedBy: castai.LabelValueManagedByCASTAI,
+					},
+				},
+			}, nil
+		})
 
 		watcher := watch.NewFake()
 		defer watcher.Stop()
