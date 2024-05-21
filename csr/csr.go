@@ -291,6 +291,8 @@ func WatchAndApproveNodeCSR(ctx context.Context, log logrus.FieldLogger, client 
 
 	defer w.Stop()
 
+	log.Debug("watching for new node csr")
+
 	for {
 		select {
 		case <-ctx.Done():
