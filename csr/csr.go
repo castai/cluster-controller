@@ -16,10 +16,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
-
-	"github.com/castai/cluster-controller/castai"
 )
 
 const (
@@ -277,9 +274,6 @@ func WatchAndApproveNodeCSRV1(ctx context.Context, log logrus.FieldLogger, clien
 		FieldSelector: fields.SelectorFromSet(fields.Set{
 			"spec.signerName": certv1.KubeAPIServerClientKubeletSignerName,
 		}).String(),
-		LabelSelector: labels.SelectorFromSet(map[string]string{
-			castai.LabelManagedBy: castai.LabelValueManagedByCASTAI,
-		}).String(),
 	}
 
 	w, err := client.CertificatesV1().CertificateSigningRequests().Watch(ctx, options)
@@ -316,13 +310,9 @@ func WatchAndApproveNodeCSRV1Beta1(ctx context.Context, log logrus.FieldLogger, 
 	fs := fields.SelectorFromSet(fields.Set{
 		"spec.signerName": certv1beta1.KubeAPIServerClientKubeletSignerName,
 	})
-	ls := labels.SelectorFromSet(map[string]string{
-		castai.LabelManagedBy: castai.LabelValueManagedByCASTAI,
-	})
 
 	w, err := client.CertificatesV1beta1().CertificateSigningRequests().Watch(ctx, metav1.ListOptions{
 		FieldSelector: fs.String(),
-		LabelSelector: ls.String(),
 	})
 	if err != nil {
 		return err
