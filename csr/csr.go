@@ -297,7 +297,7 @@ func WatchAndApproveNodeCSR(ctx context.Context, log logrus.FieldLogger, client 
 			return nil
 		case event, ok := <-w.ResultChan():
 			if !ok {
-				return nil
+				return WatchAndApproveNodeCSR(ctx, log, client, c) // start over in case of any error
 			}
 
 			var name string
