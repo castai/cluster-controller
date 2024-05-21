@@ -9,13 +9,17 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/sirupsen/logrus"
 	certv1 "k8s.io/api/certificates/v1"
 	certv1beta1 "k8s.io/api/certificates/v1beta1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/castai/cluster-controller/castai"
 )
 
 const (
@@ -266,6 +270,101 @@ func getNodeCSRV1Beta1(ctx context.Context, client kubernetes.Interface, nodeNam
 	}
 
 	return nil, ErrNodeCertificateNotFound
+}
+
+func WatchAndApproveNodeCSRV1(ctx context.Context, log logrus.FieldLogger, client kubernetes.Interface, c chan *Certificate) error {
+	options := metav1.ListOptions{
+		FieldSelector: fields.SelectorFromSet(fields.Set{
+			"spec.signerName": certv1.KubeAPIServerClientKubeletSignerName,
+		}).String(),
+		LabelSelector: labels.SelectorFromSet(map[string]string{
+			castai.LabelManagedBy: castai.LabelValueManagedByCASTAI,
+		}).String(),
+	}
+
+	w, err := client.CertificatesV1().CertificateSigningRequests().Watch(ctx, options)
+	if err != nil {
+		return err
+	}
+	defer w.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case event, ok := <-w.ResultChan():
+			if !ok {
+				return nil
+			}
+			csr, ok := event.Object.(*certv1.CertificateSigningRequest)
+			if !ok {
+				continue
+			}
+			ok, err := isNodeCSR(csr.Name, csr.Spec.Request, "")
+			if err != nil {
+				log.WithField("csr", csr.Name).Debugf("WatchAndApproveNodeCSRV1: skipping csr: %v", err)
+				continue
+			}
+			if !ok {
+				continue
+			}
+			sendCertificate(ctx, c, &Certificate{V1: csr})
+		}
+	}
+}
+func WatchAndApproveNodeCSRV1Beta1(ctx context.Context, log logrus.FieldLogger, client kubernetes.Interface, c chan *Certificate) error {
+	fs := fields.SelectorFromSet(fields.Set{
+		"spec.signerName": certv1beta1.KubeAPIServerClientKubeletSignerName,
+	})
+	ls := labels.SelectorFromSet(map[string]string{
+		castai.LabelManagedBy: castai.LabelValueManagedByCASTAI,
+	})
+
+	w, err := client.CertificatesV1beta1().CertificateSigningRequests().Watch(ctx, metav1.ListOptions{
+		FieldSelector: fs.String(),
+		LabelSelector: ls.String(),
+	})
+	if err != nil {
+		return err
+	}
+	defer w.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case event, ok := <-w.ResultChan():
+			if !ok {
+				return nil
+			}
+			csr, ok := event.Object.(*certv1beta1.CertificateSigningRequest)
+			if !ok {
+				continue
+			}
+			ok, err := isNodeCSR(csr.Name, csr.Spec.Request, "")
+			if err != nil {
+				log.WithField("csr", csr.Name).Debugf("WatchAndApproveNodeCSRV1Beta1: skipping csr: %v", err)
+				continue
+			}
+			if !ok {
+				continue
+			}
+			sendCertificate(ctx, c, &Certificate{V1Beta1: csr})
+		}
+	}
+}
+
+func sendCertificate(ctx context.Context, c chan *Certificate, cert *Certificate) {
+	if cert.Approved() {
+		return
+	}
+	for {
+		select {
+		case c <- cert:
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 func isNodeCSR(csrName string, csrRequest []byte, nodeName string) (bool, error) {

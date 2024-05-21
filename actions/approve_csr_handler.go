@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 
@@ -34,6 +36,8 @@ type approveCSRHandler struct {
 	clientset              kubernetes.Interface
 	initialCSRFetchTimeout time.Duration
 	csrFetchInterval       time.Duration
+	cancelAutoApprove      context.CancelFunc
+	m                      sync.Mutex
 }
 
 func (h *approveCSRHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
@@ -48,6 +52,13 @@ func (h *approveCSRHandler) Handle(ctx context.Context, action *castai.ClusterAc
 		actionIDLogField: action.ID,
 	})
 
+	if req.AllowAutoApprove != nil && *req.AllowAutoApprove {
+		go h.RunAutoApprove(ctx)
+	}
+	if req.AllowAutoApprove != nil && !*req.AllowAutoApprove {
+		h.StopAutoApprove()
+	}
+
 	cert, err := h.getInitialNodeCSR(ctx, log, req.NodeName)
 	if err != nil {
 		return fmt.Errorf("getting initial csr: %w", err)
@@ -58,6 +69,10 @@ func (h *approveCSRHandler) Handle(ctx context.Context, action *castai.ClusterAc
 		return nil
 	}
 
+	return h.approve(ctx, log, cert)
+}
+
+func (h *approveCSRHandler) approve(ctx context.Context, log *logrus.Entry, cert *csr.Certificate) error {
 	ctx, cancel := context.WithTimeout(ctx, approveCSRTimeout)
 	defer cancel()
 
@@ -149,6 +164,74 @@ func (h *approveCSRHandler) getInitialNodeCSR(ctx context.Context, log logrus.Fi
 	)
 
 	return cert, err
+}
+
+func (h *approveCSRHandler) RunAutoApprove(ctx context.Context) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	if !h.startAutoApprove(cancel) {
+		return // already running
+	}
+	defer h.StopAutoApprove()
+	log := h.log.WithField("RunAutoApprove", "auto-approve-csr")
+	c := make(chan *csr.Certificate, 1)
+	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		return csr.WatchAndApproveNodeCSRV1Beta1(ctx, log, h.clientset, c)
+	})
+	g.Go(func() error {
+		return csr.WatchAndApproveNodeCSRV1(ctx, log, h.clientset, c)
+	})
+
+	g.Go(func() error {
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case cert := <-c:
+				if cert == nil || cert.Approved() {
+					continue
+				}
+				err := h.approve(ctx, log, cert)
+				if err != nil {
+					log.WithError(err).Error("failed to approve csr")
+					continue
+				}
+			}
+		}
+	})
+
+	err := g.Wait()
+	if err != nil {
+		log.WithError(err).Errorf("auto approve csr: %v", err)
+	}
+}
+
+func (h *approveCSRHandler) startAutoApprove(cancelFunc context.CancelFunc) bool {
+	h.m.Lock()
+	defer h.m.Unlock()
+	if h.cancelAutoApprove != nil {
+		return false
+	}
+
+	h.log.Info("starting auto approve CSRs for managed by Cast AI nodes")
+	h.cancelAutoApprove = cancelFunc
+
+	return true
+}
+
+func (h *approveCSRHandler) StopAutoApprove() {
+	h.m.Lock()
+	defer h.m.Unlock()
+
+	if h.cancelAutoApprove == nil {
+		return
+	}
+
+	h.log.Info("stopping auto approve CSRs for managed by Cast AI nodes")
+	h.cancelAutoApprove()
+	h.cancelAutoApprove = nil
 }
 
 func newApproveCSRExponentialBackoff() wait.Backoff {

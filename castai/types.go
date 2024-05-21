@@ -10,7 +10,9 @@ import (
 )
 
 const (
-	LabelNodeID = "provisioner.cast.ai/node-id"
+	LabelNodeID               = "provisioner.cast.ai/node-id"
+	LabelManagedBy            = "provisioner.cast.ai/managed-by"
+	LabelValueManagedByCASTAI = "cast.ai"
 )
 
 type GetClusterActionsResponse struct {
@@ -143,8 +145,9 @@ type ActionDrainNode struct {
 }
 
 type ActionApproveCSR struct {
-	NodeName string `json:"nodeName"`
-	NodeID   string `json:"nodeId"`
+	NodeName         string `json:"nodeName"`
+	NodeID           string `json:"nodeId"`
+	AllowAutoApprove *bool  `json:"allowAutoApprove,omitempty"`
 }
 
 type ActionPatchNode struct {
