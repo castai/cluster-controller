@@ -20,6 +20,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/waitext"
 )
 
 const (
@@ -265,13 +266,29 @@ func getNodeCSRV1Beta1(ctx context.Context, client kubernetes.Interface, nodeNam
 func WatchAndApproveNodeCSR(ctx context.Context, log logrus.FieldLogger, client kubernetes.Interface, c chan *Certificate) error {
 	var w watch.Interface
 	var err error
-	w, err = client.CertificatesV1().CertificateSigningRequests().Watch(ctx, getOptions(certv1.KubeAPIServerClientKubeletSignerName))
+	b := waitext.DefaultExponentialBackoff()
+	err = waitext.Retry(
+		ctx,
+		b,
+		waitext.Forever,
+		func(ctx context.Context) (bool, error) {
+			w, err = client.CertificatesV1().CertificateSigningRequests().Watch(ctx, getOptions(certv1.KubeAPIServerClientKubeletSignerName))
+			if err != nil {
+				w, err = client.CertificatesV1beta1().CertificateSigningRequests().Watch(ctx, getOptions(certv1beta1.KubeAPIServerClientKubeletSignerName))
+				if err != nil {
+					return true, fmt.Errorf("fail to open v1 and v1beta watching client: %w", err)
+				}
+			}
+			return false, nil
+		},
+		func(err error) {
+			log.Warnf("retrying: %v", err)
+		},
+	)
 	if err != nil {
-		w, err = client.CertificatesV1beta1().CertificateSigningRequests().Watch(ctx, getOptions(certv1beta1.KubeAPIServerClientKubeletSignerName))
-		if err != nil {
-			return fmt.Errorf("fail to open v1 and v1beta watching client: %w", err)
-		}
+		return err
 	}
+
 	defer w.Stop()
 
 	for {

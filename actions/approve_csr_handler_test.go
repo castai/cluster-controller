@@ -259,35 +259,6 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 		r.Nil(h.getCancelAutoApprove())
 	})
 
-	t.Run("watch error", func(t *testing.T) {
-		r := require.New(t)
-		client := fake.NewSimpleClientset()
-		watcher := watch.NewFake()
-		defer watcher.Stop()
-
-		client.PrependWatchReactor("certificatesigningrequests", ktest.DefaultWatchReactor(watcher, fmt.Errorf("watch error")))
-
-		boolTrue := true
-		actionRunAutoApprove := &castai.ClusterAction{
-			ActionApproveCSR: &castai.ActionApproveCSR{AllowAutoApprove: &boolTrue},
-			CreatedAt:        time.Time{},
-		}
-
-		h := &approveCSRHandler{
-			log:                    log,
-			clientset:              client,
-			csrFetchInterval:       100 * time.Millisecond,
-			initialCSRFetchTimeout: 1000 * time.Millisecond,
-		}
-
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		err := h.Handle(ctx, actionRunAutoApprove)
-		time.Sleep(time.Second)
-		r.Nil(err)
-		r.Nil(h.getCancelAutoApprove())
-	})
-
 	t.Run("enable auto-approve + approve", func(t *testing.T) {
 		r := require.New(t)
 
@@ -322,8 +293,16 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 
 		watcher := watch.NewFake()
 		defer watcher.Stop()
-
-		client.PrependWatchReactor("certificatesigningrequests", ktest.DefaultWatchReactor(watcher, nil))
+		var count int // check retry on error
+		client.PrependWatchReactor("certificatesigningrequests",
+			func(action ktest.Action) (handled bool, ret watch.Interface, err error) {
+				if count == 5 {
+					return true, watcher, nil
+				} else {
+					count++
+					return true, nil, fmt.Errorf("ups error")
+				}
+			})
 
 		boolTrue := true
 		actionRunAutoApprove := &castai.ClusterAction{
