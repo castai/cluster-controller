@@ -180,6 +180,7 @@ func (h *approveCSRHandler) RunAutoApprove(ctx context.Context) {
 		return // already running
 	}
 	defer h.StopAutoApprove()
+
 	log := h.log.WithField("RunAutoApprove", "auto-approve-csr")
 	c := make(chan *csr.Certificate, 1)
 	g, ctx := errgroup.WithContext(ctx)
@@ -209,7 +210,7 @@ func (h *approveCSRHandler) RunAutoApprove(ctx context.Context) {
 
 	err := g.Wait()
 	if err != nil {
-		log.WithError(err).Errorf("auto approve csr finished: %v", err)
+		log.WithError(err).Errorf("auto approve csr finished")
 	}
 }
 
