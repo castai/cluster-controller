@@ -198,16 +198,19 @@ func createV1beta1(ctx context.Context, client kubernetes.Interface, csr *certv1
 
 // GetCertificateByNodeName lists all csr objects and parses request pem encoded cert to find it by node name.
 func GetCertificateByNodeName(ctx context.Context, client kubernetes.Interface, nodeName string) (*Certificate, error) {
-	v1req, errV1 := getNodeCSRV1(ctx, client, nodeName)
+	v1req, err := getNodeCSRV1(ctx, client, nodeName)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return nil, err
+	}
 	if v1req != nil {
 		return v1req, nil
 	}
 
-	v1BetaReq, errV1Beta1 := getNodeCSRV1Beta1(ctx, client, nodeName)
-	if errV1Beta1 != nil {
-		return nil, fmt.Errorf("v1: %v v1beta1 csr get: %w", errV1, errV1Beta1)
+	v1betareq, err := getNodeCSRV1Beta1(ctx, client, nodeName)
+	if err != nil {
+		return nil, err
 	}
-	return v1BetaReq, nil
+	return v1betareq, nil
 }
 
 func getNodeCSRV1(ctx context.Context, client kubernetes.Interface, nodeName string) (*Certificate, error) {
