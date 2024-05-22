@@ -35,21 +35,21 @@ var (
 
 // Certificate wraps v1 and v1beta1 csr.
 type Certificate struct {
-	V1      *certv1.CertificateSigningRequest
-	V1Beta1 *certv1beta1.CertificateSigningRequest
+	v1      *certv1.CertificateSigningRequest
+	v1Beta1 *certv1beta1.CertificateSigningRequest
 	Name    string
 }
 
 func (c *Certificate) Validate() error {
-	if c.V1 == nil && c.V1Beta1 == nil {
+	if c.v1 == nil && c.v1Beta1 == nil {
 		return errors.New("v1 or v1beta csr should be set")
 	}
 	return nil
 }
 
 func (c *Certificate) Approved() bool {
-	if c.V1Beta1 != nil {
-		for _, condition := range c.V1Beta1.Status.Conditions {
+	if c.v1Beta1 != nil {
+		for _, condition := range c.v1Beta1.Status.Conditions {
 			if condition.Reason == ReasonApproved {
 				return true
 			}
@@ -57,7 +57,7 @@ func (c *Certificate) Approved() bool {
 		return false
 	}
 
-	for _, condition := range c.V1.Status.Conditions {
+	for _, condition := range c.v1.Status.Conditions {
 		if condition.Reason == ReasonApproved && condition.Status == v1.ConditionTrue {
 			return true
 		}
@@ -66,37 +66,37 @@ func (c *Certificate) Approved() bool {
 }
 
 // ApproveCertificate approves csr.
-func (cert *Certificate) ApproveCertificate(ctx context.Context, client kubernetes.Interface) (*Certificate, error) {
-	if err := cert.Validate(); err != nil {
+func (c *Certificate) ApproveCertificate(ctx context.Context, client kubernetes.Interface) (*Certificate, error) {
+	if err := c.Validate(); err != nil {
 		return nil, err
 	}
 
-	if cert.V1Beta1 != nil {
-		cert.V1Beta1.Status.Conditions = append(cert.V1Beta1.Status.Conditions, certv1beta1.CertificateSigningRequestCondition{
+	if c.v1Beta1 != nil {
+		c.v1Beta1.Status.Conditions = append(c.v1Beta1.Status.Conditions, certv1beta1.CertificateSigningRequestCondition{
 			Type:           certv1beta1.CertificateApproved,
 			Reason:         ReasonApproved,
 			Message:        approvedMessage,
 			LastUpdateTime: metav1.Now(),
 		})
-		resp, err := client.CertificatesV1beta1().CertificateSigningRequests().UpdateApproval(ctx, cert.V1Beta1, metav1.UpdateOptions{})
+		resp, err := client.CertificatesV1beta1().CertificateSigningRequests().UpdateApproval(ctx, c.v1Beta1, metav1.UpdateOptions{})
 		if err != nil {
 			return nil, fmt.Errorf("v1beta csr approve: %w", err)
 		}
-		return &Certificate{V1Beta1: resp}, nil
+		return &Certificate{v1Beta1: resp}, nil
 	}
 
-	cert.V1.Status.Conditions = append(cert.V1.Status.Conditions, certv1.CertificateSigningRequestCondition{
+	c.v1.Status.Conditions = append(c.v1.Status.Conditions, certv1.CertificateSigningRequestCondition{
 		Type:           certv1.CertificateApproved,
 		Reason:         ReasonApproved,
 		Message:        approvedMessage,
 		Status:         v1.ConditionTrue,
 		LastUpdateTime: metav1.Now(),
 	})
-	resp, err := client.CertificatesV1().CertificateSigningRequests().UpdateApproval(ctx, cert.V1.Name, cert.V1, metav1.UpdateOptions{})
+	resp, err := client.CertificatesV1().CertificateSigningRequests().UpdateApproval(ctx, c.v1.Name, c.v1, metav1.UpdateOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("v1 csr approve: %w", err)
 	}
-	return &Certificate{V1: resp}, nil
+	return &Certificate{v1: resp}, nil
 }
 
 // DeleteCertificate deletes csr.
@@ -105,56 +105,56 @@ func (c *Certificate) DeleteCertificate(ctx context.Context, client kubernetes.I
 		return err
 	}
 
-	if c.V1Beta1 != nil {
-		return client.CertificatesV1beta1().CertificateSigningRequests().Delete(ctx, c.V1Beta1.Name, metav1.DeleteOptions{})
+	if c.v1Beta1 != nil {
+		return client.CertificatesV1beta1().CertificateSigningRequests().Delete(ctx, c.v1Beta1.Name, metav1.DeleteOptions{})
 	}
-	return client.CertificatesV1().CertificateSigningRequests().Delete(ctx, c.V1.Name, metav1.DeleteOptions{})
+	return client.CertificatesV1().CertificateSigningRequests().Delete(ctx, c.v1.Name, metav1.DeleteOptions{})
 }
 
-// RequestCertificate creates new csr.
+// RequestNewCertificate creates new csr.
 func (c *Certificate) RequestNewCertificate(ctx context.Context, client kubernetes.Interface) (*Certificate, error) {
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
 
-	if c.V1Beta1 != nil {
-		resp, err := createv1beta(ctx, client, c.V1Beta1)
+	if c.v1Beta1 != nil {
+		resp, err := createV1beta1(ctx, client, c.v1Beta1)
 		if err != nil {
 			if apierrors.IsAlreadyExists(err) {
 				return get(ctx, client, c)
 			}
 			return nil, fmt.Errorf("v1beta csr create: %w", err)
 		}
-		return &Certificate{V1Beta1: resp}, nil
+		return &Certificate{v1Beta1: resp}, nil
 	}
 
-	resp, err := createv1(ctx, client, c.V1)
+	resp, err := createV1(ctx, client, c.v1)
 	if err != nil {
 		if apierrors.IsAlreadyExists(err) {
 			return get(ctx, client, c)
 		}
 		return nil, fmt.Errorf("v1 csr create: %w", err)
 	}
-	return &Certificate{V1: resp}, nil
+	return &Certificate{v1: resp}, nil
 }
 
 func get(ctx context.Context, client kubernetes.Interface, cert *Certificate) (*Certificate, error) {
-	if cert.V1Beta1 != nil {
-		v1beta1req, err := client.CertificatesV1beta1().CertificateSigningRequests().Get(ctx, cert.V1Beta1.Name, metav1.GetOptions{})
+	if cert.v1Beta1 != nil {
+		v1beta1req, err := client.CertificatesV1beta1().CertificateSigningRequests().Get(ctx, cert.v1Beta1.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
 		}
-		return &Certificate{V1Beta1: v1beta1req}, nil
+		return &Certificate{v1Beta1: v1beta1req}, nil
 	}
 
-	v1req, err := client.CertificatesV1().CertificateSigningRequests().Get(ctx, cert.V1.Name, metav1.GetOptions{})
+	v1req, err := client.CertificatesV1().CertificateSigningRequests().Get(ctx, cert.v1.Name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
-	return &Certificate{V1: v1req}, nil
+	return &Certificate{v1: v1req}, nil
 }
 
-func createv1(ctx context.Context, client kubernetes.Interface, csr *certv1.CertificateSigningRequest) (*certv1.CertificateSigningRequest, error) {
+func createV1(ctx context.Context, client kubernetes.Interface, csr *certv1.CertificateSigningRequest) (*certv1.CertificateSigningRequest, error) {
 	csrv1 := &certv1.CertificateSigningRequest{
 		// Username, UID, Groups will be injected by API server.
 		TypeMeta: metav1.TypeMeta{Kind: "CertificateSigningRequest"},
@@ -175,7 +175,7 @@ func createv1(ctx context.Context, client kubernetes.Interface, csr *certv1.Cert
 	return req, nil
 }
 
-func createv1beta(ctx context.Context, client kubernetes.Interface, csr *certv1beta1.CertificateSigningRequest) (*certv1beta1.CertificateSigningRequest, error) {
+func createV1beta1(ctx context.Context, client kubernetes.Interface, csr *certv1beta1.CertificateSigningRequest) (*certv1beta1.CertificateSigningRequest, error) {
 	v1beta1csr := &certv1beta1.CertificateSigningRequest{
 		TypeMeta: metav1.TypeMeta{Kind: "CertificateSigningRequest"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -230,7 +230,7 @@ func getNodeCSRV1(ctx context.Context, client kubernetes.Interface, nodeName str
 			return nil, err
 		}
 		if sn == fmt.Sprintf("system:node:%s", nodeName) {
-			return &Certificate{V1: &csr}, nil
+			return &Certificate{v1: &csr}, nil
 		}
 	}
 
@@ -256,7 +256,7 @@ func getNodeCSRV1Beta1(ctx context.Context, client kubernetes.Interface, nodeNam
 		}
 		if sn == fmt.Sprintf("system:node:%s", nodeName) {
 			return &Certificate{
-				V1Beta1: &csr,
+				v1Beta1: &csr,
 			}, nil
 		}
 	}
@@ -308,11 +308,11 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 			case *certv1.CertificateSigningRequest:
 				name = csr.Name
 				request = csr.Spec.Request
-				csrResult = &Certificate{V1: csr}
+				csrResult = &Certificate{v1: csr}
 			case *certv1beta1.CertificateSigningRequest:
 				name = csr.Name
 				request = csr.Spec.Request
-				csrResult = &Certificate{V1Beta1: csr}
+				csrResult = &Certificate{v1Beta1: csr}
 			default:
 				continue
 			}

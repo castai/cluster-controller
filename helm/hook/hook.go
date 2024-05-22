@@ -119,7 +119,7 @@ func (l *LabelIgnoreHook) Run(renderedManifests *bytes.Buffer) (*bytes.Buffer, e
 			return nil, err
 		}
 
-		fmt.Fprintf(b, "---\n%s\n", y)
+		_, _ = fmt.Fprintf(b, "---\n%s\n", y)
 	}
 
 	return b, nil
