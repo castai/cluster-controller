@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
+	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ktest "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
@@ -62,7 +63,7 @@ func getClient() (*kubernetes.Clientset, error) {
 
 func Test_isAutoApproveAllowedForNode(t *testing.T) {
 	type args struct {
-		tuneMockNode *v1.Node
+		tuneMockNode runtime.Object
 		tuneMockErr  error
 		name         string
 	}
