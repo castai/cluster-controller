@@ -197,19 +197,16 @@ func createV1beta1(ctx context.Context, client kubernetes.Interface, csr *certv1
 
 // GetCertificateByNodeName lists all csr objects and parses request pem encoded cert to find it by node name.
 func GetCertificateByNodeName(ctx context.Context, client kubernetes.Interface, nodeName string) (*Certificate, error) {
-	v1req, err := getNodeCSRV1(ctx, client, nodeName)
-	if err != nil && !apierrors.IsNotFound(err) {
-		return nil, err
-	}
+	v1req, errV1 := getNodeCSRV1(ctx, client, nodeName)
 	if v1req != nil {
 		return v1req, nil
 	}
 
-	v1betareq, err := getNodeCSRV1Beta1(ctx, client, nodeName)
-	if err != nil {
-		return nil, err
+	v1BetaReq, errV1Beta1 := getNodeCSRV1Beta1(ctx, client, nodeName)
+	if errV1Beta1 != nil {
+		return nil, fmt.Errorf("v1: %v v1beta1 csr get: %w", errV1, errV1Beta1)
 	}
-	return v1betareq, nil
+	return v1BetaReq, nil
 }
 
 func getNodeCSRV1(ctx context.Context, client kubernetes.Interface, nodeName string) (*Certificate, error) {
@@ -301,19 +298,8 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 				WatchCastAINodeCSRs(ctx, log, client, c) // start over in case of any error
 			}
 
-			var name string
-			var request []byte
-			var csrResult *Certificate
-			switch csr := event.Object.(type) {
-			case *certv1.CertificateSigningRequest:
-				name = csr.Name
-				request = csr.Spec.Request
-				csrResult = &Certificate{v1: csr}
-			case *certv1beta1.CertificateSigningRequest:
-				name = csr.Name
-				request = csr.Spec.Request
-				csrResult = &Certificate{v1Beta1: csr}
-			default:
+			csrResult, name, request := toCertificate(event)
+			if csrResult == nil {
 				continue
 			}
 
@@ -343,6 +329,22 @@ func getWatcher(ctx context.Context, client kubernetes.Interface) (watch.Interfa
 		}
 	}
 	return w, nil
+}
+
+func toCertificate(event watch.Event) (cert *Certificate, name string, request []byte) {
+	switch e := event.Object.(type) {
+	case *certv1.CertificateSigningRequest:
+		name = e.Name
+		request = e.Spec.Request
+		cert = &Certificate{v1: e}
+	case *certv1beta1.CertificateSigningRequest:
+		name = e.Name
+		request = e.Spec.Request
+		cert = &Certificate{v1Beta1: e}
+	default:
+		return nil, "", nil
+	}
+	return cert, name, request
 }
 
 func isAutoApproveAllowedForNode(ctx context.Context, client kubernetes.Interface, nodeName string) bool {
