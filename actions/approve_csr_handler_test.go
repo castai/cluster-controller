@@ -263,9 +263,12 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 		r := require.New(t)
 
 		csrRes := getCSR()
+		csr2 := csrRes.DeepCopy()
+		csr2.Name = "node-csr-456"
 		ch := make(chan struct{})
+		defer close(ch)
 
-		client := fake.NewSimpleClientset(csrRes)
+		client := fake.NewSimpleClientset(csrRes, csr2)
 		client.PrependReactor("update", "certificatesigningrequests", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
 			approved := csrRes.DeepCopy()
 			approved.Status.Conditions = []certv1.CertificateSigningRequestCondition{
@@ -277,7 +280,7 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 					Status:         v1.ConditionTrue,
 				},
 			}
-			close(ch)
+			ch <- struct{}{}
 			return true, approved, nil
 		})
 		client.PrependReactor("get", "nodes", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
@@ -320,16 +323,24 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 
-		err := h.Handle(ctx, actionRunAutoApprove)
-		time.Sleep(time.Millisecond)
-		r.NoError(err)
-		r.NotNil(h.getCancelAutoApprove())
-		watcher.Add(csrRes)
+		for i := 0; i < 5; i++ {
+			go func() {
+				err := h.Handle(ctx, actionRunAutoApprove)
+				time.Sleep(time.Millisecond)
+				r.NoError(err)
+			}()
+		}
 
-		select {
-		case <-ch:
-		case <-ctx.Done():
-			r.Fail("timeout waiting for auto-approve")
+		time.Sleep(time.Second)
+		r.NotNil(h.getCancelAutoApprove())
+		go watcher.Add(csrRes)
+		go watcher.Add(csr2)
+		for i := 0; i < 2; i++ {
+			select {
+			case <-ch:
+			case <-ctx.Done():
+				r.Fail("timeout waiting for auto-approve")
+			}
 		}
 	})
 	t.Run("enable auto-approve + skip approve", func(t *testing.T) {
