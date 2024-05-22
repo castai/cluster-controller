@@ -51,7 +51,8 @@ func (h *approveCSRHandler) Handle(ctx context.Context, action *castai.ClusterAc
 		actionIDLogField: action.ID,
 	})
 
-	// If AllowAutoApprove is specified, then triggering CSR watcher that we handle CSR for nodes older than XXX (please add some context here).
+	// If AllowAutoApprove is specified, then triggering CSR watcher
+	// that we handle CSR for nodes older than 24h to avoid approve CSR for new nodes.
 	if req.AllowAutoApprove != nil {
 		if *req.AllowAutoApprove {
 			go h.RunAutoApproveForCastAINodes(ctx)
