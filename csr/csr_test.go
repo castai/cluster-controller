@@ -39,7 +39,7 @@ func TestApproveCSR(t *testing.T) {
 	err = cert.DeleteCertificate(ctx, client)
 	r.NoError(err)
 
-	cert, err = cert.RequestNewCertificate(ctx, client)
+	cert, err = cert.NewCSR(ctx, client)
 	r.NoError(err)
 
 	_, err = cert.ApproveCertificate(ctx, client)

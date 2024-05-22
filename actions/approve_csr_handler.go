@@ -51,8 +51,8 @@ func (h *approveCSRHandler) Handle(ctx context.Context, action *castai.ClusterAc
 		actionIDLogField: action.ID,
 	})
 
-	// If AllowAutoApprove is specified, then triggering CSR watcher
-	// that we handle CSR for nodes older than 24h to avoid approve CSR for new nodes.
+	// If AllowAutoApprove is specified, then triggering CSR watcher that will handle CSR for nodes older than
+	// 24h to avoid approving CSR for new nodes.
 	if req.AllowAutoApprove != nil {
 		if *req.AllowAutoApprove {
 			go h.RunAutoApproveForCastAINodes(ctx)
@@ -77,10 +77,10 @@ func (h *approveCSRHandler) Handle(ctx context.Context, action *castai.ClusterAc
 		return nil
 	}
 
-	return h.approve(ctx, log, cert)
+	return h.handleWithRetry(ctx, log, cert)
 }
 
-func (h *approveCSRHandler) approve(ctx context.Context, log *logrus.Entry, cert *csr.Certificate) error {
+func (h *approveCSRHandler) handleWithRetry(ctx context.Context, log *logrus.Entry, cert *csr.Certificate) error {
 	ctx, cancel := context.WithTimeout(ctx, approveCSRTimeout)
 	defer cancel()
 
@@ -105,9 +105,9 @@ func (h *approveCSRHandler) handle(ctx context.Context, log logrus.FieldLogger, 
 		return fmt.Errorf("deleting csr: %w", err)
 	}
 
-	// Create new csr with the same request data as original csr.
+	// Create a new CSR with the same request data as the original one.
 	log.Debug("requesting new csr")
-	newCert, err := cert.RequestNewCertificate(ctx, h.clientset)
+	newCert, err := cert.NewCSR(ctx, h.clientset)
 	if err != nil {
 		return fmt.Errorf("requesting new csr: %w", err)
 	}
@@ -121,6 +121,7 @@ func (h *approveCSRHandler) handle(ctx context.Context, log logrus.FieldLogger, 
 	if resp.Approved() {
 		return nil
 	}
+
 	return errors.New("certificate signing request was not approved")
 }
 
@@ -195,7 +196,7 @@ func (h *approveCSRHandler) RunAutoApproveForCastAINodes(ctx context.Context) {
 			go func(cert *csr.Certificate) {
 				log := log.WithField("node_name", cert.Name)
 				log.Info("auto approving csr")
-				err := h.approve(ctx, log, cert)
+				err := h.handleWithRetry(ctx, log, cert)
 				if err != nil {
 					log.WithError(err).Errorf("failed to approve csr: %+v", cert)
 				}

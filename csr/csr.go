@@ -111,8 +111,8 @@ func (c *Certificate) DeleteCertificate(ctx context.Context, client kubernetes.I
 	return client.CertificatesV1().CertificateSigningRequests().Delete(ctx, c.v1.Name, metav1.DeleteOptions{})
 }
 
-// RequestNewCertificate creates new csr.
-func (c *Certificate) RequestNewCertificate(ctx context.Context, client kubernetes.Interface) (*Certificate, error) {
+// NewCSR creates new csr.
+func (c *Certificate) NewCSR(ctx context.Context, client kubernetes.Interface) (*Certificate, error) {
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
@@ -135,6 +135,7 @@ func (c *Certificate) RequestNewCertificate(ctx context.Context, client kubernet
 		}
 		return nil, fmt.Errorf("v1 csr create: %w", err)
 	}
+
 	return &Certificate{v1: resp}, nil
 }
 
