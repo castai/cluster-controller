@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 
@@ -37,7 +36,7 @@ type approveCSRHandler struct {
 	initialCSRFetchTimeout time.Duration
 	csrFetchInterval       time.Duration
 	cancelAutoApprove      context.CancelFunc
-	m                      sync.Mutex
+	m                      sync.Mutex // protects cancelAutoApprove for concurrent access
 }
 
 func (h *approveCSRHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
@@ -52,14 +51,16 @@ func (h *approveCSRHandler) Handle(ctx context.Context, action *castai.ClusterAc
 		actionIDLogField: action.ID,
 	})
 
+	// optionally we can enable watching for new CSRs and auto-approving them
 	if req.AllowAutoApprove != nil && *req.AllowAutoApprove {
-		go h.RunAutoApprove(ctx)
+		go h.RunAutoApproveForCastAINodes(ctx)
 		if req.NodeName == "" {
 			return nil
 		}
 	}
+	// optionally we can disable watching for new CSRs and auto-approving them
 	if req.AllowAutoApprove != nil && !*req.AllowAutoApprove {
-		h.StopAutoApprove()
+		h.StopAutoApproveForCastAINodes()
 		if req.NodeName == "" {
 			return nil
 		}
@@ -99,24 +100,20 @@ func (h *approveCSRHandler) approve(ctx context.Context, log *logrus.Entry, cert
 func (h *approveCSRHandler) handle(ctx context.Context, log logrus.FieldLogger, cert *csr.Certificate) (reterr error) {
 	// Since this new csr may be denied we need to delete it.
 	log.Debug("deleting old csr")
-	if err := csr.DeleteCertificate(ctx, h.clientset, cert); err != nil {
+	if err := cert.DeleteCertificate(ctx, h.clientset); err != nil {
 		return fmt.Errorf("deleting csr: %w", err)
 	}
 
 	// Create new csr with the same request data as original csr.
 	log.Debug("requesting new csr")
-	newCert, err := csr.RequestCertificate(
-		ctx,
-		h.clientset,
-		cert,
-	)
+	newCert, err := cert.RequestNewCertificate(ctx, h.clientset)
 	if err != nil {
 		return fmt.Errorf("requesting new csr: %w", err)
 	}
 
 	// Approve new csr.
 	log.Debug("approving new csr")
-	resp, err := csr.ApproveCertificate(ctx, h.clientset, newCert)
+	resp, err := newCert.ApproveCertificate(ctx, h.clientset)
 	if err != nil {
 		return fmt.Errorf("approving csr: %w", err)
 	}
@@ -172,45 +169,37 @@ func (h *approveCSRHandler) getInitialNodeCSR(ctx context.Context, log logrus.Fi
 	return cert, err
 }
 
-func (h *approveCSRHandler) RunAutoApprove(ctx context.Context) {
+func (h *approveCSRHandler) RunAutoApproveForCastAINodes(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	if !h.startAutoApprove(cancel) {
 		return // already running
 	}
-	defer h.StopAutoApprove()
+	defer h.StopAutoApproveForCastAINodes()
 
 	log := h.log.WithField("RunAutoApprove", "auto-approve-csr")
 	c := make(chan *csr.Certificate, 1)
-	g, ctx := errgroup.WithContext(ctx)
-	g.Go(func() error {
-		return csr.WatchAndApproveNodeCSR(ctx, log, h.clientset, c)
-	})
+	go csr.WatchCastAINodeCSRs(ctx, log, h.clientset, c)
 
-	g.Go(func() error {
-		for {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case cert := <-c:
-				if cert == nil || cert.Approved() {
-					continue
-				}
+	for {
+		select {
+		case <-ctx.Done():
+			log.WithError(ctx.Err()).Errorf("auto approve csr finished")
+			return
+		case cert := <-c:
+			if cert == nil {
+				continue
+			}
+			go func(cert *csr.Certificate) {
 				log := log.WithField("node_name", cert.Name)
 				log.Info("auto approving csr")
 				err := h.approve(ctx, log, cert)
 				if err != nil {
 					log.WithError(err).Errorf("failed to approve csr: %+v", cert)
-					continue
 				}
-			}
+			}(cert)
 		}
-	})
-
-	err := g.Wait()
-	if err != nil {
-		log.WithError(err).Errorf("auto approve csr finished")
 	}
 }
 
@@ -227,7 +216,7 @@ func (h *approveCSRHandler) startAutoApprove(cancelFunc context.CancelFunc) bool
 	return true
 }
 
-func (h *approveCSRHandler) StopAutoApprove() {
+func (h *approveCSRHandler) StopAutoApproveForCastAINodes() {
 	h.m.Lock()
 	defer h.m.Unlock()
 

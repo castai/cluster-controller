@@ -286,9 +286,9 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 		client.PrependReactor("get", "nodes", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
 			return true, &v1.Node{
 				ObjectMeta: metav1.ObjectMeta{
+					CreationTimestamp: metav1.NewTime(time.Now().Add(-time.Hour * 25)),
 					Labels: map[string]string{
-						castai.LabelManagedBy:      castai.LabelValueManagedByCASTAI,
-						castai.LabelAutoApproveCSR: time.Now().Format(time.RFC3339),
+						castai.LabelManagedBy: castai.LabelValueManagedByCASTAI,
 					},
 				},
 			}, nil
@@ -354,6 +354,7 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 			close(ch)
 			return true, &v1.Node{
 				ObjectMeta: metav1.ObjectMeta{
+					CreationTimestamp: metav1.NewTime(time.Now().Add(-time.Hour * 25)),
 					Labels: map[string]string{
 						castai.LabelManagedBy: castai.LabelValueManagedByCASTAI,
 					},

@@ -13,7 +13,6 @@ const (
 	LabelNodeID               = "provisioner.cast.ai/node-id"
 	LabelManagedBy            = "provisioner.cast.ai/managed-by"
 	LabelValueManagedByCASTAI = "cast.ai"
-	LabelAutoApproveCSR       = "provisioner.cast.ai/auto-approve-csr"
 )
 
 type GetClusterActionsResponse struct {

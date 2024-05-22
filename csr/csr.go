@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	certv1 "k8s.io/api/certificates/v1"
@@ -65,7 +66,7 @@ func (c *Certificate) Approved() bool {
 }
 
 // ApproveCertificate approves csr.
-func ApproveCertificate(ctx context.Context, client kubernetes.Interface, cert *Certificate) (*Certificate, error) {
+func (cert *Certificate) ApproveCertificate(ctx context.Context, client kubernetes.Interface) (*Certificate, error) {
 	if err := cert.Validate(); err != nil {
 		return nil, err
 	}
@@ -99,38 +100,38 @@ func ApproveCertificate(ctx context.Context, client kubernetes.Interface, cert *
 }
 
 // DeleteCertificate deletes csr.
-func DeleteCertificate(ctx context.Context, client kubernetes.Interface, cert *Certificate) error {
-	if err := cert.Validate(); err != nil {
+func (c *Certificate) DeleteCertificate(ctx context.Context, client kubernetes.Interface) error {
+	if err := c.Validate(); err != nil {
 		return err
 	}
 
-	if cert.V1Beta1 != nil {
-		return client.CertificatesV1beta1().CertificateSigningRequests().Delete(ctx, cert.V1Beta1.Name, metav1.DeleteOptions{})
+	if c.V1Beta1 != nil {
+		return client.CertificatesV1beta1().CertificateSigningRequests().Delete(ctx, c.V1Beta1.Name, metav1.DeleteOptions{})
 	}
-	return client.CertificatesV1().CertificateSigningRequests().Delete(ctx, cert.V1.Name, metav1.DeleteOptions{})
+	return client.CertificatesV1().CertificateSigningRequests().Delete(ctx, c.V1.Name, metav1.DeleteOptions{})
 }
 
 // RequestCertificate creates new csr.
-func RequestCertificate(ctx context.Context, client kubernetes.Interface, cert *Certificate) (*Certificate, error) {
-	if err := cert.Validate(); err != nil {
+func (c *Certificate) RequestNewCertificate(ctx context.Context, client kubernetes.Interface) (*Certificate, error) {
+	if err := c.Validate(); err != nil {
 		return nil, err
 	}
 
-	if cert.V1Beta1 != nil {
-		resp, err := createv1beta(ctx, client, cert.V1Beta1)
+	if c.V1Beta1 != nil {
+		resp, err := createv1beta(ctx, client, c.V1Beta1)
 		if err != nil {
 			if apierrors.IsAlreadyExists(err) {
-				return get(ctx, client, cert)
+				return get(ctx, client, c)
 			}
 			return nil, fmt.Errorf("v1beta csr create: %w", err)
 		}
 		return &Certificate{V1Beta1: resp}, nil
 	}
 
-	resp, err := createv1(ctx, client, cert.V1)
+	resp, err := createv1(ctx, client, c.V1)
 	if err != nil {
 		if apierrors.IsAlreadyExists(err) {
-			return get(ctx, client, cert)
+			return get(ctx, client, c)
 		}
 		return nil, fmt.Errorf("v1 csr create: %w", err)
 	}
@@ -263,7 +264,7 @@ func getNodeCSRV1Beta1(ctx context.Context, client kubernetes.Interface, nodeNam
 	return nil, ErrNodeCertificateNotFound
 }
 
-func WatchAndApproveNodeCSR(ctx context.Context, log logrus.FieldLogger, client kubernetes.Interface, c chan *Certificate) error {
+func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kubernetes.Interface, c chan *Certificate) {
 	var w watch.Interface
 	var err error
 	b := waitext.DefaultExponentialBackoff()
@@ -272,12 +273,9 @@ func WatchAndApproveNodeCSR(ctx context.Context, log logrus.FieldLogger, client 
 		b,
 		waitext.Forever,
 		func(ctx context.Context) (bool, error) {
-			w, err = client.CertificatesV1().CertificateSigningRequests().Watch(ctx, getOptions(certv1.KubeAPIServerClientKubeletSignerName))
+			w, err = getWatcher(ctx, client)
 			if err != nil {
-				w, err = client.CertificatesV1beta1().CertificateSigningRequests().Watch(ctx, getOptions(certv1beta1.KubeAPIServerClientKubeletSignerName))
-				if err != nil {
-					return true, fmt.Errorf("fail to open v1 and v1beta watching client: %w", err)
-				}
+				return true, fmt.Errorf("fail to open v1 and v1beta watching client: %w", err)
 			}
 			return false, nil
 		},
@@ -286,7 +284,8 @@ func WatchAndApproveNodeCSR(ctx context.Context, log logrus.FieldLogger, client 
 		},
 	)
 	if err != nil {
-		return err
+		log.Warnf("finished: %v", err)
+		return
 	}
 
 	defer w.Stop()
@@ -296,10 +295,10 @@ func WatchAndApproveNodeCSR(ctx context.Context, log logrus.FieldLogger, client 
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
+			return
 		case event, ok := <-w.ResultChan():
 			if !ok {
-				return WatchAndApproveNodeCSR(ctx, log, client, c) // start over in case of any error
+				WatchCastAINodeCSRs(ctx, log, client, c) // start over in case of any error
 			}
 
 			var name string
@@ -326,7 +325,7 @@ func WatchAndApproveNodeCSR(ctx context.Context, log logrus.FieldLogger, client 
 				}).Debugf("WatchAndApproveNodeCSRV1: skipping csr: %v", err)
 				continue
 			}
-			if !isAutoApproveAllowed(ctx, client, cn) {
+			if csrResult.Approved() || !isAutoApproveAllowedForNode(ctx, client, cn) {
 				continue
 			}
 			csrResult.Name = cn
@@ -335,9 +334,23 @@ func WatchAndApproveNodeCSR(ctx context.Context, log logrus.FieldLogger, client 
 	}
 }
 
-func isAutoApproveAllowed(ctx context.Context, client kubernetes.Interface, nodeName string) bool {
+func getWatcher(ctx context.Context, client kubernetes.Interface) (watch.Interface, error) {
+	w, err := client.CertificatesV1().CertificateSigningRequests().Watch(ctx, getOptions(certv1.KubeAPIServerClientKubeletSignerName))
+	if err != nil {
+		w, err = client.CertificatesV1beta1().CertificateSigningRequests().Watch(ctx, getOptions(certv1beta1.KubeAPIServerClientKubeletSignerName))
+		if err != nil {
+			return nil, fmt.Errorf("fail to open v1 and v1beta watching client: %w", err)
+		}
+	}
+	return w, nil
+}
+
+func isAutoApproveAllowedForNode(ctx context.Context, client kubernetes.Interface, nodeName string) bool {
+	if nodeName == "" {
+		return false
+	}
 	n, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
+	if err != nil || n == nil {
 		return false
 	}
 	managedBy, ok := n.Labels[castai.LabelManagedBy]
@@ -348,7 +361,7 @@ func isAutoApproveAllowed(ctx context.Context, client kubernetes.Interface, node
 		return false
 	}
 
-	if _, ok := n.Labels[castai.LabelAutoApproveCSR]; !ok {
+	if n.CreationTimestamp.After(time.Now().Add(-time.Hour * 24)) {
 		return false
 	}
 
@@ -356,9 +369,6 @@ func isAutoApproveAllowed(ctx context.Context, client kubernetes.Interface, node
 }
 
 func sendCertificate(ctx context.Context, c chan *Certificate, cert *Certificate) {
-	if cert.Approved() {
-		return
-	}
 	select {
 	case c <- cert:
 	case <-ctx.Done():
