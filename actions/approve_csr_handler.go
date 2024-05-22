@@ -36,7 +36,7 @@ type approveCSRHandler struct {
 	initialCSRFetchTimeout time.Duration
 	csrFetchInterval       time.Duration
 	cancelAutoApprove      context.CancelFunc
-	m                      sync.Mutex // protects cancelAutoApprove for concurrent access
+	m                      sync.Mutex // Used to make sure there is just one watcher running as it may be triggered from multiple CSR actions.
 }
 
 func (h *approveCSRHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
