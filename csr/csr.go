@@ -299,6 +299,7 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 			return
 		case event, ok := <-w.ResultChan():
 			if !ok {
+				log.Debug("watcher closed")
 				WatchCastAINodeCSRs(ctx, log, client, c) // start over in case of any error
 			}
 
