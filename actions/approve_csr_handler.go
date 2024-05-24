@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -34,6 +35,8 @@ type approveCSRHandler struct {
 	clientset              kubernetes.Interface
 	initialCSRFetchTimeout time.Duration
 	csrFetchInterval       time.Duration
+	cancelAutoApprove      context.CancelFunc
+	m                      sync.Mutex // Used to make sure there is just one watcher running as it may be triggered from multiple CSR actions.
 }
 
 func (h *approveCSRHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
@@ -48,6 +51,22 @@ func (h *approveCSRHandler) Handle(ctx context.Context, action *castai.ClusterAc
 		actionIDLogField: action.ID,
 	})
 
+	// If AllowAutoApprove is enabled, the CSR watcher will be triggered to handle Certificate Signing Requests (CSRs)
+	// for nodes that are older than 24 hours and managed by CastAI
+	if req.AllowAutoApprove != nil {
+		if *req.AllowAutoApprove {
+			go h.RunAutoApproveForCastAINodes(ctx)
+		} else {
+			h.StopAutoApproveForCastAINodes()
+		}
+
+		// CSR action may be used only to instruct whether to start / stop watcher responsible for auto-approving; in
+		// this case, there is nothing more to do.
+		if req.NodeName == "" {
+			return nil
+		}
+	}
+
 	cert, err := h.getInitialNodeCSR(ctx, log, req.NodeName)
 	if err != nil {
 		return fmt.Errorf("getting initial csr: %w", err)
@@ -58,6 +77,10 @@ func (h *approveCSRHandler) Handle(ctx context.Context, action *castai.ClusterAc
 		return nil
 	}
 
+	return h.handleWithRetry(ctx, log, cert)
+}
+
+func (h *approveCSRHandler) handleWithRetry(ctx context.Context, log *logrus.Entry, cert *csr.Certificate) error {
 	ctx, cancel := context.WithTimeout(ctx, approveCSRTimeout)
 	defer cancel()
 
@@ -78,30 +101,27 @@ func (h *approveCSRHandler) Handle(ctx context.Context, action *castai.ClusterAc
 func (h *approveCSRHandler) handle(ctx context.Context, log logrus.FieldLogger, cert *csr.Certificate) (reterr error) {
 	// Since this new csr may be denied we need to delete it.
 	log.Debug("deleting old csr")
-	if err := csr.DeleteCertificate(ctx, h.clientset, cert); err != nil {
+	if err := cert.DeleteCertificate(ctx, h.clientset); err != nil {
 		return fmt.Errorf("deleting csr: %w", err)
 	}
 
-	// Create new csr with the same request data as original csr.
+	// Create a new CSR with the same request data as the original one.
 	log.Debug("requesting new csr")
-	newCert, err := csr.RequestCertificate(
-		ctx,
-		h.clientset,
-		cert,
-	)
+	newCert, err := cert.NewCSR(ctx, h.clientset)
 	if err != nil {
 		return fmt.Errorf("requesting new csr: %w", err)
 	}
 
 	// Approve new csr.
 	log.Debug("approving new csr")
-	resp, err := csr.ApproveCertificate(ctx, h.clientset, newCert)
+	resp, err := newCert.ApproveCertificate(ctx, h.clientset)
 	if err != nil {
 		return fmt.Errorf("approving csr: %w", err)
 	}
 	if resp.Approved() {
 		return nil
 	}
+
 	return errors.New("certificate signing request was not approved")
 }
 
@@ -149,6 +169,73 @@ func (h *approveCSRHandler) getInitialNodeCSR(ctx context.Context, log logrus.Fi
 	)
 
 	return cert, err
+}
+
+func (h *approveCSRHandler) RunAutoApproveForCastAINodes(ctx context.Context) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	if !h.startAutoApprove(cancel) {
+		return // already running
+	}
+	defer h.StopAutoApproveForCastAINodes()
+
+	log := h.log.WithField("RunAutoApprove", "auto-approve-csr")
+	c := make(chan *csr.Certificate, 1)
+	go csr.WatchCastAINodeCSRs(ctx, log, h.clientset, c)
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.WithError(ctx.Err()).Errorf("auto approve csr finished")
+			return
+		case cert := <-c:
+			if cert == nil {
+				continue
+			}
+			go func(cert *csr.Certificate) {
+				log := log.WithField("node_name", cert.Name)
+				log.Info("auto approving csr")
+				err := h.handleWithRetry(ctx, log, cert)
+				if err != nil {
+					log.WithError(err).Errorf("failed to approve csr: %+v", cert)
+				}
+			}(cert)
+		}
+	}
+}
+
+func (h *approveCSRHandler) startAutoApprove(cancelFunc context.CancelFunc) bool {
+	h.m.Lock()
+	defer h.m.Unlock()
+	if h.cancelAutoApprove != nil {
+		return false
+	}
+
+	h.log.Info("starting auto approve CSRs for managed by Cast AI nodes")
+	h.cancelAutoApprove = cancelFunc
+
+	return true
+}
+
+func (h *approveCSRHandler) StopAutoApproveForCastAINodes() {
+	h.m.Lock()
+	defer h.m.Unlock()
+
+	if h.cancelAutoApprove == nil {
+		return
+	}
+
+	h.log.Info("stopping auto approve CSRs for managed by Cast AI nodes")
+	h.cancelAutoApprove()
+	h.cancelAutoApprove = nil
+}
+
+func (h *approveCSRHandler) getCancelAutoApprove() context.CancelFunc {
+	h.m.Lock()
+	defer h.m.Unlock()
+
+	return h.cancelAutoApprove
 }
 
 func newApproveCSRExponentialBackoff() wait.Backoff {
