@@ -66,10 +66,11 @@ func (c *chartUpsertHandler) Handle(ctx context.Context, action *castai.ClusterA
 	}
 
 	_, err = c.helm.Upgrade(ctx, helm.UpgradeOptions{
-		ChartSource:     &req.ChartSource,
-		Release:         rel,
-		ValuesOverrides: req.ValuesOverrides,
-		MaxHistory:      3, // Keep last 3 releases history.
+		ChartSource:          &req.ChartSource,
+		Release:              rel,
+		ValuesOverrides:      req.ValuesOverrides,
+		MaxHistory:           3, // Keep last 3 releases history.
+		ResetThenReuseValues: req.ResetThenReuseValues,
 	})
 	return err
 }

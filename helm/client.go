@@ -38,10 +38,11 @@ type UninstallOptions struct {
 }
 
 type UpgradeOptions struct {
-	ChartSource     *castai.ChartSource
-	Release         *release.Release
-	ValuesOverrides map[string]string
-	MaxHistory      int
+	ChartSource          *castai.ChartSource
+	Release              *release.Release
+	ValuesOverrides      map[string]string
+	MaxHistory           int
+	ResetThenReuseValues bool
 }
 
 type GetReleaseOptions struct {
@@ -155,6 +156,7 @@ func (c *client) Upgrade(ctx context.Context, opts UpgradeOptions) (*release.Rel
 	upgrade.Namespace = namespace
 	upgrade.MaxHistory = opts.MaxHistory
 	upgrade.PostRenderer = hook.NewLabelIgnoreHook(cfg.KubeClient, opts.Release)
+	upgrade.ResetThenReuseValues = opts.ResetThenReuseValues
 	name := opts.Release.Name
 
 	// Prepare user value overrides.

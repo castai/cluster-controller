@@ -204,11 +204,12 @@ type ActionCheckNodeStatus struct {
 }
 
 type ActionChartUpsert struct {
-	Namespace       string            `json:"namespace"`
-	ReleaseName     string            `json:"releaseName"`
-	ValuesOverrides map[string]string `json:"valuesOverrides,omitempty"`
-	ChartSource     ChartSource       `json:"chartSource"`
-	CreateNamespace bool              `json:"createNamespace"`
+	Namespace            string            `json:"namespace"`
+	ReleaseName          string            `json:"releaseName"`
+	ValuesOverrides      map[string]string `json:"valuesOverrides,omitempty"`
+	ChartSource          ChartSource       `json:"chartSource"`
+	CreateNamespace      bool              `json:"createNamespace"`
+	ResetThenReuseValues bool              `json:"resetThenReuseValues,omitempty"`
 }
 
 type ActionChartUninstall struct {
