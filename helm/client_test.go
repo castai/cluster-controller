@@ -75,6 +75,36 @@ func TestClientUpdate(t *testing.T) {
 	r.Equal("noop", rel.Config["random"])
 }
 
+func TestClientUpdateResetThenReuseValue(t *testing.T) {
+	r := require.New(t)
+
+	currentRelease := buildNginxIngressRelease(release.StatusDeployed)
+	client := &client{
+		log:         logrus.New(),
+		chartLoader: &testChartLoader{chart: buildNginxIngressChart()},
+		configurationGetter: &testConfigurationGetter{
+			t:              t,
+			currentRelease: currentRelease,
+		},
+	}
+
+	rel, err := client.Upgrade(context.Background(), UpgradeOptions{
+		Release: currentRelease,
+		ValuesOverrides: map[string]string{
+			"controller.replicaCount": "100",
+			"controller.service.type": "NodePort",
+			"random":                  "noop",
+		},
+		ResetThenReuseValues: true,
+	})
+
+	r.NoError(err)
+	r.NotNil(rel)
+	r.Equal("nginx-ingress", rel.Name)
+	r.Equal(int64(100), rel.Config["controller"].(map[string]interface{})["replicaCount"])
+	r.Equal("noop", rel.Config["random"])
+}
+
 func TestClientUninstall(t *testing.T) {
 	r := require.New(t)
 

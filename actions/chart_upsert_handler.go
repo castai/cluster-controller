@@ -65,11 +65,13 @@ func (c *chartUpsertHandler) Handle(ctx context.Context, action *castai.ClusterA
 		}
 	}
 
+	c.log.Debugf("upgrading release %q in namespace %q with resetThenReuseValues %t", req.ReleaseName, req.Namespace, req.ResetThenReuseValues)
 	_, err = c.helm.Upgrade(ctx, helm.UpgradeOptions{
-		ChartSource:     &req.ChartSource,
-		Release:         rel,
-		ValuesOverrides: req.ValuesOverrides,
-		MaxHistory:      3, // Keep last 3 releases history.
+		ChartSource:          &req.ChartSource,
+		Release:              rel,
+		ValuesOverrides:      req.ValuesOverrides,
+		MaxHistory:           3, // Keep last 3 releases history.
+		ResetThenReuseValues: req.ResetThenReuseValues,
 	})
 	return err
 }
