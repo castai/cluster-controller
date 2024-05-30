@@ -162,7 +162,7 @@ func Test_isAutoApproveAllowedForNode(t *testing.T) {
 				close(ch)
 				return true, tt.args.tuneMockNode, tt.args.tuneMockErr
 			})
-			if got := isAutoApproveAllowedForNode(context.Background(), client, tt.args.name); got != tt.want {
+			if got, _ := isAutoApproveAllowedForNode(context.Background(), client, tt.args.name); got != tt.want {
 				t.Errorf("isAutoApproveAllowedForNode() = %v, want %v", got, tt.want)
 			}
 		})

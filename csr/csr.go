@@ -316,7 +316,19 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 				}).Debugf("WatchAndApproveNodeCSRV1: skipping csr: %v", err)
 				continue
 			}
-			if csrResult.Approved() || !isAutoApproveAllowedForNode(ctx, client, cn) {
+			if csrResult.Approved() {
+				continue
+			}
+			log.WithFields(logrus.Fields{
+				"csr":       name,
+				"node_name": cn,
+			}).Debugf("checking csr: %s, node: %s", name, cn)
+			enabled, err := isAutoApproveAllowedForNode(ctx, client, cn)
+			if !enabled || err != nil {
+				log.WithFields(logrus.Fields{
+					"csr":       name,
+					"node_name": cn,
+				}).Debugf("checking csr: %s, node: %s %v", name, cn, err)
 				continue
 			}
 			csrResult.Name = cn
@@ -352,27 +364,34 @@ func toCertificate(event watch.Event) (cert *Certificate, name string, request [
 	return cert, name, request
 }
 
-func isAutoApproveAllowedForNode(ctx context.Context, client kubernetes.Interface, nodeName string) bool {
+var (
+	errNoNodeName          = errors.New("no node name")
+	errCouldNotFindNode    = errors.New("could not find node")
+	errNotManagedByCastAI  = errors.New("node is not managed by CAST AI")
+	errNotOlderThan24Hours = errors.New("node is not older than 24 hours")
+)
+
+func isAutoApproveAllowedForNode(ctx context.Context, client kubernetes.Interface, nodeName string) (bool, error) {
 	if nodeName == "" {
-		return false
+		return false, errNoNodeName
 	}
 	n, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 	if err != nil || n == nil {
-		return false
+		return false, errCouldNotFindNode
 	}
 	managedBy, ok := n.Labels[castai.LabelManagedBy]
 	if !ok {
-		return false
+		return false, errNotManagedByCastAI
 	}
 	if managedBy != castai.LabelValueManagedByCASTAI {
-		return false
+		return false, fmt.Errorf("value: %s %w", managedBy, errNotManagedByCastAI)
 	}
 
 	if n.CreationTimestamp.After(time.Now().Add(-time.Hour * 24)) {
-		return false
+		return false, errNotOlderThan24Hours
 	}
 
-	return true
+	return true, nil
 }
 
 func sendCertificate(ctx context.Context, c chan *Certificate, cert *Certificate) {
