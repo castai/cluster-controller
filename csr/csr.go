@@ -35,9 +35,10 @@ var (
 
 // Certificate wraps v1 and v1beta1 csr.
 type Certificate struct {
-	v1      *certv1.CertificateSigningRequest
-	v1Beta1 *certv1beta1.CertificateSigningRequest
-	Name    string
+	v1             *certv1.CertificateSigningRequest
+	v1Beta1        *certv1beta1.CertificateSigningRequest
+	Name           string
+	RequestingUser string
 }
 
 func (c *Certificate) Validate() error {
@@ -307,16 +308,31 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 			if csrResult == nil {
 				continue
 			}
+			if csrResult.RequestingUser != "kubelet-bootstrap" {
+				log.WithFields(logrus.Fields{
+					"csr":       name,
+					"node_name": csrResult.RequestingUser,
+				}).Debugf("skipping csr not from kubelet-bootstrap: %v", csrResult.RequestingUser)
+				continue
+			}
 
 			cn, err := getSubjectCommonName(name, request)
 			if err != nil {
 				log.WithFields(logrus.Fields{
 					"csr":       name,
 					"node_name": cn,
-				}).Debugf("WatchAndApproveNodeCSRV1: skipping csr: %v", err)
+				}).Debugf("skipping csr: %v", err)
 				continue
 			}
-			if csrResult.Approved() || !isAutoApproveAllowedForNode(ctx, client, cn) {
+			if csrResult.Approved() {
+				continue
+			}
+
+			if err := autoApprovalValidation(ctx, client, cn); err != nil {
+				log.WithFields(logrus.Fields{
+					"csr":       name,
+					"node_name": cn,
+				}).Debugf("skipping csr: %s, node: %s %v", name, cn, err)
 				continue
 			}
 			csrResult.Name = cn
@@ -341,38 +357,54 @@ func toCertificate(event watch.Event) (cert *Certificate, name string, request [
 	case *certv1.CertificateSigningRequest:
 		name = e.Name
 		request = e.Spec.Request
-		cert = &Certificate{v1: e}
+		cert = &Certificate{v1: e, RequestingUser: e.Spec.Username}
 	case *certv1beta1.CertificateSigningRequest:
 		name = e.Name
 		request = e.Spec.Request
-		cert = &Certificate{v1Beta1: e}
+		cert = &Certificate{v1Beta1: e, RequestingUser: e.Spec.Username}
 	default:
 		return nil, "", nil
 	}
+
 	return cert, name, request
 }
 
-func isAutoApproveAllowedForNode(ctx context.Context, client kubernetes.Interface, nodeName string) bool {
-	if nodeName == "" {
-		return false
+var (
+	errNoNodeName          = errors.New("no node name")
+	errCouldNotFindNode    = errors.New("could not find node")
+	errNotManagedByCastAI  = errors.New("node is not managed by CAST AI")
+	errNotOlderThan24Hours = errors.New("node is not older than 24 hours")
+)
+
+func autoApprovalValidation(ctx context.Context, client kubernetes.Interface, subjectCommonName string) error {
+	if subjectCommonName == "" {
+		return errNoNodeName
 	}
+
+	nodeName := strings.TrimPrefix(subjectCommonName, "system:node:")
 	n, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
-	if err != nil || n == nil {
-		return false
+	if err != nil {
+		return err
 	}
+
+	if n == nil {
+		return errCouldNotFindNode
+	}
+
 	managedBy, ok := n.Labels[castai.LabelManagedBy]
 	if !ok {
-		return false
+		return errNotManagedByCastAI
 	}
+
 	if managedBy != castai.LabelValueManagedByCASTAI {
-		return false
+		return fmt.Errorf("label value: %s %w", managedBy, errNotManagedByCastAI)
 	}
 
 	if n.CreationTimestamp.After(time.Now().Add(-time.Hour * 24)) {
-		return false
+		return errNotOlderThan24Hours
 	}
 
-	return true
+	return nil
 }
 
 func sendCertificate(ctx context.Context, c chan *Certificate, cert *Certificate) {
