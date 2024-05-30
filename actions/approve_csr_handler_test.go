@@ -422,7 +422,7 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 -----END CERTIFICATE REQUEST-----`),
 			SignerName: certv1.KubeAPIServerClientKubeletSignerName,
 			Usages:     []certv1.KeyUsage{"kubelet"},
-			Username:   "kubelet",
+			Username:   "kubelet-bootstrap",
 		},
 		//Status: certv1.CertificateSigningRequestStatus{},
 	}

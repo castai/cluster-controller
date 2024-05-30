@@ -35,9 +35,10 @@ var (
 
 // Certificate wraps v1 and v1beta1 csr.
 type Certificate struct {
-	v1      *certv1.CertificateSigningRequest
-	v1Beta1 *certv1beta1.CertificateSigningRequest
-	Name    string
+	v1             *certv1.CertificateSigningRequest
+	v1Beta1        *certv1beta1.CertificateSigningRequest
+	Name           string
+	RequestingUser string
 }
 
 func (c *Certificate) Validate() error {
@@ -307,6 +308,13 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 			if csrResult == nil {
 				continue
 			}
+			if csrResult.RequestingUser != "kubelet-bootstrap" {
+				log.WithFields(logrus.Fields{
+					"csr":       name,
+					"node_name": csrResult.RequestingUser,
+				}).Debugf("WatchAndApproveNodeCSRV1: skipping csr not from kubelet-bootstrap: %v", csrResult.RequestingUser)
+				continue
+			}
 
 			cn, err := getSubjectCommonName(name, request)
 			if err != nil {
@@ -353,14 +361,15 @@ func toCertificate(event watch.Event) (cert *Certificate, name string, request [
 	case *certv1.CertificateSigningRequest:
 		name = e.Name
 		request = e.Spec.Request
-		cert = &Certificate{v1: e}
+		cert = &Certificate{v1: e, RequestingUser: e.Spec.Username}
 	case *certv1beta1.CertificateSigningRequest:
 		name = e.Name
 		request = e.Spec.Request
-		cert = &Certificate{v1Beta1: e}
+		cert = &Certificate{v1Beta1: e, RequestingUser: e.Spec.Username}
 	default:
 		return nil, "", nil
 	}
+
 	return cert, name, request
 }
 
@@ -375,15 +384,18 @@ func isAutoApproveAllowedForNode(ctx context.Context, client kubernetes.Interfac
 	if subjectCommonName == "" {
 		return false, errNoNodeName
 	}
+
 	nodeName := strings.TrimPrefix(subjectCommonName, "system:node:")
 	n, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 	if err != nil || n == nil {
 		return false, errCouldNotFindNode
 	}
+
 	managedBy, ok := n.Labels[castai.LabelManagedBy]
 	if !ok {
 		return false, errNotManagedByCastAI
 	}
+
 	if managedBy != castai.LabelValueManagedByCASTAI {
 		return false, fmt.Errorf("value: %s %w", managedBy, errNotManagedByCastAI)
 	}
