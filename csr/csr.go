@@ -312,7 +312,7 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 				log.WithFields(logrus.Fields{
 					"csr":       name,
 					"node_name": csrResult.RequestingUser,
-				}).Debugf("WatchAndApproveNodeCSRV1: skipping csr not from kubelet-bootstrap: %v", csrResult.RequestingUser)
+				}).Debugf("skipping csr not from kubelet-bootstrap: %v", csrResult.RequestingUser)
 				continue
 			}
 
@@ -321,7 +321,7 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 				log.WithFields(logrus.Fields{
 					"csr":       name,
 					"node_name": cn,
-				}).Debugf("WatchAndApproveNodeCSRV1: skipping csr: %v", err)
+				}).Debugf("skipping csr: %v", err)
 				continue
 			}
 			if csrResult.Approved() {
