@@ -371,10 +371,11 @@ var (
 	errNotOlderThan24Hours = errors.New("node is not older than 24 hours")
 )
 
-func isAutoApproveAllowedForNode(ctx context.Context, client kubernetes.Interface, nodeName string) (bool, error) {
-	if nodeName == "" {
+func isAutoApproveAllowedForNode(ctx context.Context, client kubernetes.Interface, subjectCommonName string) (bool, error) {
+	if subjectCommonName == "" {
 		return false, errNoNodeName
 	}
+	nodeName := strings.TrimPrefix(subjectCommonName, "system:node:")
 	n, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 	if err != nil || n == nil {
 		return false, errCouldNotFindNode

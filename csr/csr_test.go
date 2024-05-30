@@ -63,9 +63,9 @@ func getClient() (*kubernetes.Clientset, error) {
 
 func Test_isAutoApproveAllowedForNode(t *testing.T) {
 	type args struct {
-		tuneMockNode runtime.Object
-		tuneMockErr  error
-		name         string
+		tuneMockNode      runtime.Object
+		tuneMockErr       error
+		subjectCommonName string
 	}
 	tests := []struct {
 		name string
@@ -79,25 +79,25 @@ func Test_isAutoApproveAllowedForNode(t *testing.T) {
 		{
 			name: "empty node get response",
 			args: args{
-				name: "node1",
+				subjectCommonName: "system:node:node1",
 			},
 			want: false,
 		},
 		{
 			name: "empty node get response",
 			args: args{
-				name:        "node1",
-				tuneMockErr: fmt.Errorf("error"),
+				subjectCommonName: "system:node:node1",
+				tuneMockErr:       fmt.Errorf("error"),
 			},
 			want: false,
 		},
 		{
 			name: "not CastAI node",
 			args: args{
-				name: "node1",
+				subjectCommonName: "node1",
 				tuneMockNode: &v1.Node{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:              "node1",
+						Name:              "system:node:node1",
 						CreationTimestamp: metav1.NewTime(time.Now().Add(-time.Hour * 25)),
 					},
 				},
@@ -107,7 +107,7 @@ func Test_isAutoApproveAllowedForNode(t *testing.T) {
 		{
 			name: "not old enough CastAI node",
 			args: args{
-				name: "node1",
+				subjectCommonName: "system:node:node1",
 				tuneMockNode: &v1.Node{
 					ObjectMeta: metav1.ObjectMeta{
 						Labels: map[string]string{
@@ -123,7 +123,7 @@ func Test_isAutoApproveAllowedForNode(t *testing.T) {
 		{
 			name: "not proper value of CastAI label",
 			args: args{
-				name: "node1",
+				subjectCommonName: "system:node:node1",
 				tuneMockNode: &v1.Node{
 					ObjectMeta: metav1.ObjectMeta{
 						CreationTimestamp: metav1.NewTime(time.Now().Add(-time.Hour * 25)),
@@ -139,7 +139,7 @@ func Test_isAutoApproveAllowedForNode(t *testing.T) {
 		{
 			name: "true",
 			args: args{
-				name: "node1",
+				subjectCommonName: "system:node:node1",
 				tuneMockNode: &v1.Node{
 					ObjectMeta: metav1.ObjectMeta{
 						CreationTimestamp: metav1.NewTime(time.Now().Add(-time.Hour * 25)),
@@ -162,7 +162,7 @@ func Test_isAutoApproveAllowedForNode(t *testing.T) {
 				close(ch)
 				return true, tt.args.tuneMockNode, tt.args.tuneMockErr
 			})
-			if got, _ := isAutoApproveAllowedForNode(context.Background(), client, tt.args.name); got != tt.want {
+			if got, _ := isAutoApproveAllowedForNode(context.Background(), client, tt.args.subjectCommonName); got != tt.want {
 				t.Errorf("isAutoApproveAllowedForNode() = %v, want %v", got, tt.want)
 			}
 		})
