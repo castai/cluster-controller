@@ -2,6 +2,7 @@ package csr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"testing"
@@ -62,6 +63,7 @@ func getClient() (*kubernetes.Clientset, error) {
 }
 
 func Test_isAutoApproveAllowedForNode(t *testing.T) {
+	err := fmt.Errorf("error")
 	type args struct {
 		tuneMockNode      runtime.Object
 		tuneMockErr       error
@@ -70,26 +72,26 @@ func Test_isAutoApproveAllowedForNode(t *testing.T) {
 	tests := []struct {
 		name string
 		args args
-		want bool
+		want error
 	}{
 		{
 			name: "empty node name",
-			want: false,
+			want: errNoNodeName,
 		},
 		{
 			name: "empty node get response",
 			args: args{
 				subjectCommonName: "system:node:node1",
 			},
-			want: false,
+			want: errCouldNotFindNode,
 		},
 		{
 			name: "empty node get response",
 			args: args{
 				subjectCommonName: "system:node:node1",
-				tuneMockErr:       fmt.Errorf("error"),
+				tuneMockErr:       err,
 			},
-			want: false,
+			want: err,
 		},
 		{
 			name: "not CastAI node",
@@ -102,7 +104,7 @@ func Test_isAutoApproveAllowedForNode(t *testing.T) {
 					},
 				},
 			},
-			want: false,
+			want: errNotManagedByCastAI,
 		},
 		{
 			name: "not old enough CastAI node",
@@ -118,7 +120,7 @@ func Test_isAutoApproveAllowedForNode(t *testing.T) {
 					},
 				},
 			},
-			want: false,
+			want: errNotOlderThan24Hours,
 		},
 		{
 			name: "not proper value of CastAI label",
@@ -134,7 +136,7 @@ func Test_isAutoApproveAllowedForNode(t *testing.T) {
 					},
 				},
 			},
-			want: false,
+			want: errNotManagedByCastAI,
 		},
 		{
 			name: "true",
@@ -150,7 +152,7 @@ func Test_isAutoApproveAllowedForNode(t *testing.T) {
 					},
 				},
 			},
-			want: true,
+			want: nil,
 		},
 	}
 	for _, tt := range tests {
@@ -162,8 +164,8 @@ func Test_isAutoApproveAllowedForNode(t *testing.T) {
 				close(ch)
 				return true, tt.args.tuneMockNode, tt.args.tuneMockErr
 			})
-			if got, _ := isAutoApproveAllowedForNode(context.Background(), client, tt.args.subjectCommonName); got != tt.want {
-				t.Errorf("isAutoApproveAllowedForNode() = %v, want %v", got, tt.want)
+			if got := autoApprovalValidation(context.Background(), client, tt.args.subjectCommonName); !errors.Is(got, tt.want) {
+				t.Errorf("autoApprovalValidation() = %v, want %v", got, tt.want)
 			}
 		})
 	}

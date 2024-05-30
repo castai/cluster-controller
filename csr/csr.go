@@ -327,16 +327,12 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 			if csrResult.Approved() {
 				continue
 			}
-			log.WithFields(logrus.Fields{
-				"csr":       name,
-				"node_name": cn,
-			}).Debugf("checking csr: %s, node: %s", name, cn)
-			enabled, err := isAutoApproveAllowedForNode(ctx, client, cn)
-			if !enabled || err != nil {
+
+			if err := autoApprovalValidation(ctx, client, cn); err != nil {
 				log.WithFields(logrus.Fields{
 					"csr":       name,
 					"node_name": cn,
-				}).Debugf("checking csr: %s, node: %s %v", name, cn, err)
+				}).Debugf("skipping csr: %s, node: %s %v", name, cn, err)
 				continue
 			}
 			csrResult.Name = cn
@@ -380,31 +376,35 @@ var (
 	errNotOlderThan24Hours = errors.New("node is not older than 24 hours")
 )
 
-func isAutoApproveAllowedForNode(ctx context.Context, client kubernetes.Interface, subjectCommonName string) (bool, error) {
+func autoApprovalValidation(ctx context.Context, client kubernetes.Interface, subjectCommonName string) error {
 	if subjectCommonName == "" {
-		return false, errNoNodeName
+		return errNoNodeName
 	}
 
 	nodeName := strings.TrimPrefix(subjectCommonName, "system:node:")
 	n, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
-	if err != nil || n == nil {
-		return false, errCouldNotFindNode
+	if err != nil {
+		return err
+	}
+
+	if n == nil {
+		return errCouldNotFindNode
 	}
 
 	managedBy, ok := n.Labels[castai.LabelManagedBy]
 	if !ok {
-		return false, errNotManagedByCastAI
+		return errNotManagedByCastAI
 	}
 
 	if managedBy != castai.LabelValueManagedByCASTAI {
-		return false, fmt.Errorf("value: %s %w", managedBy, errNotManagedByCastAI)
+		return fmt.Errorf("label value: %s %w", managedBy, errNotManagedByCastAI)
 	}
 
 	if n.CreationTimestamp.After(time.Now().Add(-time.Hour * 24)) {
-		return false, errNotOlderThan24Hours
+		return errNotOlderThan24Hours
 	}
 
-	return true, nil
+	return nil
 }
 
 func sendCertificate(ctx context.Context, c chan *Certificate, cert *Certificate) {
