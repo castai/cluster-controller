@@ -97,6 +97,7 @@ type service struct {
 
 	startedActionsWg sync.WaitGroup
 	startedActions   map[string]struct{}
+	delayedActions   map[string]int64
 	startedActionsMu sync.Mutex
 	healthCheck      *health.HealthzProvider
 }
@@ -136,7 +137,9 @@ func (s *service) doWork(ctx context.Context) error {
 
 	errR := waitext.Retry(ctx, boff, 3, func(ctx context.Context) (bool, error) {
 		iteration++
-		actions, err = s.castAIClient.GetActions(ctx, s.k8sVersion)
+		actions, err = s.castAIClient.GetActions(ctx, s.k8sVersion, &castai.GetClusterActionsRequest{
+			SkipDelayed: s.getDelayedActions(),
+		})
 		if err != nil {
 			return true, err
 		}
@@ -161,6 +164,28 @@ func (s *service) doWork(ctx context.Context) error {
 	return nil
 }
 
+func (s *service) getDelayedActions() []string {
+	s.startedActionsMu.Lock()
+	defer s.startedActionsMu.Unlock()
+
+	var actions []string
+	for action := range s.delayedActions {
+		if time.Now().Unix()-s.delayedActions[action] > 300 {
+			delete(s.delayedActions, action)
+		}
+		actions = append(actions, action)
+	}
+	s.log.Debugf("delayed actions: %v", actions)
+	return actions
+}
+
+func (s *service) addDelayedActions(id string) {
+	s.startedActionsMu.Lock()
+	defer s.startedActionsMu.Unlock()
+
+	s.delayedActions[id] = time.Now().Unix()
+}
+
 func (s *service) handleActions(ctx context.Context, actions []*castai.ClusterAction) {
 	for _, action := range actions {
 		if !s.startProcessing(action.ID) {
@@ -174,6 +199,7 @@ func (s *service) handleActions(ctx context.Context, actions []*castai.ClusterAc
 			handleErr := s.handleAction(ctx, action)
 			if errors.Is(handleErr, context.Canceled) {
 				// Action should be handled again on context canceled errors.
+				s.addDelayedActions(action.ID)
 				return
 			}
 			ackErr := s.ackAction(ctx, action, handleErr)
