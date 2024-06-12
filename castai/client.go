@@ -23,7 +23,7 @@ const (
 // ActionsClient lists functions used by actions package.
 // TODO: move interface into actions package.
 type ActionsClient interface {
-	GetActions(ctx context.Context, k8sVersion string) ([]*ClusterAction, error)
+	GetActions(ctx context.Context, k8sVersion string, req *GetClusterActionsRequest) ([]*ClusterAction, error)
 	AckAction(ctx context.Context, actionID string, req *AckClusterActionRequest) error
 	SendAKSInitData(ctx context.Context, req *AKSInitDataRequest) error
 }
@@ -137,10 +137,11 @@ func (c *Client) SendLog(ctx context.Context, e *logEntry) error {
 	return nil
 }
 
-func (c *Client) GetActions(ctx context.Context, k8sVersion string) ([]*ClusterAction, error) {
+func (c *Client) GetActions(ctx context.Context, k8sVersion string, req *GetClusterActionsRequest) ([]*ClusterAction, error) {
 	res := &GetClusterActionsResponse{}
 	resp, err := c.rest.R().
 		SetContext(ctx).
+		SetBody(req).
 		SetResult(res).
 		SetHeader(headerKubernetesVersion, k8sVersion).
 		Get(fmt.Sprintf("/v1/kubernetes/clusters/%s/actions", c.clusterID))

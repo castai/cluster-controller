@@ -79,7 +79,7 @@ func (h *drainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	if !ok {
 		return fmt.Errorf("unexpected type %T for drain handler", action.Data())
 	}
-	drainTimeout := h.getDrainTimeout(action)
+	drainTimeout := 1 * time.Minute
 	log := h.log.WithFields(logrus.Fields{
 		"node_name":      req.NodeName,
 		"node_id":        req.NodeID,
@@ -122,7 +122,7 @@ func (h *drainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 
 		var err error
 		for _, o := range options {
-			deleteCtx, deleteCancel := context.WithTimeout(ctx, h.cfg.podsDeleteTimeout)
+			deleteCtx, deleteCancel := context.WithTimeout(ctx, 1*time.Minute)
 			defer deleteCancel()
 
 			err = h.deleteNodePods(deleteCtx, log, node, o)

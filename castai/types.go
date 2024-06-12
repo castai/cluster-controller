@@ -18,6 +18,9 @@ const (
 type GetClusterActionsResponse struct {
 	Items []*ClusterAction `json:"items"`
 }
+type GetClusterActionsRequest struct {
+	SkipDelayed []string `json:"skipDelayed"`
+}
 
 type AckClusterActionRequest struct {
 	Error *string `json:"error"`
