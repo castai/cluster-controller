@@ -65,6 +65,7 @@ func NewService(
 		k8sVersion:     k8sVersion,
 		castAIClient:   castaiClient,
 		startedActions: map[string]struct{}{},
+		delayedActions: make(map[string]int64),
 		actionHandlers: map[reflect.Type]ActionHandler{
 			reflect.TypeOf(&castai.ActionDeleteNode{}):        newDeleteNodeHandler(log, clientset),
 			reflect.TypeOf(&castai.ActionDrainNode{}):         newDrainNodeHandler(log, clientset, cfg.Namespace),
