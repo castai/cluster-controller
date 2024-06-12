@@ -184,6 +184,7 @@ func (s *service) addDelayedActions(id string) {
 	s.startedActionsMu.Lock()
 	defer s.startedActionsMu.Unlock()
 
+	s.log.Debugf("add delayed action: %v", id)
 	s.delayedActions[id] = time.Now().Unix()
 }
 
