@@ -162,14 +162,19 @@ func (s *service) doWork(ctx context.Context) error {
 }
 
 func (s *service) handleActions(ctx context.Context, actions []*castai.ClusterAction) {
+	createEventsActions := make([]*castai.ClusterAction, 0, len(actions))
 	for _, action := range actions {
 		if !s.startProcessing(action.ID) {
 			continue
 		}
-
+		// TODO(stgleb): Process and ack create vents all-together.
+		actionType := reflect.TypeOf(action.Data())
+		if actionType == reflect.TypeOf(&castai.ActionCreateEvent{}) {
+			createEventsActions = append(createEventsActions, action)
+			continue
+		}
 		go func(action *castai.ClusterAction) {
 			defer s.finishProcessing(action.ID)
-
 			var err error
 			handleErr := s.handleAction(ctx, action)
 			if errors.Is(handleErr, context.Canceled) {
@@ -191,6 +196,30 @@ func (s *service) handleActions(ctx context.Context, actions []*castai.ClusterAc
 			}
 		}(action)
 	}
+	go func() {
+		for _, action := range createEventsActions {
+			defer s.finishProcessing(action.ID)
+			var err error
+			handleErr := s.handleAction(ctx, action)
+			if errors.Is(handleErr, context.Canceled) {
+				// Action should be handled again on context canceled errors.
+				return
+			}
+			ackErr := s.ackAction(ctx, action, handleErr)
+			if handleErr != nil {
+				err = handleErr
+			}
+			if ackErr != nil {
+				err = fmt.Errorf("%v:%w", err, ackErr)
+			}
+			if err != nil {
+				s.log.WithFields(logrus.Fields{
+					actionIDLogField: action.ID,
+					"error":          err.Error(),
+				}).Error("handle actions")
+			}
+		}
+	}()
 }
 
 func (s *service) finishProcessing(actionID string) {
