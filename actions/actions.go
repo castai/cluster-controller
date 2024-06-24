@@ -167,7 +167,7 @@ func (s *service) handleActions(ctx context.Context, actions []*castai.ClusterAc
 		if !s.startProcessing(action.ID) {
 			continue
 		}
-		// TODO(stgleb): Process and ack create vents all-together.
+		// Process create events in bulk later
 		actionType := reflect.TypeOf(action.Data())
 		if actionType == reflect.TypeOf(&castai.ActionCreateEvent{}) {
 			createEventsActions = append(createEventsActions, action)
@@ -196,19 +196,35 @@ func (s *service) handleActions(ctx context.Context, actions []*castai.ClusterAc
 			}
 		}(action)
 	}
-	go func() {
-		for _, action := range createEventsActions {
+	// Process create events in bulk.
+	actionAck := sync.Map{}
+	wg := sync.WaitGroup{}
+	for i := range createEventsActions {
+		wg.Add(1)
+		action := createEventsActions[i]
+		go func(action *castai.ClusterAction) {
 			defer s.finishProcessing(action.ID)
-			var err error
 			handleErr := s.handleAction(ctx, action)
-			if errors.Is(handleErr, context.Canceled) {
+			actionAck.Store(action, handleErr)
+			wg.Done()
+		}(action)
+	}
+	wg.Wait()
+	actionAck.Range(func(key, val interface{}) bool {
+		action, ok := key.(*castai.ClusterAction)
+		if !ok {
+			return true
+		}
+		err, ok := val.(error)
+		if !ok {
+			return true
+		}
+		go func(action *castai.ClusterAction, err error) {
+			if errors.Is(err, context.Canceled) {
 				// Action should be handled again on context canceled errors.
 				return
 			}
-			ackErr := s.ackAction(ctx, action, handleErr)
-			if handleErr != nil {
-				err = handleErr
-			}
+			ackErr := s.ackAction(ctx, action, err)
 			if ackErr != nil {
 				err = fmt.Errorf("%v:%w", err, ackErr)
 			}
@@ -218,8 +234,9 @@ func (s *service) handleActions(ctx context.Context, actions []*castai.ClusterAc
 					"error":          err.Error(),
 				}).Error("handle actions")
 			}
-		}
-	}()
+		}(action, err)
+		return true
+	})
 }
 
 func (s *service) finishProcessing(actionID string) {
