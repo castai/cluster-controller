@@ -70,6 +70,7 @@ func NewService(
 			reflect.TypeOf(&castai.ActionDrainNode{}):         newDrainNodeHandler(log, clientset, cfg.Namespace),
 			reflect.TypeOf(&castai.ActionPatchNode{}):         newPatchNodeHandler(log, clientset),
 			reflect.TypeOf(&castai.ActionCreateEvent{}):       newCreateEventHandler(log, clientset),
+			reflect.TypeOf(&castai.ActionCreateEventBulk{}):   newCreateEventBulkHandler(log, dynamicClient),
 			reflect.TypeOf(&castai.ActionApproveCSR{}):        newApproveCSRHandler(log, clientset),
 			reflect.TypeOf(&castai.ActionChartUpsert{}):       newChartUpsertHandler(log, helmClient),
 			reflect.TypeOf(&castai.ActionChartUninstall{}):    newChartUninstallHandler(log, helmClient),
@@ -281,6 +282,10 @@ func (s *service) handleAction(ctx context.Context, action *castai.ClusterAction
 	if err := handler.Handle(ctx, action); err != nil {
 		return fmt.Errorf("handling action %v: %w", actionType, err)
 	}
+	return nil
+}
+
+func (s *service) handleBulkAction(ctx context.Context, action *castai.ClusterAction) (err error) {
 	return nil
 }
 

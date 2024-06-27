@@ -247,3 +247,7 @@ type AKSInitDataRequest struct {
 	ProtectedSettingsBase64 string `json:"protectedSettingsBase64"`
 	Architecture            string `json:"architecture"`
 }
+
+type ActionCreateEventBulk struct {
+	// TODO(stgleb): implement
+}
