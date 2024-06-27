@@ -70,6 +70,7 @@ func NewService(
 			reflect.TypeOf(&castai.ActionDrainNode{}):         newDrainNodeHandler(log, clientset, cfg.Namespace),
 			reflect.TypeOf(&castai.ActionPatchNode{}):         newPatchNodeHandler(log, clientset),
 			reflect.TypeOf(&castai.ActionCreateEvent{}):       newCreateEventHandler(log, clientset),
+			reflect.TypeOf(&castai.ActionCreateEventBulk{}):   newCreateEventBulkHandler(log, dynamicClient),
 			reflect.TypeOf(&castai.ActionApproveCSR{}):        newApproveCSRHandler(log, clientset),
 			reflect.TypeOf(&castai.ActionChartUpsert{}):       newChartUpsertHandler(log, helmClient),
 			reflect.TypeOf(&castai.ActionChartUninstall{}):    newChartUninstallHandler(log, helmClient),
@@ -162,14 +163,19 @@ func (s *service) doWork(ctx context.Context) error {
 }
 
 func (s *service) handleActions(ctx context.Context, actions []*castai.ClusterAction) {
+	createEventsActions := make([]*castai.ClusterAction, 0, len(actions))
 	for _, action := range actions {
 		if !s.startProcessing(action.ID) {
 			continue
 		}
-
+		// Process create events in bulk later
+		actionType := reflect.TypeOf(action.Data())
+		if actionType == reflect.TypeOf(&castai.ActionCreateEvent{}) {
+			createEventsActions = append(createEventsActions, action)
+			continue
+		}
 		go func(action *castai.ClusterAction) {
 			defer s.finishProcessing(action.ID)
-
 			var err error
 			handleErr := s.handleAction(ctx, action)
 			if errors.Is(handleErr, context.Canceled) {
@@ -191,6 +197,47 @@ func (s *service) handleActions(ctx context.Context, actions []*castai.ClusterAc
 			}
 		}(action)
 	}
+	// Process create events in bulk.
+	actionAck := sync.Map{}
+	wg := sync.WaitGroup{}
+	for i := range createEventsActions {
+		wg.Add(1)
+		action := createEventsActions[i]
+		go func(action *castai.ClusterAction) {
+			defer s.finishProcessing(action.ID)
+			handleErr := s.handleAction(ctx, action)
+			actionAck.Store(action, handleErr)
+			wg.Done()
+		}(action)
+	}
+	wg.Wait()
+	actionAck.Range(func(key, val interface{}) bool {
+		action, ok := key.(*castai.ClusterAction)
+		if !ok {
+			return true
+		}
+		err, ok := val.(error)
+		if !ok {
+			return true
+		}
+		go func(action *castai.ClusterAction, err error) {
+			if errors.Is(err, context.Canceled) {
+				// Action should be handled again on context canceled errors.
+				return
+			}
+			ackErr := s.ackAction(ctx, action, err)
+			if ackErr != nil {
+				err = fmt.Errorf("%v:%w", err, ackErr)
+			}
+			if err != nil {
+				s.log.WithFields(logrus.Fields{
+					actionIDLogField: action.ID,
+					"error":          err.Error(),
+				}).Error("handle actions")
+			}
+		}(action, err)
+		return true
+	})
 }
 
 func (s *service) finishProcessing(actionID string) {
@@ -235,6 +282,10 @@ func (s *service) handleAction(ctx context.Context, action *castai.ClusterAction
 	if err := handler.Handle(ctx, action); err != nil {
 		return fmt.Errorf("handling action %v: %w", actionType, err)
 	}
+	return nil
+}
+
+func (s *service) handleBulkAction(ctx context.Context, action *castai.ClusterAction) (err error) {
 	return nil
 }
 
