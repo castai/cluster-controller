@@ -141,7 +141,7 @@ func (h *deleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 		return fmt.Errorf("sending delete pods requests: %w", err)
 	}
 	if err := h.deleteNodeVolumeAttachments(ctx, req.NodeName); err != nil {
-		return fmt.Errorf("deleting volume attachments: %w", err)
+		log.Warnf("deleting volume attachments: %v", err)
 	}
 	// Cleanup of pods for which node has been removed and remove volume attachments.
 	// It should take a few seconds but added retry in case of network errors.
@@ -178,9 +178,7 @@ func (h *deleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 }
 
 func (h *deleteNodeHandler) deleteNodeVolumeAttachments(ctx context.Context, nodeName string) error {
-	volumeAttachments, err := h.clientset.StorageV1().VolumeAttachments().List(ctx, metav1.ListOptions{
-		FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": nodeName}).String(),
-	})
+	volumeAttachments, err := h.clientset.StorageV1().VolumeAttachments().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return err
 	}
