@@ -10,7 +10,6 @@ import (
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/kubernetes"
@@ -140,11 +139,8 @@ func (h *deleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 	if err := h.sendPodsRequests(ctx, pods, deletePod); err != nil {
 		return fmt.Errorf("sending delete pods requests: %w", err)
 	}
-	if err := h.deleteNodeVolumeAttachments(ctx, req.NodeName); err != nil {
-		log.Warnf("deleting volume attachments: %v", err)
-	}
-	// Cleanup of pods for which node has been removed and remove volume attachments.
-	// It should take a few seconds but added retry in case of network errors.
+
+	// Cleanup of pods for which node has been removed. It should take a few seconds but added retry in case of network errors.
 	podsWaitBackoff := waitext.NewConstantBackoff(h.cfg.podsTerminationWait)
 	return waitext.Retry(
 		ctx,
@@ -160,37 +156,10 @@ func (h *deleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 			if len(pods.Items) > 0 {
 				return true, fmt.Errorf("waiting for %d pods to be terminated on node %v", len(pods.Items), req.NodeName)
 			}
-			volumeAttachments, err := h.clientset.StorageV1().VolumeAttachments().List(ctx, metav1.ListOptions{})
-			if !k8serrors.IsForbidden(err) {
-				if err != nil {
-					return true, fmt.Errorf("unable to list volume attachments for node %q err: %w", req.NodeName, err)
-				}
-				if len(volumeAttachments.Items) > 0 {
-					return true, fmt.Errorf("waiting for %d volume attachments to be deleted on node %v", len(pods.Items), req.NodeName)
-				}
-			}
 			return false, nil
 		},
 		func(err error) {
 			h.log.Warnf("error waiting for pods termination, will retry: %v", err)
 		},
 	)
-}
-
-func (h *deleteNodeHandler) deleteNodeVolumeAttachments(ctx context.Context, nodeName string) error {
-	volumeAttachments, err := h.clientset.StorageV1().VolumeAttachments().List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return err
-	}
-	for _, va := range volumeAttachments.Items {
-		if va.Spec.NodeName == nodeName {
-			// Delete the volume attachment.
-			err := h.clientset.StorageV1().VolumeAttachments().
-				Delete(ctx, va.Name, metav1.DeleteOptions{})
-			if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }
