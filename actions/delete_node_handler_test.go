@@ -151,5 +151,10 @@ func TestDeleteNodeHandler(t *testing.T) {
 		})
 		r.NoError(err)
 		r.Len(pods.Items, 0)
+		va, err := h.clientset.StorageV1().VolumeAttachments().List(context.Background(), metav1.ListOptions{
+			FieldSelector: fields.SelectorFromSet(fields.Set{}).String(),
+		})
+		r.NoError(err)
+		r.Len(va.Items, 0)
 	})
 }
