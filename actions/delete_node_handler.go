@@ -139,8 +139,11 @@ func (h *deleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 	if err := h.sendPodsRequests(ctx, pods, deletePod); err != nil {
 		return fmt.Errorf("sending delete pods requests: %w", err)
 	}
-
-	// Cleanup of pods for which node has been removed. It should take a few seconds but added retry in case of network errors.
+	if err := h.deleteNodeVolumeAttachments(ctx, req.NodeName); err != nil {
+		log.Warnf("deleting volume attachments: %v", err)
+	}
+	// Cleanup of pods for which node has been removed and remove volume attachments.
+	// It should take a few seconds but added retry in case of network errors.
 	podsWaitBackoff := waitext.NewConstantBackoff(h.cfg.podsTerminationWait)
 	return waitext.Retry(
 		ctx,
@@ -156,10 +159,40 @@ func (h *deleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 			if len(pods.Items) > 0 {
 				return true, fmt.Errorf("waiting for %d pods to be terminated on node %v", len(pods.Items), req.NodeName)
 			}
+			// Check if there are any volume attachments left for the node, but don't block on waiting for them.
+			volumeAttachments, err := h.clientset.StorageV1().VolumeAttachments().List(ctx, metav1.ListOptions{})
+			if err != nil && !apierrors.IsForbidden(err) {
+				log.Warnf("unable to list volume attachments for node %q err: %v", req.NodeName, err)
+			} else if volumeAttachments != nil && len(volumeAttachments.Items) > 0 {
+				log.Infof("currently %d volume attachments to be deleted on node %v",
+					len(volumeAttachments.Items), req.NodeName)
+			}
 			return false, nil
 		},
 		func(err error) {
 			h.log.Warnf("error waiting for pods termination, will retry: %v", err)
 		},
 	)
+}
+
+func (h *deleteNodeHandler) deleteNodeVolumeAttachments(ctx context.Context, nodeName string) error {
+	volumeAttachments, err := h.clientset.StorageV1().VolumeAttachments().List(ctx, metav1.ListOptions{
+		FieldSelector: fields.SelectorFromSet(fields.Set{}).String(),
+	})
+	if err != nil {
+		return err
+	}
+	// Force delete volume attachments for the node.
+	gracePeriod := int64(0)
+	for _, va := range volumeAttachments.Items {
+		if va.Spec.NodeName == nodeName {
+			// Delete the volume attachment.
+			if err := h.clientset.StorageV1().VolumeAttachments().
+				Delete(ctx, va.Name, metav1.DeleteOptions{
+					GracePeriodSeconds: &gracePeriod}); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
