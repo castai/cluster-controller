@@ -80,6 +80,11 @@ func (h *drainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 		return fmt.Errorf("unexpected type %T for drain handler", action.Data())
 	}
 	drainTimeout := h.getDrainTimeout(action)
+	// CSU-1945 temporary reduction to force evicting even pods with violated PDBs
+	if req.Force {
+		drainTimeout = 5 * time.Second
+	}
+
 	log := h.log.WithFields(logrus.Fields{
 		"node_name":      req.NodeName,
 		"node_id":        req.NodeID,
@@ -371,10 +376,11 @@ func (h *drainNodeHandler) evictPod(ctx context.Context, pod v1.Pod, groupVersio
 			}
 
 			// If PDB is violated, K8S returns 429 TooManyRequests with specific cause
-			// We skip those pods since the PDB might never be satisfied and we don't want to
+			// We skip those pods since the PDB might never be satisfied and we don't want to retry forever
 			// We still want to retry for other 429 codes (like throttling)
 			if apierrors.IsTooManyRequests(err) && apierrors.HasStatusCause(err, policyv1.DisruptionBudgetCause) {
-				return false, err
+				h.log.Warnf("pod %s/%s failed eviction due to PodDistributionBudget violation: %v", err)
+				return false, nil
 			}
 		}
 
