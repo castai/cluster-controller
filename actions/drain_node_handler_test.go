@@ -120,7 +120,9 @@ func TestDrainNodeHandler(t *testing.T) {
 		}
 
 		err := h.Handle(context.Background(), action)
-		r.EqualError(err, "eviciting node pods: sending evict pods requests: evicting pod pod1 in namespace default: internal")
+		r.ErrorContains(err, "eviciting node pods")
+		r.ErrorContains(err, "default/pod1")
+		r.ErrorContains(err, "internal")
 
 		n, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
 		r.NoError(err)
@@ -215,7 +217,9 @@ func TestDrainNodeHandler(t *testing.T) {
 		})
 
 		err := h.Handle(context.Background(), action)
-		r.EqualError(err, "forcefully deleting pods: sending delete pods requests: deleting pod pod1 in namespace default: internal")
+		r.ErrorContains(err, "forcefully deleting pods")
+		r.ErrorContains(err, "default/pod1")
+		r.ErrorContains(err, "internal")
 
 		_, err = clientset.CoreV1().Pods("default").Get(context.Background(), podName, metav1.GetOptions{})
 		r.NoError(err)
@@ -260,7 +264,9 @@ func TestDrainNodeHandler(t *testing.T) {
 		})
 
 		err := h.Handle(context.Background(), action)
-		r.EqualError(err, "forcefully deleting pods: sending delete pods requests: deleting pod pod1 in namespace default: internal")
+		r.ErrorContains(err, "forcefully deleting pods")
+		r.ErrorContains(err, "default/pod1")
+		r.ErrorContains(err, "internal")
 
 		_, err = clientset.CoreV1().Pods("default").Get(context.Background(), podName, metav1.GetOptions{})
 		r.NoError(err)
