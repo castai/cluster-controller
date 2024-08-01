@@ -136,7 +136,7 @@ func TestDeleteNodeHandler(t *testing.T) {
 			cfg: deleteNodeConfig{
 				podsTerminationWait: 1,
 			},
-			drainNodeHandler: drainNodeHandler{clientset: clientset},
+			drainNodeHandler: drainNodeHandler{clientset: clientset, log: log},
 		}
 
 		err := h.Handle(context.Background(), action)
