@@ -110,6 +110,9 @@ func (h *drainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 		return fmt.Errorf("eviciting node pods: %w", err)
 	}
 
+	// If we reached timeout (maybe a pod was stuck in eviction or we hit another hiccup) and we are forced to drain, then delete pods
+	// This skips eviction API and even if pods have PDBs (for example), the pods are still deleted.
+	// If the node is going away (like spot interruption), there is no point in trying to keep the pods alive.
 	if errors.Is(err, context.DeadlineExceeded) {
 		if !req.Force {
 			return err
@@ -329,6 +332,8 @@ func (h *drainNodeHandler) evictPod(ctx context.Context, pod v1.Pod, groupVersio
 	b := waitext.NewConstantBackoff(h.cfg.podEvictRetryDelay)
 	action := func(ctx context.Context) (bool, error) {
 		var err error
+
+		h.log.Debugf("requesting eviction for pod %s/%s", pod.Namespace, pod.Name)
 		if groupVersion == policyv1.SchemeGroupVersion {
 			err = h.clientset.PolicyV1().Evictions(pod.Namespace).Evict(ctx, &policyv1.Eviction{
 				ObjectMeta: metav1.ObjectMeta{
