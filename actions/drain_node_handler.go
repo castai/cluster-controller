@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/sync/errgroup"
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/api/policy/v1beta1"
@@ -209,19 +209,44 @@ func (h *drainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldL
 }
 
 func (h *drainNodeHandler) sendPodsRequests(ctx context.Context, pods []v1.Pod, f func(context.Context, v1.Pod) error) error {
-	batchSize := lo.Clamp(0.2*float64(len(pods)), 5, 20)
-	for _, batch := range lo.Chunk(pods, int(batchSize)) {
-		g, ctx := errgroup.WithContext(ctx)
-		for _, pod := range batch {
-			pod := pod
-			g.Go(func() error { return f(ctx, pod) })
-		}
-		if err := g.Wait(); err != nil {
-			return err
-		}
+	if len(pods) == 0 {
+		return nil
 	}
 
-	return nil
+	var (
+		parallelTasks = int(lo.Clamp(0.2*float64(len(pods)), 5, 20))
+		taskChan      = make(chan *v1.Pod, len(pods))
+		taskErrs      = make([]error, 0)
+		taskErrsMx    sync.Mutex
+		wg            sync.WaitGroup
+	)
+
+	h.log.Infof("Starting %d parallel tasks for %d pods: [%v]", parallelTasks, len(pods), pods)
+
+	worker := func(taskChan <-chan *v1.Pod) {
+		for task := range taskChan {
+			if err := f(ctx, *task); err != nil {
+				taskErrsMx.Lock()
+				taskErrs = append(taskErrs, fmt.Errorf("pod %s/%s failed operation with %w", task.Namespace, task.Namespace, err))
+				taskErrsMx.Unlock()
+			}
+		}
+		wg.Done()
+	}
+
+	for range parallelTasks {
+		wg.Add(1)
+		go worker(taskChan)
+	}
+
+	for _, pod := range pods {
+		taskChan <- &pod
+	}
+
+	close(taskChan)
+	wg.Wait()
+
+	return errors.Join(taskErrs...)
 }
 
 func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.FieldLogger, node *v1.Node) ([]v1.Pod, error) {
