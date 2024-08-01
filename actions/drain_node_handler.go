@@ -117,6 +117,8 @@ func (h *drainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 		if !req.Force {
 			return err
 		}
+
+		h.log.Infof("timeout=%f exceeded during pod eviction, force=%v, starting pod deletion", drainTimeout.Seconds(), req.Force)
 		// Try deleting pods gracefully first, then delete with 0 grace period.
 		options := []metav1.DeleteOptions{
 			{},
