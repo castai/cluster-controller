@@ -226,7 +226,9 @@ func (h *drainNodeHandler) sendPodsRequests(ctx context.Context, pods []v1.Pod, 
 		wg            sync.WaitGroup
 	)
 
-	h.log.Infof("Starting %d parallel tasks for %d pods: [%v]", parallelTasks, len(pods), pods)
+	h.log.Debugf("Starting %d parallel tasks for %d pods: [%v]", parallelTasks, len(pods), lo.Map(pods, func(t v1.Pod, i int) string {
+		return fmt.Sprintf("%s/%s", t.Namespace, t.Name)
+	}))
 
 	worker := func(taskChan <-chan *v1.Pod) {
 		for task := range taskChan {
