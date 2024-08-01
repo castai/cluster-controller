@@ -220,7 +220,7 @@ func (h *drainNodeHandler) sendPodsRequests(ctx context.Context, pods []v1.Pod, 
 
 	var (
 		parallelTasks = int(lo.Clamp(0.2*float64(len(pods)), 5, 20))
-		taskChan      = make(chan *v1.Pod, len(pods))
+		taskChan      = make(chan v1.Pod, len(pods))
 		taskErrs      = make([]error, 0)
 		taskErrsMx    sync.Mutex
 		wg            sync.WaitGroup
@@ -230,11 +230,11 @@ func (h *drainNodeHandler) sendPodsRequests(ctx context.Context, pods []v1.Pod, 
 		return fmt.Sprintf("%s/%s", t.Namespace, t.Name)
 	}))
 
-	worker := func(taskChan <-chan *v1.Pod) {
-		for task := range taskChan {
-			if err := f(ctx, *task); err != nil {
+	worker := func(taskChan <-chan v1.Pod) {
+		for pod := range taskChan {
+			if err := f(ctx, pod); err != nil {
 				taskErrsMx.Lock()
-				taskErrs = append(taskErrs, fmt.Errorf("pod %s/%s failed operation with %w", task.Namespace, task.Namespace, err))
+				taskErrs = append(taskErrs, fmt.Errorf("pod %s/%s failed operation: %w", pod.Namespace, pod.Name, err))
 				taskErrsMx.Unlock()
 			}
 		}
@@ -247,7 +247,7 @@ func (h *drainNodeHandler) sendPodsRequests(ctx context.Context, pods []v1.Pod, 
 	}
 
 	for _, pod := range pods {
-		taskChan <- &pod
+		taskChan <- pod
 	}
 
 	close(taskChan)
