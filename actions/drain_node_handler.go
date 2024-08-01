@@ -293,6 +293,7 @@ func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.F
 
 		if p.Namespace == h.cfg.castNamespace && !isDaemonSetPod(&p) && !isStaticPod(&p) {
 			castPods = append(castPods, p)
+			continue
 		}
 
 		if !isDaemonSetPod(&p) && !isStaticPod(&p) {
