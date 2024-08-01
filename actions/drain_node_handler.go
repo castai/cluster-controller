@@ -365,6 +365,13 @@ func (h *drainNodeHandler) evictPod(ctx context.Context, pod v1.Pod, groupVersio
 			if apierrors.IsInternalError(err) {
 				return false, err
 			}
+
+			// If PDB is violated, K8S returns 429 TooManyRequests with specific cause
+			// We skip those pods since the PDB might never be satisfied and we don't want to
+			// We still want to retry for other 429 codes (like throttling)
+			if apierrors.IsTooManyRequests(err) && apierrors.HasStatusCause(err, policyv1.DisruptionBudgetCause) {
+				return false, err
+			}
 		}
 
 		// Other errors - retry.
