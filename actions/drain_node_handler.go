@@ -80,10 +80,6 @@ func (h *drainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 		return fmt.Errorf("unexpected type %T for drain handler", action.Data())
 	}
 	drainTimeout := h.getDrainTimeout(action)
-	// CSU-1945 temporary reduction to force evicting even pods with violated PDBs
-	if req.Force {
-		drainTimeout = 5 * time.Second
-	}
 
 	log := h.log.WithFields(logrus.Fields{
 		"node_name":      req.NodeName,
