@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/sync/errgroup"
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/api/policy/v1beta1"
@@ -80,6 +80,7 @@ func (h *drainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 		return fmt.Errorf("unexpected type %T for drain handler", action.Data())
 	}
 	drainTimeout := h.getDrainTimeout(action)
+
 	log := h.log.WithFields(logrus.Fields{
 		"node_name":      req.NodeName,
 		"node_id":        req.NodeID,
@@ -110,10 +111,15 @@ func (h *drainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 		return fmt.Errorf("eviciting node pods: %w", err)
 	}
 
+	// If we reached timeout (maybe a pod was stuck in eviction or we hit another hiccup) and we are forced to drain, then delete pods
+	// This skips eviction API and even if pods have PDBs (for example), the pods are still deleted.
+	// If the node is going away (like spot interruption), there is no point in trying to keep the pods alive.
 	if errors.Is(err, context.DeadlineExceeded) {
 		if !req.Force {
 			return err
 		}
+
+		h.log.Infof("timeout=%f exceeded during pod eviction, force=%v, starting pod deletion", drainTimeout.Seconds(), req.Force)
 		// Try deleting pods gracefully first, then delete with 0 grace period.
 		options := []metav1.DeleteOptions{
 			{},
@@ -209,19 +215,46 @@ func (h *drainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldL
 }
 
 func (h *drainNodeHandler) sendPodsRequests(ctx context.Context, pods []v1.Pod, f func(context.Context, v1.Pod) error) error {
-	batchSize := lo.Clamp(0.2*float64(len(pods)), 5, 20)
-	for _, batch := range lo.Chunk(pods, int(batchSize)) {
-		g, ctx := errgroup.WithContext(ctx)
-		for _, pod := range batch {
-			pod := pod
-			g.Go(func() error { return f(ctx, pod) })
-		}
-		if err := g.Wait(); err != nil {
-			return err
-		}
+	if len(pods) == 0 {
+		return nil
 	}
 
-	return nil
+	var (
+		parallelTasks = int(lo.Clamp(0.2*float64(len(pods)), 5, 20))
+		taskChan      = make(chan v1.Pod, len(pods))
+		taskErrs      = make([]error, 0)
+		taskErrsMx    sync.Mutex
+		wg            sync.WaitGroup
+	)
+
+	h.log.Debugf("Starting %d parallel tasks for %d pods: [%v]", parallelTasks, len(pods), lo.Map(pods, func(t v1.Pod, i int) string {
+		return fmt.Sprintf("%s/%s", t.Namespace, t.Name)
+	}))
+
+	worker := func(taskChan <-chan v1.Pod) {
+		for pod := range taskChan {
+			if err := f(ctx, pod); err != nil {
+				taskErrsMx.Lock()
+				taskErrs = append(taskErrs, fmt.Errorf("pod %s/%s failed operation: %w", pod.Namespace, pod.Name, err))
+				taskErrsMx.Unlock()
+			}
+		}
+		wg.Done()
+	}
+
+	for range parallelTasks {
+		wg.Add(1)
+		go worker(taskChan)
+	}
+
+	for _, pod := range pods {
+		taskChan <- pod
+	}
+
+	close(taskChan)
+	wg.Wait()
+
+	return errors.Join(taskErrs...)
 }
 
 func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.FieldLogger, node *v1.Node) ([]v1.Pod, error) {
@@ -265,6 +298,7 @@ func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.F
 
 		if p.Namespace == h.cfg.castNamespace && !isDaemonSetPod(&p) && !isStaticPod(&p) {
 			castPods = append(castPods, p)
+			continue
 		}
 
 		if !isDaemonSetPod(&p) && !isStaticPod(&p) {
@@ -304,6 +338,8 @@ func (h *drainNodeHandler) evictPod(ctx context.Context, pod v1.Pod, groupVersio
 	b := waitext.NewConstantBackoff(h.cfg.podEvictRetryDelay)
 	action := func(ctx context.Context) (bool, error) {
 		var err error
+
+		h.log.Debugf("requesting eviction for pod %s/%s", pod.Namespace, pod.Name)
 		if groupVersion == policyv1.SchemeGroupVersion {
 			err = h.clientset.PolicyV1().Evictions(pod.Namespace).Evict(ctx, &policyv1.Eviction{
 				ObjectMeta: metav1.ObjectMeta{
@@ -333,6 +369,14 @@ func (h *drainNodeHandler) evictPod(ctx context.Context, pod v1.Pod, groupVersio
 			// Pod is misconfigured - stop retry.
 			if apierrors.IsInternalError(err) {
 				return false, err
+			}
+
+			// If PDB is violated, K8S returns 429 TooManyRequests with specific cause
+			// We skip those pods since the PDB might never be satisfied and we don't want to retry forever
+			// We still want to retry for other 429 codes (like throttling)
+			if apierrors.IsTooManyRequests(err) && apierrors.HasStatusCause(err, policyv1.DisruptionBudgetCause) {
+				h.log.Warnf("pod %s/%s failed eviction due to PodDistributionBudget violation: %v", err)
+				return false, nil
 			}
 		}
 
