@@ -220,7 +220,7 @@ func (h *drainNodeHandler) sendPodsRequests(ctx context.Context, pods []v1.Pod, 
 	}
 
 	var (
-		parallelTasks = int(lo.Clamp(0.2*float64(len(pods)), 5, 20))
+		parallelTasks = int(lo.Clamp(float64(len(pods)), 30, 100))
 		taskChan      = make(chan v1.Pod, len(pods))
 		taskErrs      = make([]error, 0)
 		taskErrsMx    sync.Mutex
@@ -372,11 +372,9 @@ func (h *drainNodeHandler) evictPod(ctx context.Context, pod v1.Pod, groupVersio
 			}
 
 			// If PDB is violated, K8S returns 429 TooManyRequests with specific cause
-			// We skip those pods since the PDB might never be satisfied and we don't want to retry forever
-			// We still want to retry for other 429 codes (like throttling)
+			// TODO: With KUBE-479, rethink this flow in general
 			if apierrors.IsTooManyRequests(err) && apierrors.HasStatusCause(err, policyv1.DisruptionBudgetCause) {
-				h.log.Warnf("pod %s/%s failed eviction due to PodDistributionBudget violation: %v", err)
-				return false, nil
+				return true, err
 			}
 		}
 
