@@ -220,7 +220,7 @@ func (h *drainNodeHandler) sendPodsRequests(ctx context.Context, pods []v1.Pod, 
 	}
 
 	var (
-		parallelTasks = int(lo.Clamp(0.2*float64(len(pods)), 5, 20))
+		parallelTasks = int(lo.Clamp(float64(len(pods)), 30, 100))
 		taskChan      = make(chan v1.Pod, len(pods))
 		taskErrs      = make([]error, 0)
 		taskErrsMx    sync.Mutex
