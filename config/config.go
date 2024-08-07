@@ -11,6 +11,7 @@ import (
 type Config struct {
 	Log            Log
 	API            API
+	TLS            TLS
 	Kubeconfig     string
 	KubeClient     KubeClient
 	ClusterID      string
@@ -27,6 +28,10 @@ type Log struct {
 type API struct {
 	Key string
 	URL string
+}
+
+type TLS struct {
+	CACert string
 }
 
 type LeaderElection struct {
@@ -57,6 +62,7 @@ func Get() Config {
 	_ = viper.BindEnv("log.level", "LOG_LEVEL")
 	_ = viper.BindEnv("api.key", "API_KEY")
 	_ = viper.BindEnv("api.url", "API_URL")
+	_ = viper.BindEnv("tls.cacert", "TLS_CA_CERT_FILE")
 	_ = viper.BindEnv("clusterid", "CLUSTER_ID")
 	_ = viper.BindEnv("kubeconfig")
 	_ = viper.BindEnv("kubeclient.qps", "KUBECLIENT_QPS")

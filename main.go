@@ -67,7 +67,7 @@ func main() {
 			return fmt.Sprintf("%s()", f.Function), fmt.Sprintf("%s:%d", filename, f.Line)
 		},
 	}
-	cl, err := castai.NewDefaultClient(cfg.API.URL, cfg.API.Key, logger.Level, binVersion, maxRequestTimeout)
+	cl, err := castai.NewRestyClient(cfg.API.URL, cfg.API.Key, cfg.TLS.CACert, logger.Level, binVersion, maxRequestTimeout)
 	if err != nil {
 		log.Fatalf("failed to create castai client: %v", err)
 

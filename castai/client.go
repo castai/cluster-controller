@@ -2,6 +2,8 @@ package castai
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net"
 	"net/http"
@@ -45,9 +47,9 @@ func NewClient(log *logrus.Logger, rest *resty.Client, clusterID string) *Client
 	}
 }
 
-// NewDefaultClient configures a default instance of the resty.Client used to do HTTP requests.
-func NewDefaultClient(url, key string, level logrus.Level, binVersion *config.ClusterControllerVersion, defaultTimeout time.Duration) (*resty.Client, error) {
-	clientTransport, err := createHTTPTransport()
+// NewRestyClient configures a default instance of the resty.Client used to do HTTP requests.
+func NewRestyClient(url, key, ca string, level logrus.Level, binVersion *config.ClusterControllerVersion, defaultTimeout time.Duration) (*resty.Client, error) {
+	clientTransport, err := createHTTPTransport(ca)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +69,11 @@ func NewDefaultClient(url, key string, level logrus.Level, binVersion *config.Cl
 	return client, nil
 }
 
-func createHTTPTransport() (*http.Transport, error) {
+func createHTTPTransport(ca string) (*http.Transport, error) {
+	tlsConfig, err := createTLSConfig(ca)
+	if err != nil {
+		return nil, fmt.Errorf("creating TLS config: %v", err)
+	}
 	t1 := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: (&net.Dialer{
@@ -78,6 +84,7 @@ func createHTTPTransport() (*http.Transport, error) {
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   5 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
+		TLSClientConfig:       tlsConfig,
 	}
 
 	t2, err := http2.ConfigureTransports(t1)
@@ -93,6 +100,21 @@ func createHTTPTransport() (*http.Transport, error) {
 	t2.PingTimeout = 15 * time.Second
 
 	return t1, nil
+}
+
+func createTLSConfig(ca string) (*tls.Config, error) {
+	if len(ca) == 0 {
+		return nil, nil
+	}
+
+	certPool := x509.NewCertPool()
+	if !certPool.AppendCertsFromPEM([]byte(ca)) {
+		return nil, fmt.Errorf("failed to add root certificate to CA pool")
+	}
+
+	return &tls.Config{
+		RootCAs: certPool,
+	}, nil
 }
 
 func (c *Client) SendAKSInitData(ctx context.Context, req *AKSInitDataRequest) error {
