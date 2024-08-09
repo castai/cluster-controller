@@ -42,6 +42,7 @@ type createEventHandler struct {
 }
 
 func (h *createEventHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+	h.log.Infof("handling create_event action: %s", action.ID)
 	req, ok := action.Data().(*castai.ActionCreateEvent)
 	if !ok {
 		return fmt.Errorf("unexpected type %T for create event handler", action.Data())
@@ -50,13 +51,14 @@ func (h *createEventHandler) Handle(ctx context.Context, action *castai.ClusterA
 	if namespace == "" {
 		namespace = v1.NamespaceDefault
 	}
+	h.log.Infof("handling create_event action: %s type: %s namespace: %s", req.Action, req.EventType, namespace)
 	h.handleEventV1(ctx, req, namespace)
 	return nil
 }
 
 func (h *createEventHandler) handleEventV1(_ context.Context, req *castai.ActionCreateEvent, namespace string) {
 	h.mu.RLock()
-	h.log.Debug("handling create event action: %s type: %s", req.Action, req.EventType)
+	h.log.Debug("handling create_event action: %s type: %s", req.Action, req.EventType)
 	if recorder, ok := h.eventNsRecorder[namespace]; ok {
 		recorder.Eventf(&req.ObjectRef, v1.EventTypeNormal, req.Reason, req.Action, req.Message)
 		h.mu.RUnlock()
