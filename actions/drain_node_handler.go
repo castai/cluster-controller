@@ -130,9 +130,12 @@ func (h *drainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 		var err error
 		for _, o := range options {
 			deleteCtx, deleteCancel := context.WithTimeout(ctx, h.cfg.podsDeleteTimeout)
-			defer deleteCancel()
 
 			err = h.deleteNodePods(deleteCtx, log, node, o)
+
+			// Clean-up the child context if we got here; no reason to wait for the function to exit
+			deleteCancel()
+
 			if err == nil {
 				break
 			}
