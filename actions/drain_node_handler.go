@@ -374,15 +374,13 @@ func (h *drainNodeHandler) evictPod(ctx context.Context, pod v1.Pod, groupVersio
 			if apierrors.IsInternalError(err) {
 				return false, err
 			}
-
-			// If PDB is violated, K8S returns 429 TooManyRequests with specific cause
-			// TODO: With KUBE-479, rethink this flow in general
-			if apierrors.IsTooManyRequests(err) && apierrors.HasStatusCause(err, policyv1.DisruptionBudgetCause) {
-				return true, err
-			}
 		}
 
 		// Other errors - retry.
+		// This includes 429 TooManyRequests (due to throttling) and 429 TooManyRequests + DisruptionBudgetCause (due to violated PDBs)
+		// This is done to try and do graceful eviction for as long as possible;
+		// it is expected that caller has a timeout that will stop this process if the PDB can never be satisfied.
+		// Note: pods only receive SIGTERM signals if they are evicted; if PDB prevents that, the signal will not happen here.
 		return true, err
 	}
 	err := waitext.Retry(ctx, b, waitext.Forever, action, func(err error) {
