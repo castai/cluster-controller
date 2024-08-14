@@ -60,12 +60,11 @@ func newDrainNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface,
 // the result is clamped between 0s and the requested timeout.
 func (h *drainNodeHandler) getDrainTimeout(action *castai.ClusterAction) time.Duration {
 	timeSinceCreated := time.Since(action.CreatedAt)
-	drainTimeout := time.Duration(action.ActionDrainNode.DrainTimeoutSeconds) * time.Second
+	requestedTimeout := time.Duration(action.ActionDrainNode.DrainTimeoutSeconds) * time.Second
 
-	// Remove 2 poll interval required for polling the action.
-	timeSinceCreated = timeSinceCreated - roundTripTime
+	drainTimeout := requestedTimeout - timeSinceCreated
 
-	return lo.Clamp(drainTimeout-timeSinceCreated, minDrainTimeout*time.Second, time.Duration(action.ActionDrainNode.DrainTimeoutSeconds)*time.Second)
+	return lo.Clamp(drainTimeout, minDrainTimeout*time.Second, requestedTimeout)
 }
 
 type drainNodeHandler struct {
