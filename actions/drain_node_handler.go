@@ -96,13 +96,15 @@ func (h *drainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 		return err
 	}
 
-	log.Infof("draining node, drain_timeout_seconds=%f, force=%v created_at=%s", drainTimeout.Seconds(), req.Force, action.CreatedAt)
+	log.Info("tainting node for draining")
 
 	if err := h.taintNode(ctx, node); err != nil {
 		return fmt.Errorf("tainting node %q: %w", req.NodeName, err)
 	}
 
-	// First try to evict pods gracefully.
+	log.Infof("draining node, drain_timeout_seconds=%f, force=%v created_at=%s", drainTimeout.Seconds(), req.Force, action.CreatedAt)
+
+	// First try to evict pods gracefully using eviction API.
 	evictCtx, evictCancel := context.WithTimeout(ctx, drainTimeout)
 	defer evictCancel()
 	err = h.evictNodePods(evictCtx, log, node)
