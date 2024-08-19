@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
+	"github.com/prometheus/tsdb/errors"
+	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -117,6 +120,94 @@ func getNodeForPatching(ctx context.Context, log logrus.FieldLogger, clientset k
 
 }
 
+// executeBatchPodActions executes the action for each pod in the list.
+// It does internal throttling to avoid spawning a goroutine-per-pod on large lists.
+// Return value is either nil or an instance of batchPodActionError if any pods fail the action.
+// actionName might be used to distinguish what is the operation (for logs, debugging, etc.) but is optional.
+func executeBatchPodActions(
+	ctx context.Context,
+	log logrus.FieldLogger,
+	pods []v1.Pod,
+	action func(context.Context, v1.Pod) error,
+	actionName string,
+) error {
+	if actionName == "" {
+		actionName = "unspecified"
+	}
+	log = log.WithField("actionName", actionName)
+
+	if len(pods) == 0 {
+		log.Debug("empty list of pods to execute action against")
+		return nil
+	}
+
+	type podFailure struct {
+		pod *v1.Pod
+		err error
+	}
+
+	var (
+		parallelTasks  = int(lo.Clamp(float64(len(pods)), 30, 100))
+		taskChan       = make(chan v1.Pod, len(pods))
+		failedPodsChan = make(chan podFailure, len(pods))
+		wg             sync.WaitGroup
+	)
+
+	log.Debugf("Starting %d parallel tasks for %d pods: [%v]", parallelTasks, len(pods), lo.Map(pods, func(t v1.Pod, i int) string {
+		return fmt.Sprintf("%s/%s", t.Namespace, t.Name)
+	}))
+
+	worker := func(taskChan <-chan v1.Pod) {
+		for pod := range taskChan {
+			if err := action(ctx, pod); err != nil {
+				failedPodsChan <- podFailure{
+					pod: &pod,
+					err: err,
+				}
+			}
+		}
+		wg.Done()
+	}
+
+	for range parallelTasks {
+		wg.Add(1)
+		go worker(taskChan)
+	}
+
+	for _, pod := range pods {
+		taskChan <- pod
+	}
+
+	close(taskChan)
+	wg.Wait()
+	close(failedPodsChan)
+
+	if len(failedPodsChan) > 0 {
+		batchErr := &batchPodActionError{}
+		for failedPod := range failedPodsChan {
+			batchErr.FailedPods = append(batchErr.FailedPods, failedPod)
+		}
+		return batchErr
+	}
+
+	return nil
+}
+
 func defaultBackoff() wait.Backoff {
 	return waitext.NewConstantBackoff(500 * time.Millisecond)
+}
+
+type batchPodActionError struct {
+	FailedPods []struct {
+		pod *v1.Pod
+		err error
+	}
+}
+
+func (b *batchPodActionError) Error() string {
+	multiErr := &errors.MultiError{}
+	for _, failedPod := range b.FailedPods {
+		multiErr.Add(fmt.Errorf("pod %s/%s failed: %w", failedPod.pod.Namespace, failedPod.pod.Namespace, failedPod.err))
+	}
+	return multiErr.Error()
 }
