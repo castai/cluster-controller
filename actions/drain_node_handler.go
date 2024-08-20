@@ -149,10 +149,12 @@ func (h *drainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 		}
 	}
 
+	// Note: if some pods remained even after forced deletion, we'd hit and return timeout here.
+	// This shouldn't happen if the pod was properly cordoned.
 	if deleteErr == nil {
 		log.Info("node drained forcefully")
 	} else {
-		log.Warnf("node failed to force drain: %w", deleteErr)
+		log.Warnf("node failed to force drain: %v", deleteErr)
 	}
 
 	return deleteErr
