@@ -94,10 +94,10 @@ func (h *drainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 		return err
 	}
 
-	log.Info("tainting node for draining")
+	log.Info("cordoning node for draining")
 
-	if err := h.taintNode(ctx, node); err != nil {
-		return fmt.Errorf("tainting node %q: %w", req.NodeName, err)
+	if err := h.cordonNode(ctx, node); err != nil {
+		return fmt.Errorf("cordoning node %q: %w", req.NodeName, err)
 	}
 
 	log.Infof("draining node, drain_timeout_seconds=%f, force=%v created_at=%s", drainTimeout.Seconds(), req.Force, action.CreatedAt)
@@ -158,7 +158,7 @@ func (h *drainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	return deleteErr
 }
 
-func (h *drainNodeHandler) taintNode(ctx context.Context, node *v1.Node) error {
+func (h *drainNodeHandler) cordonNode(ctx context.Context, node *v1.Node) error {
 	if node.Spec.Unschedulable {
 		return nil
 	}
