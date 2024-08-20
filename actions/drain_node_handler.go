@@ -502,7 +502,7 @@ func isControlledBy(p *v1.Pod, kind string) bool {
 }
 
 type podFailedActionError struct {
-	// Action is either "delete" or "evict"
+	// Action holds context what was the code trying to do.
 	Action string
 	// Errors should hold an entry per pod, for which the action failed.
 	Errors []error
