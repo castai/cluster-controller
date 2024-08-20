@@ -23,12 +23,15 @@ import (
 )
 
 func TestDrainNodeHandler(t *testing.T) {
+	t.Parallel()
 	r := require.New(t)
 
 	log := logrus.New()
 	log.SetLevel(logrus.DebugLevel)
 
 	t.Run("drain successfully", func(t *testing.T) {
+		t.Parallel()
+
 		nodeName := "node1"
 		podName := "pod1"
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
@@ -70,6 +73,8 @@ func TestDrainNodeHandler(t *testing.T) {
 	})
 
 	t.Run("skip drain when node not found", func(t *testing.T) {
+		t.Parallel()
+
 		nodeName := "node1"
 		podName := "pod1"
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
@@ -98,6 +103,8 @@ func TestDrainNodeHandler(t *testing.T) {
 	})
 
 	t.Run("when eviction fails for a pod and force=false, leaves node cordoned and skip deletion", func(t *testing.T) {
+		t.Parallel()
+
 		nodeName := "node1"
 		podName := "pod1"
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
@@ -133,6 +140,8 @@ func TestDrainNodeHandler(t *testing.T) {
 	})
 
 	t.Run("when eviction timeout is reached and force=false, leaves node cordoned and skip deletion", func(t *testing.T) {
+		t.Parallel()
+
 		nodeName := "node1"
 		podName := "pod1"
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
@@ -169,6 +178,8 @@ func TestDrainNodeHandler(t *testing.T) {
 	})
 
 	t.Run("eviction fails and force=true, force remove pods", func(t *testing.T) {
+		t.Parallel()
+
 		cases := []struct {
 			name                    string
 			drainTimeoutSeconds     int
@@ -188,6 +199,8 @@ func TestDrainNodeHandler(t *testing.T) {
 
 		for _, tc := range cases {
 			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+
 				r := require.New(t)
 				nodeName := "node1"
 				podName := "pod1"
@@ -247,7 +260,8 @@ func TestDrainNodeHandler(t *testing.T) {
 	})
 
 	t.Run("eviction fails and force=true, at least one pod fails to delete due to internal error, should return error", func(t *testing.T) {
-		r := require.New(t)
+		t.Parallel()
+
 		nodeName := "node1"
 		podName := "pod1"
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
@@ -295,7 +309,8 @@ func TestDrainNodeHandler(t *testing.T) {
 	})
 
 	t.Run("eviction fails and force=true, timeout during deletion should be retried and returned", func(t *testing.T) {
-		r := require.New(t)
+		t.Parallel()
+
 		nodeName := "node1"
 		podName := "pod1"
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
@@ -345,6 +360,8 @@ func TestDrainNodeHandler(t *testing.T) {
 	})
 
 	t.Run("force=true, failed eviction for PDBs should be retried until timeout before deleting", func(t *testing.T) {
+		t.Parallel()
+
 		// tests specifically that PDB error in eviction is retried and not failed fast
 		nodeName := "node1"
 		podName := "pod1"
