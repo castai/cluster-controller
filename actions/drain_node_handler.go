@@ -511,3 +511,7 @@ type podFailedActionError struct {
 func (p *podFailedActionError) Error() string {
 	return fmt.Sprintf("action %q: %v", p.Action, errors.Join(p.Errors...))
 }
+
+func (p *podFailedActionError) Unwrap() []error {
+	return p.Errors
+}

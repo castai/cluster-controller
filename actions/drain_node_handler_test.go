@@ -11,6 +11,7 @@ import (
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/api/policy/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,7 +32,7 @@ func TestDrainNodeHandler(t *testing.T) {
 		nodeName := "node1"
 		podName := "pod1"
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
-		prependEvictionReaction(t, clientset, true)
+		prependEvictionReaction(t, clientset, true, false)
 
 		action := &castai.ClusterAction{
 			ID: uuid.New().String(),
@@ -72,7 +73,6 @@ func TestDrainNodeHandler(t *testing.T) {
 		nodeName := "node1"
 		podName := "pod1"
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
-		prependEvictionReaction(t, clientset, true)
 
 		action := &castai.ClusterAction{
 			ID: uuid.New().String(),
@@ -97,18 +97,18 @@ func TestDrainNodeHandler(t *testing.T) {
 		r.NoError(err)
 	})
 
-	t.Run("fail to drain when internal pod eviction error occur", func(t *testing.T) {
+	t.Run("when eviction fails for a pod and force=false, leaves node cordoned and skip deletion", func(t *testing.T) {
 		nodeName := "node1"
 		podName := "pod1"
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
-		prependEvictionReaction(t, clientset, false)
+		prependEvictionReaction(t, clientset, false, false)
 
 		action := &castai.ClusterAction{
 			ID: uuid.New().String(),
 			ActionDrainNode: &castai.ActionDrainNode{
 				NodeName:            "node1",
 				DrainTimeoutSeconds: 1,
-				Force:               true,
+				Force:               false,
 			},
 			CreatedAt: time.Now().UTC(),
 		}
@@ -120,9 +120,9 @@ func TestDrainNodeHandler(t *testing.T) {
 		}
 
 		err := h.Handle(context.Background(), action)
-		r.ErrorContains(err, "eviciting node pods")
-		r.ErrorContains(err, "default/pod1")
-		r.ErrorContains(err, "internal")
+
+		r.Error(err)
+		r.ErrorContains(err, "failed to drain via graceful eviction")
 
 		n, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
 		r.NoError(err)
@@ -132,18 +132,18 @@ func TestDrainNodeHandler(t *testing.T) {
 		r.NoError(err)
 	})
 
-	t.Run("eviction timeout - force remove pods", func(t *testing.T) {
-		r := require.New(t)
+	t.Run("when eviction timeout is reached and force=false, leaves node cordoned and skip deletion", func(t *testing.T) {
 		nodeName := "node1"
 		podName := "pod1"
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
+		prependEvictionReaction(t, clientset, false, true)
 
 		action := &castai.ClusterAction{
 			ID: uuid.New().String(),
 			ActionDrainNode: &castai.ActionDrainNode{
 				NodeName:            "node1",
-				DrainTimeoutSeconds: 1,
-				Force:               true,
+				DrainTimeoutSeconds: 0,
+				Force:               false,
 			},
 			CreatedAt: time.Now().UTC(),
 		}
@@ -151,37 +151,102 @@ func TestDrainNodeHandler(t *testing.T) {
 		h := drainNodeHandler{
 			log:       log,
 			clientset: clientset,
-			cfg: drainNodeConfig{
-				podsDeleteTimeout:             700 * time.Millisecond,
-				podDeleteRetries:              5,
-				podDeleteRetryDelay:           500 * time.Millisecond,
-				podEvictRetryDelay:            500 * time.Millisecond,
-				podsTerminationWaitRetryDelay: 1000 * time.Millisecond,
-			}}
-
-		clientset.PrependReactor("delete", "pods", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
-			deleteAction := action.(ktest.DeleteActionImpl)
-			if deleteAction.Name == podName {
-				if deleteAction.DeleteOptions.GracePeriodSeconds == nil {
-					return true, nil, context.DeadlineExceeded
-				}
-				return false, nil, nil
-			}
-			return false, nil, nil
-		})
+			cfg:       drainNodeConfig{},
+		}
 
 		err := h.Handle(context.Background(), action)
-		r.NoError(err)
+
+		r.Error(err)
+		r.ErrorContains(err, "failed to drain via graceful eviction")
+		r.ErrorIs(err, context.DeadlineExceeded)
 
 		n, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
 		r.NoError(err)
 		r.True(n.Spec.Unschedulable)
 
 		_, err = clientset.CoreV1().Pods("default").Get(context.Background(), podName, metav1.GetOptions{})
-		r.True(apierrors.IsNotFound(err))
+		r.NoError(err)
 	})
 
-	t.Run("eviction timeout - force remove pods - failure", func(t *testing.T) {
+	t.Run("eviction fails and force=true, force remove pods", func(t *testing.T) {
+		cases := []struct {
+			name                    string
+			drainTimeoutSeconds     int
+			retryablePodEvictionErr bool
+		}{
+			{
+				name:                    "timeout during eviction",
+				drainTimeoutSeconds:     0,
+				retryablePodEvictionErr: true,
+			},
+			{
+				name:                    "failed pod during eviction",
+				drainTimeoutSeconds:     10,
+				retryablePodEvictionErr: false,
+			},
+		}
+
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				r := require.New(t)
+				nodeName := "node1"
+				podName := "pod1"
+				clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
+				prependEvictionReaction(t, clientset, false, tc.retryablePodEvictionErr)
+
+				action := &castai.ClusterAction{
+					ID: uuid.New().String(),
+					ActionDrainNode: &castai.ActionDrainNode{
+						NodeName:            "node1",
+						DrainTimeoutSeconds: tc.drainTimeoutSeconds,
+						Force:               true,
+					},
+					CreatedAt: time.Now().UTC(),
+				}
+
+				h := drainNodeHandler{
+					log:       log,
+					clientset: clientset,
+					cfg: drainNodeConfig{
+						podsDeleteTimeout:             700 * time.Millisecond,
+						podDeleteRetries:              5,
+						podDeleteRetryDelay:           500 * time.Millisecond,
+						podEvictRetryDelay:            500 * time.Millisecond,
+						podsTerminationWaitRetryDelay: 1000 * time.Millisecond,
+					}}
+
+				actualCalls := 0
+				clientset.PrependReactor("delete", "pods", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
+					deleteAction := action.(ktest.DeleteActionImpl)
+					if deleteAction.Name == podName {
+						actualCalls++
+						// First call should be graceful; simulate it failed to validate we'll do the forced part.
+						// This relies on us not retrying 404s (or let's say it tests it :) )
+						if deleteAction.DeleteOptions.GracePeriodSeconds == nil {
+							return true, nil, &apierrors.StatusError{ErrStatus: metav1.Status{Reason: metav1.StatusReasonNotFound}}
+						}
+						// Second call should be forced
+						r.Equal(int64(0), *deleteAction.DeleteOptions.GracePeriodSeconds)
+						return false, nil, nil
+					}
+					return false, nil, nil
+				})
+
+				err := h.Handle(context.Background(), action)
+				r.NoError(err)
+				r.Equal(2, actualCalls)
+
+				n, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
+				r.NoError(err)
+				r.True(n.Spec.Unschedulable)
+
+				_, err = clientset.CoreV1().Pods("default").Get(context.Background(), podName, metav1.GetOptions{})
+				r.True(apierrors.IsNotFound(err))
+			})
+		}
+	})
+
+	t.Run("eviction fails and force=true, at least one pod fails to delete due to internal error, should return error", func(t *testing.T) {
 		r := require.New(t)
 		nodeName := "node1"
 		podName := "pod1"
@@ -217,15 +282,19 @@ func TestDrainNodeHandler(t *testing.T) {
 		})
 
 		err := h.Handle(context.Background(), action)
-		r.ErrorContains(err, "forcefully deleting pods")
-		r.ErrorContains(err, "default/pod1")
-		r.ErrorContains(err, "internal")
+
+		var podFailedDeletionErr *podFailedActionError
+
+		r.ErrorAs(err, &podFailedDeletionErr)
+		r.Len(podFailedDeletionErr.Errors, 1)
+		r.Contains(podFailedDeletionErr.Errors[0].Error(), "default/pod1")
+		r.Equal("delete", podFailedDeletionErr.Action)
 
 		_, err = clientset.CoreV1().Pods("default").Get(context.Background(), podName, metav1.GetOptions{})
 		r.NoError(err)
 	})
 
-	t.Run("eviction timeout - force remove pods with grace 0 - failure", func(t *testing.T) {
+	t.Run("eviction fails and force=true, timeout during deletion should be retried and returned", func(t *testing.T) {
 		r := require.New(t)
 		nodeName := "node1"
 		podName := "pod1"
@@ -245,28 +314,87 @@ func TestDrainNodeHandler(t *testing.T) {
 			log:       log,
 			clientset: clientset,
 			cfg: drainNodeConfig{
-				podsDeleteTimeout:             700 * time.Millisecond,
+				podsDeleteTimeout:             0, // Force delete to timeout on first call
 				podDeleteRetries:              5,
-				podDeleteRetryDelay:           500 * time.Millisecond,
-				podEvictRetryDelay:            500 * time.Millisecond,
-				podsTerminationWaitRetryDelay: 1000 * time.Millisecond,
+				podDeleteRetryDelay:           5 * time.Second,
+				podEvictRetryDelay:            5 * time.Second,
+				podsTerminationWaitRetryDelay: 10 * time.Second,
 			}}
 
+		actualDeleteCalls := 0
 		clientset.PrependReactor("delete", "pods", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
 			deleteAction := action.(ktest.DeleteActionImpl)
 			if deleteAction.Name == podName {
-				if deleteAction.DeleteOptions.GracePeriodSeconds == nil {
-					return true, nil, context.DeadlineExceeded
-				}
-				return true, nil, &apierrors.StatusError{ErrStatus: metav1.Status{Reason: metav1.StatusReasonInternalError, Message: "internal"}}
+				actualDeleteCalls++
+				return true, nil, &apierrors.StatusError{ErrStatus: metav1.Status{Reason: metav1.StatusReasonTooManyRequests, Message: "stop hammering"}}
 			}
 			return false, nil, nil
 		})
 
 		err := h.Handle(context.Background(), action)
-		r.ErrorContains(err, "forcefully deleting pods")
-		r.ErrorContains(err, "default/pod1")
-		r.ErrorContains(err, "internal")
+
+		r.Equal(2, actualDeleteCalls)
+		var podFailedDeletionErr *podFailedActionError
+		r.ErrorAs(err, &podFailedDeletionErr)
+		r.Len(podFailedDeletionErr.Errors, 1)
+		r.Contains(podFailedDeletionErr.Errors[0].Error(), "default/pod1")
+		r.Equal("delete", podFailedDeletionErr.Action)
+
+		_, err = clientset.CoreV1().Pods("default").Get(context.Background(), podName, metav1.GetOptions{})
+		r.NoError(err)
+	})
+
+	t.Run("force=true, failed eviction for PDBs should be retried until timeout before deleting", func(t *testing.T) {
+		// tests specifically that PDB error in eviction is retried and not failed fast
+		nodeName := "node1"
+		podName := "pod1"
+		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
+
+		clientset.PrependReactor("create", "pods", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
+			if action.GetSubresource() != "eviction" {
+				return false, nil, nil
+			}
+
+			// PDB error is a bit specific in k8s to reconstruct...
+			return true,
+				nil,
+				&apierrors.StatusError{ErrStatus: metav1.Status{
+					Reason: metav1.StatusReasonTooManyRequests,
+					Details: &metav1.StatusDetails{
+						Causes: []metav1.StatusCause{
+							{
+								Type: policyv1.DisruptionBudgetCause,
+							},
+						},
+					},
+				}}
+		})
+
+		action := &castai.ClusterAction{
+			ID: uuid.New().String(),
+			ActionDrainNode: &castai.ActionDrainNode{
+				NodeName:            "node1",
+				DrainTimeoutSeconds: 2,
+				Force:               false,
+			},
+			CreatedAt: time.Now().UTC(),
+		}
+
+		h := drainNodeHandler{
+			log:       log,
+			clientset: clientset,
+			cfg:       drainNodeConfig{},
+		}
+
+		err := h.Handle(context.Background(), action)
+
+		r.Error(err)
+		r.ErrorContains(err, "failed to drain via graceful eviction")
+		r.ErrorIs(err, context.DeadlineExceeded)
+
+		n, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
+		r.NoError(err)
+		r.True(n.Spec.Unschedulable)
 
 		_, err = clientset.CoreV1().Pods("default").Get(context.Background(), podName, metav1.GetOptions{})
 		r.NoError(err)
@@ -294,7 +422,9 @@ func TestGetDrainTimeout(t *testing.T) {
 		}
 
 		timeout := h.getDrainTimeout(action)
-		r.Equal(100*time.Second, timeout)
+
+		// We give some wiggle room as the test might get here a few milliseconds late
+		r.InDelta((100 * time.Second).Milliseconds(), timeout.Milliseconds(), 10)
 	})
 
 	t.Run("drain timeout for older action should be decreased by time since action creation", func(t *testing.T) {
@@ -364,7 +494,7 @@ func TestLogCastPodsToEvict(t *testing.T) {
 
 }
 
-func prependEvictionReaction(t *testing.T, c *fake.Clientset, success bool) {
+func prependEvictionReaction(t *testing.T, c *fake.Clientset, success, retryableFailure bool) {
 	c.PrependReactor("create", "pods", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
 		if action.GetSubresource() != "eviction" {
 			return false, nil, nil
@@ -379,6 +509,11 @@ func prependEvictionReaction(t *testing.T, c *fake.Clientset, success bool) {
 			}()
 
 			return true, nil, nil
+		}
+
+		// Simulate failure that should be retried by client
+		if retryableFailure {
+			return true, nil, &apierrors.StatusError{ErrStatus: metav1.Status{Reason: metav1.StatusReasonTooManyRequests}}
 		}
 
 		return true, nil, &apierrors.StatusError{ErrStatus: metav1.Status{Reason: metav1.StatusReasonInternalError, Message: "internal"}}
