@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/prometheus/tsdb/errors"
 	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
@@ -201,19 +200,4 @@ type podActionFailure struct {
 	actionName string
 	pod        *v1.Pod
 	err        error
-}
-
-type batchPodActionError struct {
-	FailedPods []struct {
-		pod *v1.Pod
-		err error
-	}
-}
-
-func (b *batchPodActionError) Error() string {
-	multiErr := &errors.MultiError{}
-	for _, failedPod := range b.FailedPods {
-		multiErr.Add(fmt.Errorf("pod %s/%s failed: %w", failedPod.pod.Namespace, failedPod.pod.Namespace, failedPod.err))
-	}
-	return multiErr.Error()
 }
