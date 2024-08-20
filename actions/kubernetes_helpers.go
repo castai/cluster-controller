@@ -122,7 +122,7 @@ func getNodeForPatching(ctx context.Context, log logrus.FieldLogger, clientset k
 
 // executeBatchPodActions executes the action for each pod in the list.
 // It does internal throttling to avoid spawning a goroutine-per-pod on large lists.
-// Return value is either nil or an instance of batchPodActionError if any pods fail the action.
+// Returns two sets of pods - the ones that successfully executed the action and the ones that failed.
 // actionName might be used to distinguish what is the operation (for logs, debugging, etc.) but is optional.
 func executeBatchPodActions(
 	ctx context.Context,
@@ -130,7 +130,7 @@ func executeBatchPodActions(
 	pods []v1.Pod,
 	action func(context.Context, v1.Pod) error,
 	actionName string,
-) error {
+) (successfulPods []*v1.Pod, failedPods []podActionFailure) {
 	if actionName == "" {
 		actionName = "unspecified"
 	}
@@ -138,19 +138,15 @@ func executeBatchPodActions(
 
 	if len(pods) == 0 {
 		log.Debug("empty list of pods to execute action against")
-		return nil
-	}
-
-	type podFailure struct {
-		pod *v1.Pod
-		err error
+		return []*v1.Pod{}, nil
 	}
 
 	var (
-		parallelTasks  = int(lo.Clamp(float64(len(pods)), 30, 100))
-		taskChan       = make(chan v1.Pod, len(pods))
-		failedPodsChan = make(chan podFailure, len(pods))
-		wg             sync.WaitGroup
+		parallelTasks      = int(lo.Clamp(float64(len(pods)), 30, 100))
+		taskChan           = make(chan v1.Pod, len(pods))
+		successfulPodsChan = make(chan *v1.Pod, len(pods))
+		failedPodsChan     = make(chan podActionFailure, len(pods))
+		wg                 sync.WaitGroup
 	)
 
 	log.Debugf("Starting %d parallel tasks for %d pods: [%v]", parallelTasks, len(pods), lo.Map(pods, func(t v1.Pod, i int) string {
@@ -160,10 +156,13 @@ func executeBatchPodActions(
 	worker := func(taskChan <-chan v1.Pod) {
 		for pod := range taskChan {
 			if err := action(ctx, pod); err != nil {
-				failedPodsChan <- podFailure{
-					pod: &pod,
-					err: err,
+				failedPodsChan <- podActionFailure{
+					actionName: actionName,
+					pod:        &pod,
+					err:        err,
 				}
+			} else {
+				successfulPodsChan <- &pod
 			}
 		}
 		wg.Done()
@@ -181,20 +180,27 @@ func executeBatchPodActions(
 	close(taskChan)
 	wg.Wait()
 	close(failedPodsChan)
+	close(successfulPodsChan)
 
-	if len(failedPodsChan) > 0 {
-		batchErr := &batchPodActionError{}
-		for failedPod := range failedPodsChan {
-			batchErr.FailedPods = append(batchErr.FailedPods, failedPod)
-		}
-		return batchErr
+	for pod := range successfulPodsChan {
+		successfulPods = append(successfulPods, pod)
 	}
 
-	return nil
+	for failure := range failedPodsChan {
+		failedPods = append(failedPods, failure)
+	}
+
+	return
 }
 
 func defaultBackoff() wait.Backoff {
 	return waitext.NewConstantBackoff(500 * time.Millisecond)
+}
+
+type podActionFailure struct {
+	actionName string
+	pod        *v1.Pod
+	err        error
 }
 
 type batchPodActionError struct {
