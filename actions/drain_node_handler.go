@@ -353,6 +353,14 @@ func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.F
 // This is useful when you don't expect some pods on the node to terminate (e.g. because eviction failed for them) so there is no reason to wait until timeout.
 // The wait can potentially run forever if pods are scheduled on the node and are not evicted/deleted by anything. Use a timeout to avoid infinite wait.
 func (h *drainNodeHandler) waitNodePodsTerminated(ctx context.Context, log logrus.FieldLogger, node *v1.Node, podsToIgnore []*v1.Pod) error {
+	// Check if context is cancelled before starting any work.
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		// Continue with the work
+	}
+
 	podsToIgnoreLookup := make(map[string]struct{})
 	for _, pod := range podsToIgnore {
 		podsToIgnoreLookup[fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)] = struct{}{}
