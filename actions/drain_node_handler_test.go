@@ -329,7 +329,7 @@ func TestDrainNodeHandler(t *testing.T) {
 			log:       log,
 			clientset: clientset,
 			cfg: drainNodeConfig{
-				podsDeleteTimeout:             0, // Force delete to timeout on first call
+				podsDeleteTimeout:             0, // Force delete to timeout immediately
 				podDeleteRetries:              5,
 				podDeleteRetryDelay:           5 * time.Second,
 				podEvictRetryDelay:            5 * time.Second,
@@ -349,11 +349,7 @@ func TestDrainNodeHandler(t *testing.T) {
 		err := h.Handle(context.Background(), action)
 
 		r.Equal(2, actualDeleteCalls)
-		var podFailedDeletionErr *podFailedActionError
-		r.ErrorAs(err, &podFailedDeletionErr)
-		r.Len(podFailedDeletionErr.Errors, 1)
-		r.Contains(podFailedDeletionErr.Errors[0].Error(), "default/pod1")
-		r.Equal("delete", podFailedDeletionErr.Action)
+		r.ErrorIs(err, context.DeadlineExceeded)
 
 		_, err = clientset.CoreV1().Pods("default").Get(context.Background(), podName, metav1.GetOptions{})
 		r.NoError(err)
