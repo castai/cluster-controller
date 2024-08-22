@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
+	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -117,6 +119,85 @@ func getNodeForPatching(ctx context.Context, log logrus.FieldLogger, clientset k
 
 }
 
+// executeBatchPodActions executes the action for each pod in the list.
+// It does internal throttling to avoid spawning a goroutine-per-pod on large lists.
+// Returns two sets of pods - the ones that successfully executed the action and the ones that failed.
+// actionName might be used to distinguish what is the operation (for logs, debugging, etc.) but is optional.
+func executeBatchPodActions(
+	ctx context.Context,
+	log logrus.FieldLogger,
+	pods []v1.Pod,
+	action func(context.Context, v1.Pod) error,
+	actionName string,
+) (successfulPods []*v1.Pod, failedPods []podActionFailure) {
+	if actionName == "" {
+		actionName = "unspecified"
+	}
+	log = log.WithField("actionName", actionName)
+
+	if len(pods) == 0 {
+		log.Debug("empty list of pods to execute action against")
+		return []*v1.Pod{}, nil
+	}
+
+	var (
+		parallelTasks      = int(lo.Clamp(float64(len(pods)), 30, 100))
+		taskChan           = make(chan v1.Pod, len(pods))
+		successfulPodsChan = make(chan *v1.Pod, len(pods))
+		failedPodsChan     = make(chan podActionFailure, len(pods))
+		wg                 sync.WaitGroup
+	)
+
+	log.Debugf("Starting %d parallel tasks for %d pods: [%v]", parallelTasks, len(pods), lo.Map(pods, func(t v1.Pod, i int) string {
+		return fmt.Sprintf("%s/%s", t.Namespace, t.Name)
+	}))
+
+	worker := func(taskChan <-chan v1.Pod) {
+		for pod := range taskChan {
+			if err := action(ctx, pod); err != nil {
+				failedPodsChan <- podActionFailure{
+					actionName: actionName,
+					pod:        &pod,
+					err:        err,
+				}
+			} else {
+				successfulPodsChan <- &pod
+			}
+		}
+		wg.Done()
+	}
+
+	for range parallelTasks {
+		wg.Add(1)
+		go worker(taskChan)
+	}
+
+	for _, pod := range pods {
+		taskChan <- pod
+	}
+
+	close(taskChan)
+	wg.Wait()
+	close(failedPodsChan)
+	close(successfulPodsChan)
+
+	for pod := range successfulPodsChan {
+		successfulPods = append(successfulPods, pod)
+	}
+
+	for failure := range failedPodsChan {
+		failedPods = append(failedPods, failure)
+	}
+
+	return
+}
+
 func defaultBackoff() wait.Backoff {
 	return waitext.NewConstantBackoff(500 * time.Millisecond)
+}
+
+type podActionFailure struct {
+	actionName string
+	pod        *v1.Pod
+	err        error
 }

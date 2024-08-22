@@ -136,9 +136,9 @@ func (h *deleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 		return h.deletePod(ctx, *deleteOptions, pod)
 	}
 
-	if err := h.sendPodsRequests(ctx, pods, deletePod); err != nil {
-		return fmt.Errorf("sending delete pods requests: %w", err)
-	}
+	deletedPods, failedPods := executeBatchPodActions(ctx, log, pods, deletePod, "delete-pod")
+	log.Infof("successfully deleted %d pods, failed to delete %d pods", len(deletedPods), len(failedPods))
+
 	if err := h.deleteNodeVolumeAttachments(ctx, req.NodeName); err != nil {
 		log.Warnf("deleting volume attachments: %v", err)
 	}

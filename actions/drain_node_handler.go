@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/samber/lo"
@@ -26,8 +25,7 @@ import (
 )
 
 const (
-	minDrainTimeout = 0                // Minimal pod drain timeout
-	roundTripTime   = 10 * time.Second // 2xPollInterval for action
+	minDrainTimeout = 0 // Minimal pod drain timeout
 )
 
 type drainNodeConfig struct {
@@ -60,12 +58,11 @@ func newDrainNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface,
 // the result is clamped between 0s and the requested timeout.
 func (h *drainNodeHandler) getDrainTimeout(action *castai.ClusterAction) time.Duration {
 	timeSinceCreated := time.Since(action.CreatedAt)
-	drainTimeout := time.Duration(action.ActionDrainNode.DrainTimeoutSeconds) * time.Second
+	requestedTimeout := time.Duration(action.ActionDrainNode.DrainTimeoutSeconds) * time.Second
 
-	// Remove 2 poll interval required for polling the action.
-	timeSinceCreated = timeSinceCreated - roundTripTime
+	drainTimeout := requestedTimeout - timeSinceCreated
 
-	return lo.Clamp(drainTimeout-timeSinceCreated, minDrainTimeout*time.Second, time.Duration(action.ActionDrainNode.DrainTimeoutSeconds)*time.Second)
+	return lo.Clamp(drainTimeout, minDrainTimeout*time.Second, requestedTimeout)
 }
 
 type drainNodeHandler struct {
@@ -97,58 +94,78 @@ func (h *drainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 		return err
 	}
 
+	log.Info("cordoning node for draining")
+
+	if err := h.cordonNode(ctx, node); err != nil {
+		return fmt.Errorf("cordoning node %q: %w", req.NodeName, err)
+	}
+
 	log.Infof("draining node, drain_timeout_seconds=%f, force=%v created_at=%s", drainTimeout.Seconds(), req.Force, action.CreatedAt)
 
-	if err := h.taintNode(ctx, node); err != nil {
-		return fmt.Errorf("tainting node %q: %w", req.NodeName, err)
-	}
-
-	// First try to evict pods gracefully.
+	// First try to evict pods gracefully using eviction API.
 	evictCtx, evictCancel := context.WithTimeout(ctx, drainTimeout)
 	defer evictCancel()
+
 	err = h.evictNodePods(evictCtx, log, node)
-	if err != nil && !errors.Is(err, context.DeadlineExceeded) {
-		return fmt.Errorf("eviciting node pods: %w", err)
+
+	if err == nil {
+		log.Info("node fully drained via graceful eviction")
+		return nil
 	}
 
-	// If we reached timeout (maybe a pod was stuck in eviction or we hit another hiccup) and we are forced to drain, then delete pods
-	// This skips eviction API and even if pods have PDBs (for example), the pods are still deleted.
-	// If the node is going away (like spot interruption), there is no point in trying to keep the pods alive.
-	if errors.Is(err, context.DeadlineExceeded) {
-		if !req.Force {
-			return err
-		}
-
-		h.log.Infof("timeout=%f exceeded during pod eviction, force=%v, starting pod deletion", drainTimeout.Seconds(), req.Force)
-		// Try deleting pods gracefully first, then delete with 0 grace period.
-		options := []metav1.DeleteOptions{
-			{},
-			*metav1.NewDeleteOptions(0),
-		}
-
-		var err error
-		for _, o := range options {
-			deleteCtx, deleteCancel := context.WithTimeout(ctx, h.cfg.podsDeleteTimeout)
-			defer deleteCancel()
-
-			err = h.deleteNodePods(deleteCtx, log, node, o)
-			if err == nil {
-				break
-			}
-			if !errors.Is(err, context.DeadlineExceeded) {
-				return fmt.Errorf("forcefully deleting pods: %w", err)
-			}
-		}
-
-		return err
+	if !req.Force {
+		return fmt.Errorf("node failed to drain via graceful eviction, force=%v, timeout=%f, will not force delete pods: %w", req.Force, drainTimeout.Seconds(), err)
 	}
 
-	log.Info("node drained")
+	var podsFailedEvictionErr *podFailedActionError
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		log.Infof("timeout=%f exceeded during pod eviction, force=%v, starting pod deletion", drainTimeout.Seconds(), req.Force)
+	case errors.As(err, &podsFailedEvictionErr):
+		log.Infof("some pods failed eviction, force=%v, starting pod deletion: %v", req.Force, err)
+	default:
+		// Expected to be errors where we can't continue at all; e.g. missing permissions or lack of connectivity
+		return fmt.Errorf("evicting node pods: %w", err)
+	}
 
-	return nil
+	// If voluntary eviction fails, and we are told to force drain, start deleting pods.
+	// Try deleting pods gracefully first, then delete with 0 grace period. PDBs are not respected here.
+	options := []metav1.DeleteOptions{
+		{},
+		*metav1.NewDeleteOptions(0),
+	}
+
+	var deleteErr error
+	for _, o := range options {
+		deleteCtx, deleteCancel := context.WithTimeout(ctx, h.cfg.podsDeleteTimeout)
+
+		deleteErr = h.deleteNodePods(deleteCtx, log, node, o)
+
+		// Clean-up the child context if we got here; no reason to wait for the function to exit
+		deleteCancel()
+
+		if deleteErr == nil {
+			break
+		}
+
+		var podsFailedDeletionErr *podFailedActionError
+		if errors.Is(deleteErr, context.DeadlineExceeded) || errors.As(deleteErr, &podsFailedDeletionErr) {
+			continue
+		}
+		return fmt.Errorf("forcefully deleting pods: %w", deleteErr)
+	}
+
+	// Note: if some pods remained even after forced deletion, we'd get an error from last call here.
+	if deleteErr == nil {
+		log.Info("node drained forcefully")
+	} else {
+		log.Warnf("node failed to fully force drain: %v", deleteErr)
+	}
+
+	return deleteErr
 }
 
-func (h *drainNodeHandler) taintNode(ctx context.Context, node *v1.Node) error {
+func (h *drainNodeHandler) cordonNode(ctx context.Context, node *v1.Node) error {
 	if node.Spec.Unschedulable {
 		return nil
 	}
@@ -162,16 +179,25 @@ func (h *drainNodeHandler) taintNode(ctx context.Context, node *v1.Node) error {
 	return nil
 }
 
+// Return error if at least one pod failed (but don't wait for it!) => to signal if we should do force delete
+
+// evictNodePods attempts voluntarily eviction for all pods on node.
+// This method will wait until all evictable pods on the node either terminate or fail deletion.
+// A timeout should be used to avoid infinite waits.
+// Errors in calling EVICT for individual pods are accumulated. If at least one pod failed this but termination was successful, an instance of podFailedActionError is returned.
+// The method will still wait for termination of other evicted pods first.
+// A return value of nil means all pods on the node should be evicted and terminated.
 func (h *drainNodeHandler) evictNodePods(ctx context.Context, log logrus.FieldLogger, node *v1.Node) error {
 	pods, err := h.listNodePodsToEvict(ctx, log, node)
 	if err != nil {
 		return err
 	}
 
-	log.Infof("evicting %d pods", len(pods))
 	if len(pods) == 0 {
+		log.Infof("no pods to evict")
 		return nil
 	}
+	log.Infof("evicting %d pods", len(pods))
 	groupVersion, err := drain.CheckEvictionSupport(h.clientset)
 	if err != nil {
 		return err
@@ -180,17 +206,48 @@ func (h *drainNodeHandler) evictNodePods(ctx context.Context, log logrus.FieldLo
 		return h.evictPod(ctx, pod, groupVersion)
 	}
 
-	if err := h.sendPodsRequests(ctx, pods, evictPod); err != nil {
-		return fmt.Errorf("sending evict pods requests: %w", err)
+	_, podsWithFailedEviction := executeBatchPodActions(ctx, log, pods, evictPod, "evict-pod")
+	var podsToIgnoreForTermination []*v1.Pod
+	var failedPodsError *podFailedActionError
+	if len(podsWithFailedEviction) > 0 {
+		podErrors := lo.Map(podsWithFailedEviction, func(failure podActionFailure, _ int) error {
+			return fmt.Errorf("pod %s/%s failed eviction: %w", failure.pod.Namespace, failure.pod.Name, failure.err)
+		})
+		failedPodsError = &podFailedActionError{
+			Action: "evict",
+			Errors: podErrors,
+		}
+		log.Warnf("some pods failed eviction, will ignore for termination wait: %v", failedPodsError)
+		podsToIgnoreForTermination = lo.Map(podsWithFailedEviction, func(failure podActionFailure, _ int) *v1.Pod {
+			return failure.pod
+		})
 	}
 
-	return h.waitNodePodsTerminated(ctx, log, node)
+	err = h.waitNodePodsTerminated(ctx, log, node, podsToIgnoreForTermination)
+	if err != nil {
+		return err
+	}
+	if failedPodsError != nil {
+		return failedPodsError
+	}
+	return nil
 }
 
+// deleteNodePods deletes the pods running on node. Use options to control if eviction is graceful or forced.
+// This method will wait until all evictable pods on the node either terminate or fail deletion.
+// A timeout should be used to avoid infinite waits.
+// Errors in calling DELETE for individual pods are accumulated. If at least one pod failed this but termination was successful, an instance of podFailedActionError is returned.
+// The method will still wait for termination of other deleted pods first.
+// A return value of nil means all pods on the node should be deleted and terminated.
 func (h *drainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldLogger, node *v1.Node, options metav1.DeleteOptions) error {
 	pods, err := h.listNodePodsToEvict(ctx, log, node)
 	if err != nil {
 		return err
+	}
+
+	if len(pods) == 0 {
+		log.Infof("no pods to delete")
+		return nil
 	}
 
 	if options.GracePeriodSeconds != nil {
@@ -199,64 +256,43 @@ func (h *drainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldL
 		log.Infof("forcefully deleting %d pods", len(pods))
 	}
 
-	if len(pods) == 0 {
-		return nil
-	}
-
 	deletePod := func(ctx context.Context, pod v1.Pod) error {
 		return h.deletePod(ctx, options, pod)
 	}
 
-	if err := h.sendPodsRequests(ctx, pods, deletePod); err != nil {
-		return fmt.Errorf("sending delete pods requests: %w", err)
-	}
-
-	return h.waitNodePodsTerminated(ctx, log, node)
-}
-
-func (h *drainNodeHandler) sendPodsRequests(ctx context.Context, pods []v1.Pod, f func(context.Context, v1.Pod) error) error {
-	if len(pods) == 0 {
-		return nil
-	}
-
-	var (
-		parallelTasks = int(lo.Clamp(float64(len(pods)), 30, 100))
-		taskChan      = make(chan v1.Pod, len(pods))
-		taskErrs      = make([]error, 0)
-		taskErrsMx    sync.Mutex
-		wg            sync.WaitGroup
-	)
-
-	h.log.Debugf("Starting %d parallel tasks for %d pods: [%v]", parallelTasks, len(pods), lo.Map(pods, func(t v1.Pod, i int) string {
-		return fmt.Sprintf("%s/%s", t.Namespace, t.Name)
-	}))
-
-	worker := func(taskChan <-chan v1.Pod) {
-		for pod := range taskChan {
-			if err := f(ctx, pod); err != nil {
-				taskErrsMx.Lock()
-				taskErrs = append(taskErrs, fmt.Errorf("pod %s/%s failed operation: %w", pod.Namespace, pod.Name, err))
-				taskErrsMx.Unlock()
-			}
+	_, podsWithFailedDeletion := executeBatchPodActions(ctx, log, pods, deletePod, "delete-pod")
+	var podsToIgnoreForTermination []*v1.Pod
+	var failedPodsError *podFailedActionError
+	if len(podsWithFailedDeletion) > 0 {
+		podErrors := lo.Map(podsWithFailedDeletion, func(failure podActionFailure, _ int) error {
+			return fmt.Errorf("pod %s/%s failed deletion: %w", failure.pod.Namespace, failure.pod.Name, failure.err)
+		})
+		failedPodsError = &podFailedActionError{
+			Action: "delete",
+			Errors: podErrors,
 		}
-		wg.Done()
+		log.Warnf("some pods failed deletion, will ignore for termination wait: %v", failedPodsError)
+		podsToIgnoreForTermination = lo.Map(podsWithFailedDeletion, func(failure podActionFailure, _ int) *v1.Pod {
+			return failure.pod
+		})
 	}
 
-	for range parallelTasks {
-		wg.Add(1)
-		go worker(taskChan)
+	err = h.waitNodePodsTerminated(ctx, log, node, podsToIgnoreForTermination)
+	if err != nil {
+		return err
 	}
-
-	for _, pod := range pods {
-		taskChan <- pod
+	if failedPodsError != nil {
+		return failedPodsError
 	}
-
-	close(taskChan)
-	wg.Wait()
-
-	return errors.Join(taskErrs...)
+	return nil
 }
 
+// listNodePodsToEvict creates a list of pods that are "evictable" on the node.
+// The following pods are ignored:
+//   - static pods
+//   - DaemonSet pods
+//   - pods that are already finished (Succeeded or Failed)
+//   - pods that were marked for deletion recently (Terminating state); the meaning of "recently" is controlled by config
 func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.FieldLogger, node *v1.Node) ([]v1.Pod, error) {
 	var pods *v1.PodList
 	err := waitext.Retry(
@@ -292,7 +328,7 @@ func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.F
 		}
 
 		// Skip completed pods. Will be removed during node removal.
-		if p.Status.Phase == v1.PodSucceeded {
+		if p.Status.Phase == v1.PodSucceeded || p.Status.Phase == v1.PodFailed {
 			continue
 		}
 
@@ -311,7 +347,26 @@ func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.F
 	return podsToEvict, nil
 }
 
-func (h *drainNodeHandler) waitNodePodsTerminated(ctx context.Context, log logrus.FieldLogger, node *v1.Node) error {
+// waitNodePodsTerminated waits until the pods on the node terminate.
+// The wait only considers evictable pods (see listNodePodsToEvict).
+// If podsToIgnore is not empty, the list is further filtered by it.
+// This is useful when you don't expect some pods on the node to terminate (e.g. because eviction failed for them) so there is no reason to wait until timeout.
+// The wait can potentially run forever if pods are scheduled on the node and are not evicted/deleted by anything. Use a timeout to avoid infinite wait.
+func (h *drainNodeHandler) waitNodePodsTerminated(ctx context.Context, log logrus.FieldLogger, node *v1.Node, podsToIgnore []*v1.Pod) error {
+	// Check if context is cancelled before starting any work.
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		// Continue with the work
+	}
+
+	podsToIgnoreLookup := make(map[string]struct{})
+	for _, pod := range podsToIgnore {
+		podsToIgnoreLookup[fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)] = struct{}{}
+	}
+
+	log.Infof("starting wait for pod termination, %d pods in ignore list", len(podsToIgnore))
 	return waitext.Retry(
 		ctx,
 		waitext.NewConstantBackoff(h.cfg.podsTerminationWaitRetryDelay),
@@ -321,8 +376,18 @@ func (h *drainNodeHandler) waitNodePodsTerminated(ctx context.Context, log logru
 			if err != nil {
 				return true, fmt.Errorf("listing %q pods to be terminated: %w", node.Name, err)
 			}
-			if len(pods) > 0 {
-				return true, fmt.Errorf("waiting for %d pods to be terminated on node %v", len(pods), node.Name)
+
+			remainingPods := len(pods)
+			if len(podsToIgnore) > 0 {
+				for i := range pods {
+					_, shouldIgnore := podsToIgnoreLookup[fmt.Sprintf("%s/%s", pods[i].Namespace, pods[i].Name)]
+					if shouldIgnore {
+						remainingPods--
+					}
+				}
+			}
+			if remainingPods > 0 {
+				return true, fmt.Errorf("waiting for %d pods to be terminated on node %v", remainingPods, node.Name)
 			}
 			return false, nil
 		},
@@ -370,15 +435,13 @@ func (h *drainNodeHandler) evictPod(ctx context.Context, pod v1.Pod, groupVersio
 			if apierrors.IsInternalError(err) {
 				return false, err
 			}
-
-			// If PDB is violated, K8S returns 429 TooManyRequests with specific cause
-			// TODO: With KUBE-479, rethink this flow in general
-			if apierrors.IsTooManyRequests(err) && apierrors.HasStatusCause(err, policyv1.DisruptionBudgetCause) {
-				return true, err
-			}
 		}
 
 		// Other errors - retry.
+		// This includes 429 TooManyRequests (due to throttling) and 429 TooManyRequests + DisruptionBudgetCause (due to violated PDBs)
+		// This is done to try and do graceful eviction for as long as possible;
+		// it is expected that caller has a timeout that will stop this process if the PDB can never be satisfied.
+		// Note: pods only receive SIGTERM signals if they are evicted; if PDB prevents that, the signal will not happen here.
 		return true, err
 	}
 	err := waitext.Retry(ctx, b, waitext.Forever, action, func(err error) {
@@ -386,7 +449,6 @@ func (h *drainNodeHandler) evictPod(ctx context.Context, pod v1.Pod, groupVersio
 	})
 	if err != nil {
 		return fmt.Errorf("evicting pod %s in namespace %s: %w", pod.Name, pod.Namespace, err)
-
 	}
 	return nil
 }
@@ -445,4 +507,19 @@ func isControlledBy(p *v1.Pod, kind string) bool {
 	ctrl := metav1.GetControllerOf(p)
 
 	return ctrl != nil && ctrl.Kind == kind
+}
+
+type podFailedActionError struct {
+	// Action holds context what was the code trying to do.
+	Action string
+	// Errors should hold an entry per pod, for which the action failed.
+	Errors []error
+}
+
+func (p *podFailedActionError) Error() string {
+	return fmt.Sprintf("action %q: %v", p.Action, errors.Join(p.Errors...))
+}
+
+func (p *podFailedActionError) Unwrap() []error {
+	return p.Errors
 }
