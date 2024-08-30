@@ -95,6 +95,7 @@ func getNodeForPatching(ctx context.Context, log logrus.FieldLogger, clientset k
 	var node *v1.Node
 
 	boff := waitext.DefaultExponentialBackoff()
+	boff.Duration = 5 * time.Second
 
 	err := waitext.Retry(
 		ctx,

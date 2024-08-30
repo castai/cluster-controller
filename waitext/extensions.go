@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	defaultInitialInterval     = 500 * time.Millisecond
+	defaultInitialInterval     = 1 * time.Second
 	defaultRandomizationFactor = 0.5
 	defaultMultiplier          = 1.5
 	defaultMaxInterval         = 60 * time.Second
