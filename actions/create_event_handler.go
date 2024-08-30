@@ -14,7 +14,7 @@ import (
 	"github.com/castai/cluster-controller/castai"
 )
 
-func newCreateEventHandler(log logrus.FieldLogger, clientset kubernetes.Interface) ActionHandler {
+func NewCreateEventHandler(log logrus.FieldLogger, clientset kubernetes.Interface) ActionHandler {
 	factory := func(ns, reporter string) (record.EventBroadcaster, record.EventRecorder) {
 		eventBroadcaster := record.NewBroadcaster()
 		eventBroadcaster.StartRecordingToSink(&typedv1core.EventSinkImpl{Interface: clientset.CoreV1().Events(ns)})

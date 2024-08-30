@@ -1,0 +1,27 @@
+- action: Upscaling
+  apiVersion: v1
+  count: 2
+  eventTime: "2024-09-05T13:07:49.151519Z"
+  firstTimestamp: "2024-09-05T13:07:35Z"
+  involvedObject:
+    apiVersion: v1
+    kind: Pod
+    name: win-webserver-768f8469fb-8cwws
+    namespace: default
+    resourceVersion: "51389"
+    uid: 70ce29b8-c6c4-4fe0-ba05-a1c71e965d70
+  kind: Event
+  lastTimestamp: "2024-09-05T13:07:49Z"
+  message: 'Impossible to schedule pod, no instance type matches selectors. For example:
+    kubernetes.io/os=windows. (Node template: default-by-castai)'
+  metadata:
+    creationTimestamp: "2024-09-05T13:07:35Z"
+    name: win-webserver-768f8469fb-8cwws.66d9ad17
+    namespace: default
+    resourceVersion: "1210"
+    uid: 62ad4f8c-6e35-4bf0-8e88-1d0dabc67355
+  reason: FailedUpscaling
+  reportingComponent: autoscaler.cast.ai
+  reportingInstance: autoscaler.cast.ai
+  source: {}
+  type: Warning
