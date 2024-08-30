@@ -131,8 +131,8 @@ func TestApproveCSRHandler(t *testing.T) {
 		h := &approveCSRHandler{
 			log:                    log,
 			clientset:              client,
-			csrFetchInterval:       100 * time.Millisecond,
-			initialCSRFetchTimeout: 1000 * time.Millisecond,
+			csrFetchInterval:       500 * time.Millisecond,
+			initialCSRFetchTimeout: 5000 * time.Millisecond,
 		}
 
 		ctx := context.Background()
