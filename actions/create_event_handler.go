@@ -15,13 +15,16 @@ import (
 )
 
 func newCreateEventHandler(log logrus.FieldLogger, clientset kubernetes.Interface) ActionHandler {
-	factory := func(ns string) (record.EventBroadcaster, record.EventRecorder) {
+	factory := func(ns, reporter string) (record.EventBroadcaster, record.EventRecorder) {
 		eventBroadcaster := record.NewBroadcaster()
 		eventBroadcaster.StartRecordingToSink(&typedv1core.EventSinkImpl{Interface: clientset.CoreV1().Events(ns)})
 		eventBroadcaster.StartStructuredLogging(0)
 		log.Debug("create new broadcaster and recorder for namespace: %s", ns)
 		// Create an event recorder
-		return eventBroadcaster, eventBroadcaster.NewRecorder(nil, v1.EventSource{})
+		return eventBroadcaster, eventBroadcaster.NewRecorder(nil, v1.EventSource{
+			Component: reporter,
+			Host:      reporter,
+		})
 	}
 	return &createEventHandler{
 		log:                log,
@@ -35,7 +38,7 @@ func newCreateEventHandler(log logrus.FieldLogger, clientset kubernetes.Interfac
 type createEventHandler struct {
 	log                logrus.FieldLogger
 	clientSet          kubernetes.Interface
-	recorderFactory    func(string) (record.EventBroadcaster, record.EventRecorder)
+	recorderFactory    func(string, string) (record.EventBroadcaster, record.EventRecorder)
 	mu                 sync.RWMutex
 	eventNsBroadcaster map[string]record.EventBroadcaster
 	eventNsRecorder    map[string]record.EventRecorder
@@ -57,20 +60,20 @@ func (h *createEventHandler) Handle(ctx context.Context, action *castai.ClusterA
 func (h *createEventHandler) handleEventV1(_ context.Context, req *castai.ActionCreateEvent, namespace string) {
 	h.mu.RLock()
 	h.log.Debug("handling create event action: %s type: %s", req.Action, req.EventType)
-	if recorder, ok := h.eventNsRecorder[namespace]; ok {
-		recorder.Eventf(&req.ObjectRef, v1.EventTypeNormal, req.Reason, req.Action, req.Message)
+	if recorder, ok := h.eventNsRecorder[fmt.Sprintf("%s-%s", namespace, req.Reporter)]; ok {
+		recorder.Event(&req.ObjectRef, v1.EventTypeNormal, req.Reason, req.Message)
 		h.mu.RUnlock()
 	} else {
 		h.mu.RUnlock()
 		h.mu.Lock()
 		// Double check after acquiring the lock.
 		if recorder, ok := h.eventNsRecorder[namespace]; !ok {
-			broadcaster, rec := h.recorderFactory(namespace)
-			h.eventNsBroadcaster[namespace] = broadcaster
-			h.eventNsRecorder[namespace] = rec
-			rec.Eventf(&req.ObjectRef, v1.EventTypeNormal, req.Reason, req.Action, req.Message)
+			broadcaster, rec := h.recorderFactory(namespace, req.Reporter)
+			h.eventNsBroadcaster[fmt.Sprintf("%s-%s", namespace, req.Reporter)] = broadcaster
+			h.eventNsRecorder[fmt.Sprintf("%s-%s", namespace, req.Reporter)] = rec
+			rec.Event(&req.ObjectRef, req.EventType, req.Reason, req.Message)
 		} else {
-			recorder.Eventf(&req.ObjectRef, v1.EventTypeNormal, req.Reason, req.Action, req.Message)
+			recorder.Event(&req.ObjectRef, req.EventType, req.Reason, req.Message)
 		}
 		h.mu.Unlock()
 	}
