@@ -3,7 +3,6 @@ package actions
 import (
 	"context"
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
@@ -11,12 +10,10 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
-	"k8s.io/client-go/tools/record"
 
 	"github.com/castai/cluster-controller/castai"
 )
@@ -88,113 +85,33 @@ func TestCreateEvent(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			clientSet := fake.NewSimpleClientset(test.object)
-			recorder := record.NewFakeRecorder(test.actionCount)
-			broadCaster := record.NewBroadcasterForTests(time.Second * 10)
 			h := createEventHandler{
 				log:       logrus.New(),
-				clientSet: clientSet,
-				eventNsRecorder: map[string]record.EventRecorder{
-					"castai": recorder,
-				},
-				eventNsBroadcaster: map[string]record.EventBroadcaster{
-					"castai": broadCaster,
-				},
+				clientset: clientSet,
 			}
-			ctx := context.Background()
-			wg := sync.WaitGroup{}
-			wg.Add(test.actionCount)
-			for i := 0; i < test.actionCount; i++ {
-				go func() {
-					err := h.Handle(ctx, test.action)
-					r.NoError(err)
-					wg.Done()
-				}()
-			}
-			wg.Wait()
-			events := make([]string, 0, test.actionCount)
-			for i := 0; i < test.actionCount; i++ {
-				select {
-				case event := <-recorder.Events:
-					events = append(events, event)
-				default:
-					t.Errorf("not enough events expected %d actual %d", test.actionCount, i)
-					continue
-				}
-			}
-			for i := 0; i < test.actionCount; i++ {
-				r.Contains(events[i], v1.EventTypeNormal)
-				r.Contains(events[i], test.expectedEvent.Action)
-				r.Contains(events[i], test.expectedEvent.Reason)
-				r.Contains(events[i], test.expectedEvent.Message)
-			}
-			broadCaster.Shutdown()
-		})
-	}
-}
 
-func TestRandomNs(t *testing.T) {
-	t.Parallel()
-	r := require.New(t)
-	actionCount := 10
-	clientSet := fake.NewSimpleClientset(testPod(types.UID(uuid.New().String())))
-	recorders := make([]*record.FakeRecorder, 0, actionCount)
-	h := createEventHandler{
-		log:       logrus.New(),
-		clientSet: clientSet,
-		recorderFactory: func(ns string) (record.EventBroadcaster, record.EventRecorder) {
-			broadcaster := record.NewBroadcasterForTests(time.Second * 10)
-			rec := record.NewFakeRecorder(actionCount)
-			recorders = append(recorders, rec)
-			return broadcaster, rec
-		},
-		eventNsRecorder:    map[string]record.EventRecorder{},
-		eventNsBroadcaster: map[string]record.EventBroadcaster{},
-	}
-	ctx := context.Background()
-	wg := sync.WaitGroup{}
-	wg.Add(actionCount)
-	for i := 0; i < actionCount; i++ {
-		go func() {
-			err := h.Handle(ctx, &castai.ClusterAction{
-				ID: uuid.New().String(),
-				ActionCreateEvent: &castai.ActionCreateEvent{
-					ObjectRef: podObjReference(
-						&corev1.Pod{
-							ObjectMeta: metav1.ObjectMeta{
-								Name:      fmt.Sprintf("testPod-%s", uuid.NewString()[:4]),
-								Namespace: uuid.NewString(),
-							},
-						}),
-					Reporter:  "provisioning.cast.ai",
-					EventTime: time.Now(),
-					EventType: "Warning",
-					Reason:    "Just because!",
-					Action:    "During node creation.",
-					Message:   "Oh common, you can do better.",
-				},
-			})
+			ctx := context.Background()
+			for i := 0; i < test.actionCount; i++ {
+				err := h.Handle(ctx, test.action)
+				r.NoError(err)
+			}
+
+			eventTime := test.action.ActionCreateEvent.EventTime
+			testEventName := fmt.Sprintf("%v.%x", test.action.ActionCreateEvent.ObjectRef.Name, eventTime.Unix())
+
+			testEvent, err := clientSet.CoreV1().
+				Events(test.expectedEvent.Namespace).
+				Get(ctx, testEventName, metav1.GetOptions{})
 			r.NoError(err)
-			wg.Done()
-		}()
-	}
-	wg.Wait()
-	events := make([]string, 0, actionCount)
-	for i := range recorders {
-		select {
-		case event := <-recorders[i].Events:
-			events = append(events, event)
-		default:
-			t.Errorf("not enough events expected %d actual %d", actionCount, i)
-			continue
-		}
-	}
-	for ns, broadCaster := range h.eventNsBroadcaster {
-		t.Logf("shutting down broadcaster for ns %s", ns)
-		broadCaster.Shutdown()
-	}
-	r.Len(events, actionCount)
-	for i := 0; i < actionCount; i++ {
-		r.Contains(events[i], v1.EventTypeNormal)
+
+			r.Equal(test.expectedEvent.Type, testEvent.Type)
+			r.Equal(test.expectedEvent.Reason, testEvent.Reason)
+			r.Equal(test.expectedEvent.Action, testEvent.Action)
+			r.Equal(test.expectedEvent.Message, testEvent.Message)
+			r.Equal(test.expectedEvent.ReportingController, testEvent.ReportingController)
+			r.Equal(test.expectedEvent.ReportingInstance, testEvent.ReportingInstance)
+			r.EqualValues(test.actionCount, testEvent.Count)
+		})
 	}
 }
 
