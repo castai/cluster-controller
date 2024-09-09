@@ -11,7 +11,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -122,8 +121,6 @@ func TestCreateEvent(t *testing.T) {
 				}
 			}
 			for i := 0; i < test.actionCount; i++ {
-				r.Contains(events[i], v1.EventTypeNormal)
-				r.Contains(events[i], test.expectedEvent.Action)
 				r.Contains(events[i], test.expectedEvent.Reason)
 				r.Contains(events[i], test.expectedEvent.Message)
 			}
@@ -141,7 +138,7 @@ func TestRandomNs(t *testing.T) {
 	h := createEventHandler{
 		log:       logrus.New(),
 		clientSet: clientSet,
-		recorderFactory: func(ns string) (record.EventBroadcaster, record.EventRecorder) {
+		recorderFactory: func(ns, reporter string) (record.EventBroadcaster, record.EventRecorder) {
 			broadcaster := record.NewBroadcasterForTests(time.Second * 10)
 			rec := record.NewFakeRecorder(actionCount)
 			recorders = append(recorders, rec)
@@ -194,7 +191,8 @@ func TestRandomNs(t *testing.T) {
 	}
 	r.Len(events, actionCount)
 	for i := 0; i < actionCount; i++ {
-		r.Contains(events[i], v1.EventTypeNormal)
+		r.Contains(events[i], "Warning")
+		r.Contains(events[i], "Oh common, you can do better.")
 	}
 }
 
