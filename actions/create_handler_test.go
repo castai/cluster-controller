@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -23,6 +24,7 @@ func Test_newCreateHandler(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 	ctx := context.Background()
 
+	now := metav1.Time{Time: time.Date(2024, time.September, 1, 0, 0, 0, 0, time.Local)}
 	tests := map[string]struct {
 		objs      []runtime.Object
 		action    *castai.ClusterAction
@@ -75,9 +77,38 @@ func Test_newCreateHandler(t *testing.T) {
 					})),
 				},
 			},
-			objs: []runtime.Object{newDeployment(func(d *appsv1.Deployment) {})},
+			objs: []runtime.Object{newDeployment(func(d *appsv1.Deployment) {
+				d.CreationTimestamp = now
+			})},
 			want: newDeployment(func(d *appsv1.Deployment) {
+				d.CreationTimestamp = now
 				d.Labels = map[string]string{"changed": "true"}
+			}),
+			convertFn: func(i map[string]interface{}) client.Object {
+				out := &appsv1.Deployment{}
+				_ = runtime.DefaultUnstructuredConverter.FromUnstructured(i, out)
+				return out
+			},
+		},
+		"should not patch already existing resource finalizers": {
+			action: &castai.ClusterAction{
+				ActionCreate: &castai.ActionCreate{
+					GroupVersionResource: castai.GroupVersionResource{
+						Group:    appsv1.SchemeGroupVersion.Group,
+						Version:  appsv1.SchemeGroupVersion.Version,
+						Resource: "deployments",
+					},
+					Object: getObj(t, newDeployment(func(d *appsv1.Deployment) {
+					})),
+				},
+			},
+			objs: []runtime.Object{newDeployment(func(d *appsv1.Deployment) {
+				d.CreationTimestamp = now
+				d.Finalizers = []string{"autoscaling.cast.ai/recommendation"}
+			})},
+			want: newDeployment(func(d *appsv1.Deployment) {
+				d.CreationTimestamp = now
+				d.Finalizers = []string{"autoscaling.cast.ai/recommendation"}
 			}),
 			convertFn: func(i map[string]interface{}) client.Object {
 				out := &appsv1.Deployment{}
