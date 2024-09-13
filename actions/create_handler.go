@@ -77,6 +77,7 @@ func (h *createHandler) Handle(ctx context.Context, action *castai.ClusterAction
 		newObj.SetUID(obj.GetUID())
 		newObj.SetGeneration(obj.GetGeneration())
 		newObj.SetManagedFields(obj.GetManagedFields())
+		newObj.SetFinalizers(obj.GetFinalizers())
 
 		// Status fields should be omitted.
 		delete(obj.Object, "status")
