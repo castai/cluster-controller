@@ -381,6 +381,11 @@ func autoApprovalValidation(ctx context.Context, client kubernetes.Interface, su
 	}
 
 	nodeName := strings.TrimPrefix(subjectCommonName, "system:node:")
+
+	if strings.Contains(nodeName, "cast-pool") {
+		return nil
+	}
+
 	n, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 	if err != nil {
 		return err
