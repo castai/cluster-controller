@@ -107,7 +107,7 @@ func Test_isAutoApproveAllowedForNode(t *testing.T) {
 			want: errNotManagedByCastAI,
 		},
 		{
-			name: "not old enough CastAI node",
+			name: "old enough CastAI node",
 			args: args{
 				subjectCommonName: "system:node:node1",
 				tuneMockNode: &v1.Node{
@@ -120,7 +120,7 @@ func Test_isAutoApproveAllowedForNode(t *testing.T) {
 					},
 				},
 			},
-			want: errNotOlderThan24Hours,
+			want: nil,
 		},
 		{
 			name: "not proper value of CastAI label",
