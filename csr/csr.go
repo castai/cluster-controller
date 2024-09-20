@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/sirupsen/logrus"
 	certv1 "k8s.io/api/certificates/v1"
@@ -398,10 +397,6 @@ func autoApprovalValidation(ctx context.Context, client kubernetes.Interface, su
 
 	if managedBy != castai.LabelValueManagedByCASTAI {
 		return fmt.Errorf("label value: %s %w", managedBy, errNotManagedByCastAI)
-	}
-
-	if n.CreationTimestamp.After(time.Now().Add(-time.Hour * 24)) {
-		return errNotOlderThan24Hours
 	}
 
 	return nil
