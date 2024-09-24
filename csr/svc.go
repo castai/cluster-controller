@@ -149,13 +149,6 @@ func (h *ApprovalManager) stopAutoApproveForCastAINodes() {
 	h.cancelAutoApprove = nil
 }
 
-func (h *ApprovalManager) getCancelAutoApprove() context.CancelFunc {
-	h.m.Lock()
-	defer h.m.Unlock()
-
-	return h.cancelAutoApprove
-}
-
 func newApproveCSRExponentialBackoff() wait.Backoff {
 	b := waitext.DefaultExponentialBackoff()
 	b.Factor = 2
