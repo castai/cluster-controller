@@ -32,13 +32,11 @@ type ApprovalManager struct {
 	m                 sync.Mutex // Used to make sure there is just one watcher running.
 }
 
-func (h *ApprovalManager) Start(ctx context.Context) error {
+func (h *ApprovalManager) Start(ctx context.Context) {
 	go h.runAutoApproveForCastAINodes(ctx)
-	return nil
 }
-func (h *ApprovalManager) Stop(ctx context.Context) error {
+func (h *ApprovalManager) Stop(ctx context.Context) {
 	h.stopAutoApproveForCastAINodes()
-	return nil
 }
 
 func (h *ApprovalManager) handleWithRetry(ctx context.Context, log *logrus.Entry, cert *Certificate) error {
