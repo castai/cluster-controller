@@ -19,7 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/castai/cluster-controller/castai"
 	"github.com/castai/cluster-controller/waitext"
 )
 
@@ -320,18 +319,18 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 				log.WithFields(logrus.Fields{
 					"csr":       name,
 					"node_name": cn,
-				}).Debugf("skipping csr: %v", err)
+				}).Debugf("skipping csr unable to get common name: %v", err)
 				continue
 			}
 			if csrResult.Approved() {
 				continue
 			}
 
-			if err := autoApprovalValidation(ctx, client, cn); err != nil {
+			if !isCastAINodeCsr(cn) {
 				log.WithFields(logrus.Fields{
 					"csr":       name,
 					"node_name": cn,
-				}).Debugf("skipping csr: %s, node: %s %v", name, cn, err)
+				}).Debug("skipping csr not CAST AI node")
 				continue
 			}
 			csrResult.Name = cn
@@ -356,11 +355,11 @@ func toCertificate(event watch.Event) (cert *Certificate, name string, request [
 	case *certv1.CertificateSigningRequest:
 		name = e.Name
 		request = e.Spec.Request
-		cert = &Certificate{v1: e, RequestingUser: e.Spec.Username}
+		cert = &Certificate{Name: name, v1: e, RequestingUser: e.Spec.Username}
 	case *certv1beta1.CertificateSigningRequest:
 		name = e.Name
 		request = e.Spec.Request
-		cert = &Certificate{v1Beta1: e, RequestingUser: e.Spec.Username}
+		cert = &Certificate{Name: name, v1Beta1: e, RequestingUser: e.Spec.Username}
 	default:
 		return nil, "", nil
 	}
@@ -368,43 +367,16 @@ func toCertificate(event watch.Event) (cert *Certificate, name string, request [
 	return cert, name, request
 }
 
-var (
-	errNoNodeName          = errors.New("no node name")
-	errCouldNotFindNode    = errors.New("could not find node")
-	errNotManagedByCastAI  = errors.New("node is not managed by CAST AI")
-	errNotOlderThan24Hours = errors.New("node is not older than 24 hours")
-)
-
-func autoApprovalValidation(ctx context.Context, client kubernetes.Interface, subjectCommonName string) error {
+func isCastAINodeCsr(subjectCommonName string) bool {
 	if subjectCommonName == "" {
-		return errNoNodeName
+		return false
 	}
 
-	nodeName := strings.TrimPrefix(subjectCommonName, "system:node:")
-
-	if strings.Contains(nodeName, "cast-pool") {
-		return nil
+	if strings.HasPrefix(subjectCommonName, "system:node") && strings.Contains(subjectCommonName, "cast-pool") {
+		return true
 	}
 
-	n, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
-	if err != nil {
-		return err
-	}
-
-	if n == nil {
-		return errCouldNotFindNode
-	}
-
-	managedBy, ok := n.Labels[castai.LabelManagedBy]
-	if !ok {
-		return errNotManagedByCastAI
-	}
-
-	if managedBy != castai.LabelValueManagedByCASTAI {
-		return fmt.Errorf("label value: %s %w", managedBy, errNotManagedByCastAI)
-	}
-
-	return nil
+	return false
 }
 
 func sendCertificate(ctx context.Context, c chan *Certificate, cert *Certificate) {

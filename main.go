@@ -30,6 +30,7 @@ import (
 	"github.com/castai/cluster-controller/actions"
 	"github.com/castai/cluster-controller/castai"
 	"github.com/castai/cluster-controller/config"
+	"github.com/castai/cluster-controller/csr"
 	"github.com/castai/cluster-controller/health"
 	"github.com/castai/cluster-controller/helm"
 	"github.com/castai/cluster-controller/version"
@@ -201,6 +202,13 @@ func run(
 		return runWithLeaderElection(ctx, log, clientSetLeader, leaderHealthCheck, cfg.LeaderElection, svc.Run)
 	}
 
+	if cfg.AutoApproveCSR {
+		csrMgr := csr.NewApprovalManager(log, clientset)
+		if err := csrMgr.Start(ctx); err != nil {
+			return fmt.Errorf("starting csr approval manager: %w", err)
+		}
+		defer csrMgr.Stop(ctx)
+	}
 	// Run action service. Blocks.
 	svc.Run(ctx)
 	return nil
