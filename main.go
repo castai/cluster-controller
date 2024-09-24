@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/bombsimon/logrusr/v4"
@@ -202,7 +203,12 @@ func run(
 		return runWithLeaderElection(ctx, log, clientSetLeader, leaderHealthCheck, cfg.LeaderElection, svc.Run)
 	}
 
-	if cfg.AutoApproveCSR {
+	isGKE, err := runningOnGKE(clientset, cfg)
+	if err != nil {
+		return err
+	}
+
+	if cfg.AutoApproveCSR && isGKE {
 		csrMgr := csr.NewApprovalManager(log, clientset)
 		csrMgr.Start(ctx)
 		defer csrMgr.Stop(ctx)
@@ -378,4 +384,26 @@ func (e *logContextErr) Error() string {
 
 func (e *logContextErr) Unwrap() error {
 	return e.err
+}
+
+func runningOnGKE(clientset *kubernetes.Clientset, cfg config.Config) (isGKE bool, err error) {
+	err = waitext.Retry(context.Background(), waitext.DefaultExponentialBackoff(), 3, func(ctx context.Context) (bool, error) {
+		node, err := clientset.CoreV1().Nodes().Get(ctx, cfg.NodeName, metav1.GetOptions{})
+		if err != nil {
+			return true, fmt.Errorf("getting node: %w", err)
+		}
+
+		for k, v := range node.Labels {
+			if strings.HasPrefix(k, "cloud.google.com/") {
+				isGKE = true
+				return false, nil
+			}
+		}
+
+		return false, nil
+	}, func(err error) {
+
+	})
+
+	return
 }
