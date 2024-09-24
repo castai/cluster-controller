@@ -204,9 +204,7 @@ func run(
 
 	if cfg.AutoApproveCSR {
 		csrMgr := csr.NewApprovalManager(log, clientset)
-		if err := csrMgr.Start(ctx); err != nil {
-			return fmt.Errorf("starting csr approval manager: %w", err)
-		}
+		csrMgr.Start(ctx)
 		defer csrMgr.Stop(ctx)
 	}
 	// Run action service. Blocks.
