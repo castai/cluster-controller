@@ -393,7 +393,7 @@ func runningOnGKE(clientset *kubernetes.Clientset, cfg config.Config) (isGKE boo
 			return true, fmt.Errorf("getting node: %w", err)
 		}
 
-		for k, v := range node.Labels {
+		for k, _ := range node.Labels {
 			if strings.HasPrefix(k, "cloud.google.com/") {
 				isGKE = true
 				return false, nil
