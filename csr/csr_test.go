@@ -55,7 +55,6 @@ func getClient() (*kubernetes.Clientset, error) {
 
 func Test_isCastAINodeCsr(t *testing.T) {
 	type args struct {
-		tuneMockErr       error
 		subjectCommonName string
 	}
 	tests := []struct {
