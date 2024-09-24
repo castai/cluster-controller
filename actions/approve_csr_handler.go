@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -35,8 +34,6 @@ type approveCSRHandler struct {
 	clientset              kubernetes.Interface
 	initialCSRFetchTimeout time.Duration
 	csrFetchInterval       time.Duration
-	cancelAutoApprove      context.CancelFunc
-	m                      sync.Mutex // Used to make sure there is just one watcher running as it may be triggered from multiple CSR actions.
 }
 
 func (h *approveCSRHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
