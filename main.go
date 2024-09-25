@@ -208,6 +208,7 @@ func run(
 		return err
 	}
 
+	log.Debugf("auto approve csr: %v, running on GKE: %v", cfg.AutoApproveCSR, isGKE)
 	if cfg.AutoApproveCSR && isGKE {
 		csrMgr := csr.NewApprovalManager(log, clientset)
 		csrMgr.Start(ctx)
