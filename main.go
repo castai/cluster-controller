@@ -197,24 +197,29 @@ func run(
 			log.Errorf("failed to start pprof http server: %v", err)
 		}
 	}()
-	isGKE, err := runningOnGKE(clientset, cfg)
-	if err != nil {
-		return err
-	}
 
-	log.Debugf("auto approve csr: %v, running on GKE: %v", cfg.AutoApproveCSR, isGKE)
-	if cfg.AutoApproveCSR && isGKE {
-		csrMgr := csr.NewApprovalManager(log, clientset)
-		csrMgr.Start(ctx)
+	runSvc := func(ctx context.Context) {
+		isGKE, err := runningOnGKE(clientset, cfg)
+		if err != nil {
+			log.Fatalf("failed to determine if running on GKE: %v", err)
+		}
+
+		log.Debugf("auto approve csr: %v, running on GKE: %v", cfg.AutoApproveCSR, isGKE)
+		if cfg.AutoApproveCSR && isGKE {
+			csrMgr := csr.NewApprovalManager(log, clientset)
+			csrMgr.Start(ctx)
+		}
+
+		svc.Run(ctx)
 	}
 
 	if cfg.LeaderElection.Enabled {
 		// Run actions service with leader election. Blocks.
-		return runWithLeaderElection(ctx, log, clientSetLeader, leaderHealthCheck, cfg.LeaderElection, svc.Run)
+		return runWithLeaderElection(ctx, log, clientSetLeader, leaderHealthCheck, cfg.LeaderElection, runSvc)
 	}
 
 	// Run action service. Blocks.
-	svc.Run(ctx)
+	runSvc(ctx)
 	return nil
 }
 
