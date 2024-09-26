@@ -62,6 +62,7 @@ func (h *ApprovalManager) handle(ctx context.Context, log logrus.FieldLogger, ce
 	if cert.Approved() {
 		return nil
 	}
+	log = log.WithField("csr_name", cert.Name)
 	// Since this new csr may be denied we need to delete it.
 	log.Debug("deleting old csr")
 	if err := cert.DeleteCertificate(ctx, h.clientset); err != nil {

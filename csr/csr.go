@@ -64,6 +64,14 @@ func (c *Certificate) Approved() bool {
 	return false
 }
 
+func isAlreadyApproved(err error) bool {
+	if strings.Contains(err.Error(), "Duplicate value: \"Approved\"") {
+		return true
+	}
+	return false
+
+}
+
 // ApproveCertificate approves csr.
 func (c *Certificate) ApproveCertificate(ctx context.Context, client kubernetes.Interface) (*Certificate, error) {
 	if err := c.Validate(); err != nil {
@@ -78,7 +86,7 @@ func (c *Certificate) ApproveCertificate(ctx context.Context, client kubernetes.
 			LastUpdateTime: metav1.Now(),
 		})
 		resp, err := client.CertificatesV1beta1().CertificateSigningRequests().UpdateApproval(ctx, c.v1Beta1, metav1.UpdateOptions{})
-		if err != nil {
+		if err != nil && !isAlreadyApproved(err) {
 			return nil, fmt.Errorf("v1beta csr approve: %w", err)
 		}
 		return &Certificate{v1Beta1: resp}, nil
@@ -92,7 +100,7 @@ func (c *Certificate) ApproveCertificate(ctx context.Context, client kubernetes.
 		LastUpdateTime: metav1.Now(),
 	})
 	resp, err := client.CertificatesV1().CertificateSigningRequests().UpdateApproval(ctx, c.v1.Name, c.v1, metav1.UpdateOptions{})
-	if err != nil {
+	if err != nil && !isAlreadyApproved(err) {
 		return nil, fmt.Errorf("v1 csr approve: %w", err)
 	}
 	return &Certificate{v1: resp}, nil
