@@ -65,11 +65,10 @@ func (c *Certificate) Approved() bool {
 }
 
 func isAlreadyApproved(err error) bool {
-	if strings.Contains(err.Error(), "Duplicate value: \"Approved\"") {
-		return true
+	if err == nil {
+		return false
 	}
-	return false
-
+	return strings.Contains(err.Error(), "Duplicate value: \"Approved\"")
 }
 
 // ApproveCertificate approves csr.
