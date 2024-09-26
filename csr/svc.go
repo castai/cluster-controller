@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 
@@ -64,7 +65,9 @@ func (h *ApprovalManager) handle(ctx context.Context, log logrus.FieldLogger, ce
 	// Since this new csr may be denied we need to delete it.
 	log.Debug("deleting old csr")
 	if err := cert.DeleteCertificate(ctx, h.clientset); err != nil {
-		return fmt.Errorf("deleting csr: %w", err)
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("deleting csr: %w", err)
+		}
 	}
 
 	// Create a new CSR with the same request data as the original one.
