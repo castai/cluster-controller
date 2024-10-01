@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/sirupsen/logrus"
 	certv1 "k8s.io/api/certificates/v1"
@@ -20,7 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/castai/cluster-controller/castai"
 	"github.com/castai/cluster-controller/waitext"
 )
 
@@ -66,6 +64,13 @@ func (c *Certificate) Approved() bool {
 	return false
 }
 
+func isAlreadyApproved(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "Duplicate value: \"Approved\"")
+}
+
 // ApproveCertificate approves csr.
 func (c *Certificate) ApproveCertificate(ctx context.Context, client kubernetes.Interface) (*Certificate, error) {
 	if err := c.Validate(); err != nil {
@@ -80,7 +85,7 @@ func (c *Certificate) ApproveCertificate(ctx context.Context, client kubernetes.
 			LastUpdateTime: metav1.Now(),
 		})
 		resp, err := client.CertificatesV1beta1().CertificateSigningRequests().UpdateApproval(ctx, c.v1Beta1, metav1.UpdateOptions{})
-		if err != nil {
+		if err != nil && !isAlreadyApproved(err) {
 			return nil, fmt.Errorf("v1beta csr approve: %w", err)
 		}
 		return &Certificate{v1Beta1: resp}, nil
@@ -94,7 +99,7 @@ func (c *Certificate) ApproveCertificate(ctx context.Context, client kubernetes.
 		LastUpdateTime: metav1.Now(),
 	})
 	resp, err := client.CertificatesV1().CertificateSigningRequests().UpdateApproval(ctx, c.v1.Name, c.v1, metav1.UpdateOptions{})
-	if err != nil {
+	if err != nil && !isAlreadyApproved(err) {
 		return nil, fmt.Errorf("v1 csr approve: %w", err)
 	}
 	return &Certificate{v1: resp}, nil
@@ -321,18 +326,18 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 				log.WithFields(logrus.Fields{
 					"csr":       name,
 					"node_name": cn,
-				}).Debugf("skipping csr: %v", err)
+				}).Debugf("skipping csr unable to get common name: %v", err)
 				continue
 			}
 			if csrResult.Approved() {
 				continue
 			}
 
-			if err := autoApprovalValidation(ctx, client, cn); err != nil {
+			if !isCastAINodeCsr(cn) {
 				log.WithFields(logrus.Fields{
 					"csr":       name,
 					"node_name": cn,
-				}).Debugf("skipping csr: %s, node: %s %v", name, cn, err)
+				}).Debug("skipping csr not CAST AI node")
 				continue
 			}
 			csrResult.Name = cn
@@ -357,11 +362,11 @@ func toCertificate(event watch.Event) (cert *Certificate, name string, request [
 	case *certv1.CertificateSigningRequest:
 		name = e.Name
 		request = e.Spec.Request
-		cert = &Certificate{v1: e, RequestingUser: e.Spec.Username}
+		cert = &Certificate{Name: name, v1: e, RequestingUser: e.Spec.Username}
 	case *certv1beta1.CertificateSigningRequest:
 		name = e.Name
 		request = e.Spec.Request
-		cert = &Certificate{v1Beta1: e, RequestingUser: e.Spec.Username}
+		cert = &Certificate{Name: name, v1Beta1: e, RequestingUser: e.Spec.Username}
 	default:
 		return nil, "", nil
 	}
@@ -369,42 +374,16 @@ func toCertificate(event watch.Event) (cert *Certificate, name string, request [
 	return cert, name, request
 }
 
-var (
-	errNoNodeName          = errors.New("no node name")
-	errCouldNotFindNode    = errors.New("could not find node")
-	errNotManagedByCastAI  = errors.New("node is not managed by CAST AI")
-	errNotOlderThan24Hours = errors.New("node is not older than 24 hours")
-)
-
-func autoApprovalValidation(ctx context.Context, client kubernetes.Interface, subjectCommonName string) error {
+func isCastAINodeCsr(subjectCommonName string) bool {
 	if subjectCommonName == "" {
-		return errNoNodeName
+		return false
 	}
 
-	nodeName := strings.TrimPrefix(subjectCommonName, "system:node:")
-	n, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
-	if err != nil {
-		return err
+	if strings.HasPrefix(subjectCommonName, "system:node") && strings.Contains(subjectCommonName, "cast-pool") {
+		return true
 	}
 
-	if n == nil {
-		return errCouldNotFindNode
-	}
-
-	managedBy, ok := n.Labels[castai.LabelManagedBy]
-	if !ok {
-		return errNotManagedByCastAI
-	}
-
-	if managedBy != castai.LabelValueManagedByCASTAI {
-		return fmt.Errorf("label value: %s %w", managedBy, errNotManagedByCastAI)
-	}
-
-	if n.CreationTimestamp.After(time.Now().Add(-time.Hour * 24)) {
-		return errNotOlderThan24Hours
-	}
-
-	return nil
+	return false
 }
 
 func sendCertificate(ctx context.Context, c chan *Certificate, cert *Certificate) {

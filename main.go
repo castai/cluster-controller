@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/bombsimon/logrusr/v4"
@@ -30,6 +31,7 @@ import (
 	"github.com/castai/cluster-controller/actions"
 	"github.com/castai/cluster-controller/castai"
 	"github.com/castai/cluster-controller/config"
+	"github.com/castai/cluster-controller/csr"
 	"github.com/castai/cluster-controller/health"
 	"github.com/castai/cluster-controller/helm"
 	"github.com/castai/cluster-controller/version"
@@ -196,13 +198,28 @@ func run(
 		}
 	}()
 
+	runSvc := func(ctx context.Context) {
+		isGKE, err := runningOnGKE(clientset, cfg)
+		if err != nil {
+			log.Fatalf("failed to determine if running on GKE: %v", err)
+		}
+
+		log.Debugf("auto approve csr: %v, running on GKE: %v", cfg.AutoApproveCSR, isGKE)
+		if cfg.AutoApproveCSR && isGKE {
+			csrMgr := csr.NewApprovalManager(log, clientset)
+			csrMgr.Start(ctx)
+		}
+
+		svc.Run(ctx)
+	}
+
 	if cfg.LeaderElection.Enabled {
 		// Run actions service with leader election. Blocks.
-		return runWithLeaderElection(ctx, log, clientSetLeader, leaderHealthCheck, cfg.LeaderElection, svc.Run)
+		return runWithLeaderElection(ctx, log, clientSetLeader, leaderHealthCheck, cfg.LeaderElection, runSvc)
 	}
 
 	// Run action service. Blocks.
-	svc.Run(ctx)
+	runSvc(ctx)
 	return nil
 }
 
@@ -372,4 +389,26 @@ func (e *logContextErr) Error() string {
 
 func (e *logContextErr) Unwrap() error {
 	return e.err
+}
+
+func runningOnGKE(clientset *kubernetes.Clientset, cfg config.Config) (isGKE bool, err error) {
+	err = waitext.Retry(context.Background(), waitext.DefaultExponentialBackoff(), 3, func(ctx context.Context) (bool, error) {
+		node, err := clientset.CoreV1().Nodes().Get(ctx, cfg.NodeName, metav1.GetOptions{})
+		if err != nil {
+			return true, fmt.Errorf("getting node: %w", err)
+		}
+
+		for k, _ := range node.Labels {
+			if strings.HasPrefix(k, "cloud.google.com/") {
+				isGKE = true
+				return false, nil
+			}
+		}
+
+		return false, nil
+	}, func(err error) {
+
+	})
+
+	return
 }

@@ -2,24 +2,15 @@ package csr
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/fake"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
-	ktest "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
-
-	"github.com/castai/cluster-controller/castai"
 )
 
 func TestApproveCSR(t *testing.T) {
@@ -62,111 +53,45 @@ func getClient() (*kubernetes.Clientset, error) {
 	return clientset, err
 }
 
-func Test_isAutoApproveAllowedForNode(t *testing.T) {
-	err := fmt.Errorf("error")
+func Test_isCastAINodeCsr(t *testing.T) {
 	type args struct {
-		tuneMockNode      runtime.Object
-		tuneMockErr       error
 		subjectCommonName string
 	}
 	tests := []struct {
 		name string
 		args args
-		want error
+		want bool
 	}{
 		{
 			name: "empty node name",
-			want: errNoNodeName,
+			want: false,
 		},
 		{
-			name: "empty node get response",
+			name: "not cast in subjectComma	",
 			args: args{
 				subjectCommonName: "system:node:node1",
 			},
-			want: errCouldNotFindNode,
-		},
-		{
-			name: "empty node get response",
-			args: args{
-				subjectCommonName: "system:node:node1",
-				tuneMockErr:       err,
-			},
-			want: err,
+			want: false,
 		},
 		{
 			name: "not CastAI node",
 			args: args{
 				subjectCommonName: "node1",
-				tuneMockNode: &v1.Node{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:              "system:node:node1",
-						CreationTimestamp: metav1.NewTime(time.Now().Add(-time.Hour * 25)),
-					},
-				},
 			},
-			want: errNotManagedByCastAI,
+			want: false,
 		},
 		{
-			name: "not old enough CastAI node",
+			name: "CAST AI node",
 			args: args{
-				subjectCommonName: "system:node:node1",
-				tuneMockNode: &v1.Node{
-					ObjectMeta: metav1.ObjectMeta{
-						Labels: map[string]string{
-							castai.LabelManagedBy: castai.LabelValueManagedByCASTAI,
-						},
-						CreationTimestamp: metav1.NewTime(time.Now().Add(-time.Hour)),
-						Name:              "node1",
-					},
-				},
+				subjectCommonName: "system:node:node1-cast-pool-123",
 			},
-			want: errNotOlderThan24Hours,
-		},
-		{
-			name: "not proper value of CastAI label",
-			args: args{
-				subjectCommonName: "system:node:node1",
-				tuneMockNode: &v1.Node{
-					ObjectMeta: metav1.ObjectMeta{
-						CreationTimestamp: metav1.NewTime(time.Now().Add(-time.Hour * 25)),
-						Name:              "node1",
-						Labels: map[string]string{
-							castai.LabelManagedBy: "tests",
-						},
-					},
-				},
-			},
-			want: errNotManagedByCastAI,
-		},
-		{
-			name: "true",
-			args: args{
-				subjectCommonName: "system:node:node1",
-				tuneMockNode: &v1.Node{
-					ObjectMeta: metav1.ObjectMeta{
-						CreationTimestamp: metav1.NewTime(time.Now().Add(-time.Hour * 25)),
-						Name:              "node1",
-						Labels: map[string]string{
-							castai.LabelManagedBy: castai.LabelValueManagedByCASTAI,
-						},
-					},
-				},
-			},
-			want: nil,
+			want: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := fake.NewSimpleClientset()
-			ch := make(chan struct{})
-
-			client.PrependReactor("get", "nodes", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
-				close(ch)
-				return true, tt.args.tuneMockNode, tt.args.tuneMockErr
-			})
-			if got := autoApprovalValidation(context.Background(), client, tt.args.subjectCommonName); !errors.Is(got, tt.want) {
-				t.Errorf("autoApprovalValidation() = %v, want %v", got, tt.want)
-			}
+			got := isCastAINodeCsr(tt.args.subjectCommonName)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }
