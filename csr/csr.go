@@ -281,8 +281,13 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 		waitext.Forever,
 		func(ctx context.Context) (bool, error) {
 			w, err = getWatcher(ctx, client)
+			// Context canceled is when the cluster-controller is stopped.
+			// In that case context.Canceled is not an error.
+			if errors.Is(err, context.Canceled) {
+				return false, err
+			}
 			if err != nil {
-				return true, fmt.Errorf("fail to open v1 and v1beta watching client: %w", err)
+				return true, fmt.Errorf("getWatcher: %w", err)
 			}
 			return false, nil
 		},
@@ -306,7 +311,8 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 		case event, ok := <-w.ResultChan():
 			if !ok {
 				log.Debug("watcher closed")
-				WatchCastAINodeCSRs(ctx, log, client, c) // start over in case of any error
+				go WatchCastAINodeCSRs(ctx, log, client, c) // start over in case of any error
+				return
 			}
 
 			csrResult, name, request := toCertificate(event)
