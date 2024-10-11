@@ -1,4 +1,4 @@
-package version
+package k8version
 
 import (
 	"encoding/json"

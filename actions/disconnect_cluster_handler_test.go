@@ -12,7 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/internal/castai"
 )
 
 func TestDisconnectClusterHandler(t *testing.T) {

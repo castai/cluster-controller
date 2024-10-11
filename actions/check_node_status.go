@@ -14,7 +14,7 @@ import (
 
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/waitext"
 )
 

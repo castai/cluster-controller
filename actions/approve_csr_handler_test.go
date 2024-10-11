@@ -22,8 +22,8 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	ktest "k8s.io/client-go/testing"
 
-	"github.com/castai/cluster-controller/castai"
 	"github.com/castai/cluster-controller/csr"
+	"github.com/castai/cluster-controller/internal/castai"
 )
 
 func TestApproveCSRHandler(t *testing.T) {

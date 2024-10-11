@@ -12,9 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 
-	"github.com/castai/cluster-controller/castai"
-	"github.com/castai/cluster-controller/castai/mock"
 	"github.com/castai/cluster-controller/health"
+	castai2 "github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/castai/mock"
 )
 
 func TestMain(m *testing.M) {
@@ -33,7 +33,7 @@ func TestActions(t *testing.T) {
 		ClusterID:        uuid.New().String(),
 	}
 
-	newTestService := func(handler ActionHandler, client castai.ActionsClient) *service {
+	newTestService := func(handler ActionHandler, client castai2.ActionsClient) *service {
 		svc := NewService(
 			log,
 			cfg,
@@ -55,25 +55,25 @@ func TestActions(t *testing.T) {
 	t.Run("poll handle and ack", func(t *testing.T) {
 		r := require.New(t)
 
-		apiActions := []*castai.ClusterAction{
+		apiActions := []*castai2.ClusterAction{
 			{
 				ID:        "a1",
 				CreatedAt: time.Now(),
-				ActionDeleteNode: &castai.ActionDeleteNode{
+				ActionDeleteNode: &castai2.ActionDeleteNode{
 					NodeName: "n1",
 				},
 			},
 			{
 				ID:        "a2",
 				CreatedAt: time.Now(),
-				ActionDrainNode: &castai.ActionDrainNode{
+				ActionDrainNode: &castai2.ActionDrainNode{
 					NodeName: "n1",
 				},
 			},
 			{
 				ID:        "a3",
 				CreatedAt: time.Now(),
-				ActionPatchNode: &castai.ActionPatchNode{
+				ActionPatchNode: &castai2.ActionPatchNode{
 					NodeName: "n1",
 				},
 			},
@@ -102,7 +102,7 @@ func TestActions(t *testing.T) {
 	t.Run("continue polling on api error", func(t *testing.T) {
 		r := require.New(t)
 
-		client := mock.NewMockAPIClient([]*castai.ClusterAction{})
+		client := mock.NewMockAPIClient([]*castai2.ClusterAction{})
 		client.GetActionsErr = errors.New("ups")
 		handler := &mockAgentActionHandler{err: errors.New("ups")}
 		svc := newTestService(handler, client)
@@ -119,11 +119,11 @@ func TestActions(t *testing.T) {
 	t.Run("do not ack action on context canceled error", func(t *testing.T) {
 		r := require.New(t)
 
-		apiActions := []*castai.ClusterAction{
+		apiActions := []*castai2.ClusterAction{
 			{
 				ID:        "a1",
 				CreatedAt: time.Now(),
-				ActionPatchNode: &castai.ActionPatchNode{
+				ActionPatchNode: &castai2.ActionPatchNode{
 					NodeName: "n1",
 				},
 			},
@@ -145,11 +145,11 @@ func TestActions(t *testing.T) {
 	t.Run("ack with error when action handler failed", func(t *testing.T) {
 		r := require.New(t)
 
-		apiActions := []*castai.ClusterAction{
+		apiActions := []*castai2.ClusterAction{
 			{
 				ID:        "a1",
 				CreatedAt: time.Now(),
-				ActionPatchNode: &castai.ActionPatchNode{
+				ActionPatchNode: &castai2.ActionPatchNode{
 					NodeName: "n1",
 				},
 			},
@@ -173,11 +173,11 @@ func TestActions(t *testing.T) {
 	t.Run("ack with error when action handler panic occurred", func(t *testing.T) {
 		r := require.New(t)
 
-		apiActions := []*castai.ClusterAction{
+		apiActions := []*castai2.ClusterAction{
 			{
 				ID:        "a1",
 				CreatedAt: time.Now(),
-				ActionPatchNode: &castai.ActionPatchNode{
+				ActionPatchNode: &castai2.ActionPatchNode{
 					NodeName: "n1",
 				},
 			},
@@ -205,7 +205,7 @@ type mockAgentActionHandler struct {
 	handleDelay time.Duration
 }
 
-func (m *mockAgentActionHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+func (m *mockAgentActionHandler) Handle(ctx context.Context, action *castai2.ClusterAction) error {
 	time.Sleep(m.handleDelay)
 	if m.panicErr != nil {
 		panic(m.panicErr)

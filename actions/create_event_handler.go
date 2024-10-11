@@ -11,7 +11,7 @@ import (
 	typedv1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/record"
 
-	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/internal/castai"
 )
 
 func newCreateEventHandler(log logrus.FieldLogger, clientset kubernetes.Interface) ActionHandler {

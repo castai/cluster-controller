@@ -20,20 +20,15 @@ func TestLogExporter(t *testing.T) {
 	defer hook.Reset()
 
 	sender := &mockSender{}
-	e := NewLogExporter(nil, sender)
-	logger.AddHook(e)
-	log := logger.WithFields(logrus.Fields{
-		"cluster_id": "test-cluster",
-	})
-	log.Log(logrus.ErrorLevel, "foo")
-	log.Log(logrus.DebugLevel, "bar")
-	e.Wait()
+	SetupLogExporter(logger, sender)
+	logger.Log(logrus.ErrorLevel, "foo")
+	logger.Log(logrus.DebugLevel, "bar")
 
 	it := require.New(t)
 	it.Len(sender.entries, 1)
-	it.Equal(sender.entries[0].Message, "foo")
-	it.Equal(sender.entries[0].Level, "error")
-	it.Equal(sender.entries[0].Fields, logrus.Fields{"cluster_id": "test-cluster"})
+	it.Equal("foo", sender.entries[0].Message)
+	it.Equal("error", sender.entries[0].Level)
+	it.Equal(logrus.Fields{"cluster_id": "test-cluster"}, sender.entries[0].Fields)
 }
 
 type mockSender struct {

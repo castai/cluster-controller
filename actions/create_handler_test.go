@@ -16,7 +16,7 @@ import (
 	"k8s.io/client-go/dynamic/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/internal/castai"
 )
 
 func Test_newCreateHandler(t *testing.T) {

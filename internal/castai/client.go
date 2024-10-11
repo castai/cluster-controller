@@ -13,7 +13,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/http2"
 
-	"github.com/castai/cluster-controller/config"
+	"github.com/castai/cluster-controller/internal/config"
 )
 
 const (

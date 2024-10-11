@@ -11,9 +11,9 @@ import (
 	"helm.sh/helm/v3/pkg/release"
 	helmdriver "helm.sh/helm/v3/pkg/storage/driver"
 
-	"github.com/castai/cluster-controller/castai"
 	"github.com/castai/cluster-controller/helm"
 	mock_helm "github.com/castai/cluster-controller/helm/mock"
+	"github.com/castai/cluster-controller/internal/castai"
 )
 
 func TestChartUpsertHandler(t *testing.T) {

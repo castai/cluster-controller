@@ -3,9 +3,9 @@ package actions
 import (
 	"context"
 	"fmt"
-	"github.com/castai/cluster-controller/castai"
 	"reflect"
 
+	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/sirupsen/logrus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

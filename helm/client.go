@@ -20,8 +20,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/castai/cluster-controller/castai"
 	"github.com/castai/cluster-controller/helm/hook"
+	"github.com/castai/cluster-controller/internal/castai"
 )
 
 type InstallOptions struct {

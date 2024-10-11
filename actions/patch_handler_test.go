@@ -15,7 +15,7 @@ import (
 	"k8s.io/client-go/dynamic/fake"
 	client_testing "k8s.io/client-go/testing"
 
-	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/internal/castai"
 )
 
 func TestPatchHandler(t *testing.T) {

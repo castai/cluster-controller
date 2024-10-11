@@ -14,9 +14,9 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/castai/cluster-controller/castai"
 	"github.com/castai/cluster-controller/health"
 	"github.com/castai/cluster-controller/helm"
+	castai2 "github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/waitext"
 )
 
@@ -46,7 +46,7 @@ type Service interface {
 }
 
 type ActionHandler interface {
-	Handle(ctx context.Context, action *castai.ClusterAction) error
+	Handle(ctx context.Context, action *castai2.ClusterAction) error
 }
 
 func NewService(
@@ -55,7 +55,7 @@ func NewService(
 	k8sVersion string,
 	clientset *kubernetes.Clientset,
 	dynamicClient dynamic.Interface,
-	castaiClient castai.ActionsClient,
+	castaiClient castai2.ActionsClient,
 	helmClient helm.Client,
 	healthCheck *health.HealthzProvider,
 ) Service {
@@ -66,21 +66,21 @@ func NewService(
 		castAIClient:   castaiClient,
 		startedActions: map[string]struct{}{},
 		actionHandlers: map[reflect.Type]ActionHandler{
-			reflect.TypeOf(&castai.ActionDeleteNode{}):        newDeleteNodeHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionDrainNode{}):         newDrainNodeHandler(log, clientset, cfg.Namespace),
-			reflect.TypeOf(&castai.ActionPatchNode{}):         newPatchNodeHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionCreateEvent{}):       newCreateEventHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionApproveCSR{}):        newApproveCSRHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionChartUpsert{}):       newChartUpsertHandler(log, helmClient),
-			reflect.TypeOf(&castai.ActionChartUninstall{}):    newChartUninstallHandler(log, helmClient),
-			reflect.TypeOf(&castai.ActionChartRollback{}):     newChartRollbackHandler(log, helmClient, cfg.Version),
-			reflect.TypeOf(&castai.ActionDisconnectCluster{}): newDisconnectClusterHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionSendAKSInitData{}):   newSendAKSInitDataHandler(log, castaiClient),
-			reflect.TypeOf(&castai.ActionCheckNodeDeleted{}):  newCheckNodeDeletedHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionCheckNodeStatus{}):   newCheckNodeStatusHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionPatch{}):             newPatchHandler(log, dynamicClient),
-			reflect.TypeOf(&castai.ActionCreate{}):            newCreateHandler(log, dynamicClient),
-			reflect.TypeOf(&castai.ActionDelete{}):            newDeleteHandler(log, dynamicClient),
+			reflect.TypeOf(&castai2.ActionDeleteNode{}):        newDeleteNodeHandler(log, clientset),
+			reflect.TypeOf(&castai2.ActionDrainNode{}):         newDrainNodeHandler(log, clientset, cfg.Namespace),
+			reflect.TypeOf(&castai2.ActionPatchNode{}):         newPatchNodeHandler(log, clientset),
+			reflect.TypeOf(&castai2.ActionCreateEvent{}):       newCreateEventHandler(log, clientset),
+			reflect.TypeOf(&castai2.ActionApproveCSR{}):        newApproveCSRHandler(log, clientset),
+			reflect.TypeOf(&castai2.ActionChartUpsert{}):       newChartUpsertHandler(log, helmClient),
+			reflect.TypeOf(&castai2.ActionChartUninstall{}):    newChartUninstallHandler(log, helmClient),
+			reflect.TypeOf(&castai2.ActionChartRollback{}):     newChartRollbackHandler(log, helmClient, cfg.Version),
+			reflect.TypeOf(&castai2.ActionDisconnectCluster{}): newDisconnectClusterHandler(log, clientset),
+			reflect.TypeOf(&castai2.ActionSendAKSInitData{}):   newSendAKSInitDataHandler(log, castaiClient),
+			reflect.TypeOf(&castai2.ActionCheckNodeDeleted{}):  newCheckNodeDeletedHandler(log, clientset),
+			reflect.TypeOf(&castai2.ActionCheckNodeStatus{}):   newCheckNodeStatusHandler(log, clientset),
+			reflect.TypeOf(&castai2.ActionPatch{}):             newPatchHandler(log, dynamicClient),
+			reflect.TypeOf(&castai2.ActionCreate{}):            newCreateHandler(log, dynamicClient),
+			reflect.TypeOf(&castai2.ActionDelete{}):            newDeleteHandler(log, dynamicClient),
 		},
 		healthCheck: healthCheck,
 	}
@@ -89,7 +89,7 @@ func NewService(
 type service struct {
 	log          logrus.FieldLogger
 	cfg          Config
-	castAIClient castai.ActionsClient
+	castAIClient castai2.ActionsClient
 
 	k8sVersion string
 
@@ -127,7 +127,7 @@ func (s *service) doWork(ctx context.Context) error {
 	s.log.Info("polling actions")
 	start := time.Now()
 	var (
-		actions   []*castai.ClusterAction
+		actions   []*castai2.ClusterAction
 		err       error
 		iteration int
 	)
@@ -161,13 +161,13 @@ func (s *service) doWork(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) handleActions(ctx context.Context, actions []*castai.ClusterAction) {
+func (s *service) handleActions(ctx context.Context, actions []*castai2.ClusterAction) {
 	for _, action := range actions {
 		if !s.startProcessing(action.ID) {
 			continue
 		}
 
-		go func(action *castai.ClusterAction) {
+		go func(action *castai2.ClusterAction) {
 			defer s.finishProcessing(action.ID)
 
 			var err error
@@ -214,7 +214,7 @@ func (s *service) startProcessing(actionID string) bool {
 	return true
 }
 
-func (s *service) handleAction(ctx context.Context, action *castai.ClusterAction) (err error) {
+func (s *service) handleAction(ctx context.Context, action *castai2.ClusterAction) (err error) {
 	actionType := reflect.TypeOf(action.Data())
 
 	defer func() {
@@ -238,7 +238,7 @@ func (s *service) handleAction(ctx context.Context, action *castai.ClusterAction
 	return nil
 }
 
-func (s *service) ackAction(ctx context.Context, action *castai.ClusterAction, handleErr error) error {
+func (s *service) ackAction(ctx context.Context, action *castai2.ClusterAction, handleErr error) error {
 	actionType := reflect.TypeOf(action.Data())
 	s.log.WithFields(logrus.Fields{
 		actionIDLogField: action.ID,
@@ -250,7 +250,7 @@ func (s *service) ackAction(ctx context.Context, action *castai.ClusterAction, h
 	return waitext.Retry(ctx, boff, s.cfg.AckRetriesCount, func(ctx context.Context) (bool, error) {
 		ctx, cancel := context.WithTimeout(ctx, s.cfg.AckTimeout)
 		defer cancel()
-		return true, s.castAIClient.AckAction(ctx, action.ID, &castai.AckClusterActionRequest{
+		return true, s.castAIClient.AckAction(ctx, action.ID, &castai2.AckClusterActionRequest{
 			Error: getHandlerError(handleErr),
 		})
 	}, func(err error) {

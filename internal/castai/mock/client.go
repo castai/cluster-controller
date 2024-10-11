@@ -4,12 +4,12 @@ import (
 	"context"
 	"sync"
 
-	"github.com/castai/cluster-controller/castai"
+	castai2 "github.com/castai/cluster-controller/internal/castai"
 )
 
-var _ castai.ActionsClient = (*mockClient)(nil)
+var _ castai2.ActionsClient = (*mockClient)(nil)
 
-func NewMockAPIClient(actions []*castai.ClusterAction) *mockClient {
+func NewMockAPIClient(actions []*castai2.ClusterAction) *mockClient {
 	return &mockClient{Actions: actions}
 }
 
@@ -19,29 +19,29 @@ type mockAck struct {
 }
 
 type mockClient struct {
-	Actions        []*castai.ClusterAction
+	Actions        []*castai2.ClusterAction
 	GetActionsErr  error
 	Acks           []*mockAck
-	AKSInitDataReq *castai.AKSInitDataRequest
+	AKSInitDataReq *castai2.AKSInitDataRequest
 
 	mu sync.Mutex
 }
 
-func (m *mockClient) SendAKSInitData(ctx context.Context, req *castai.AKSInitDataRequest) error {
+func (m *mockClient) SendAKSInitData(ctx context.Context, req *castai2.AKSInitDataRequest) error {
 	m.mu.Lock()
 	m.AKSInitDataReq = req
 	m.mu.Unlock()
 	return nil
 }
 
-func (m *mockClient) GetActions(_ context.Context, _ string) ([]*castai.ClusterAction, error) {
+func (m *mockClient) GetActions(_ context.Context, _ string) ([]*castai2.ClusterAction, error) {
 	m.mu.Lock()
 	actions := m.Actions
 	m.mu.Unlock()
 	return actions, m.GetActionsErr
 }
 
-func (m *mockClient) AckAction(_ context.Context, actionID string, req *castai.AckClusterActionRequest) error {
+func (m *mockClient) AckAction(_ context.Context, actionID string, req *castai2.AckClusterActionRequest) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -52,7 +52,7 @@ func (m *mockClient) AckAction(_ context.Context, actionID string, req *castai.A
 }
 
 func (m *mockClient) removeAckedActions(actionID string) {
-	var remaining []*castai.ClusterAction
+	var remaining []*castai2.ClusterAction
 	for _, action := range m.Actions {
 		if action.ID != actionID {
 			remaining = append(remaining, action)

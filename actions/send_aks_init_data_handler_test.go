@@ -8,8 +8,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
-	"github.com/castai/cluster-controller/castai"
-	"github.com/castai/cluster-controller/castai/mock"
+	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/castai/mock"
 )
 
 func TestAKSInitDataHandler(t *testing.T) {

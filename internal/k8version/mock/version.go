@@ -5,9 +5,9 @@
 package mock_version
 
 import (
-	reflect "reflect"
+	"reflect"
 
-	gomock "github.com/golang/mock/gomock"
+	"github.com/golang/mock/gomock"
 )
 
 // MockInterface is a mock of Interface interface.

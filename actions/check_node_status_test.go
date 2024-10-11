@@ -16,7 +16,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	k8stest "k8s.io/client-go/testing"
 
-	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/internal/castai"
 )
 
 func TestCheckStatus_Deleted(t *testing.T) {

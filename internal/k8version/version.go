@@ -1,5 +1,5 @@
 //go:generate mockgen -destination ./mock/version.go . Interface
-package version
+package k8version
 
 import (
 	"fmt"
