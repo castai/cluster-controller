@@ -15,7 +15,7 @@ func TestConfig(t *testing.T) {
 	require.NoError(t, os.Setenv("KUBECONFIG", "~/.kube/config"))
 	require.NoError(t, os.Setenv("CLUSTER_ID", "c1"))
 	require.NoError(t, os.Setenv("LEADER_ELECTION_ENABLED", "true"))
-	require.NoError(t, os.Setenv("LEADER_ELECTION_NAMESPACE", "castai-agent"))
+	require.NoError(t, os.Setenv("KUBERNETES_NAMESPACE", "castai-agent"))
 	require.NoError(t, os.Setenv("LEADER_ELECTION_LOCK_NAME", "castai-cluster-controller"))
 	require.NoError(t, os.Setenv("LEADER_ELECTION_LEASE_DURATION", "25s"))
 	require.NoError(t, os.Setenv("LEADER_ELECTION_LEASE_RENEW_DEADLINE", "20s"))

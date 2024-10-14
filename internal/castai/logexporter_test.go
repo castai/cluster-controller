@@ -21,11 +21,14 @@ func TestLogExporter(t *testing.T) {
 
 	sender := &mockSender{}
 	SetupLogExporter(logger, sender)
-	logger.Log(logrus.ErrorLevel, "foo")
-	logger.Log(logrus.DebugLevel, "bar")
+	log := logger.WithFields(logrus.Fields{
+		"cluster_id": "test-cluster",
+	})
+	log.Log(logrus.ErrorLevel, "foo")
+	log.Log(logrus.DebugLevel, "bar")
 
 	it := require.New(t)
-	it.Len(sender.entries, 1)
+	it.Equal(sender.Len(), 1)
 	it.Equal("foo", sender.entries[0].Message)
 	it.Equal("error", sender.entries[0].Level)
 	it.Equal(logrus.Fields{"cluster_id": "test-cluster"}, sender.entries[0].Fields)
@@ -41,4 +44,10 @@ func (s *mockSender) SendLog(_ context.Context, entry *logEntry) error {
 	s.entries = append(s.entries, entry)
 	s.mu.Unlock()
 	return nil
+}
+func (s *mockSender) Len() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return len(s.entries)
 }
