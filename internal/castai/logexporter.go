@@ -8,7 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"fmt"
-	"github.com/castai/cluster-controller/waitext"
+	"github.com/castai/cluster-controller/internal/waitext"
 	"path"
 	"runtime"
 )

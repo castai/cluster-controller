@@ -1,14 +1,14 @@
 package castai
 
 import (
-	"context"
-	"sync"
 	"testing"
 
+	"context"
 	"github.com/sirupsen/logrus"
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
+	"sync"
 )
 
 func TestMain(m *testing.M) {

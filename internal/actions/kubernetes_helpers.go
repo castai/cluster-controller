@@ -17,7 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/castai/cluster-controller/waitext"
+	"github.com/castai/cluster-controller/internal/waitext"
 )
 
 const (

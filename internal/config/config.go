@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"context"
-	"github.com/castai/cluster-controller/waitext"
+	"github.com/castai/cluster-controller/internal/waitext"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"k8s.io/apimachinery/pkg/util/net"
