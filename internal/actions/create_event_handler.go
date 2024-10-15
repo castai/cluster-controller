@@ -11,10 +11,10 @@ import (
 	typedv1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/record"
 
-	"github.com/castai/cluster-controller/internal/types"
+	"github.com/castai/cluster-controller/internal/castai"
 )
 
-var _ types.ActionHandler = &CreateEventHandler{}
+var _ ActionHandler = &CreateEventHandler{}
 
 func NewCreateEventHandler(log logrus.FieldLogger, clientset kubernetes.Interface) *CreateEventHandler {
 	factory := func(ns, reporter string) (record.EventBroadcaster, record.EventRecorder) {
@@ -46,8 +46,8 @@ type CreateEventHandler struct {
 	eventNsRecorder    map[string]record.EventRecorder
 }
 
-func (h *CreateEventHandler) Handle(ctx context.Context, action *types.ClusterAction) error {
-	req, ok := action.Data().(*types.ActionCreateEvent)
+func (h *CreateEventHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+	req, ok := action.Data().(*castai.ActionCreateEvent)
 	if !ok {
 		return fmt.Errorf("unexpected type %T for create event handler", action.Data())
 	}
@@ -59,7 +59,7 @@ func (h *CreateEventHandler) Handle(ctx context.Context, action *types.ClusterAc
 	return nil
 }
 
-func (h *CreateEventHandler) handleEventV1(_ context.Context, req *types.ActionCreateEvent, namespace string) {
+func (h *CreateEventHandler) handleEventV1(_ context.Context, req *castai.ActionCreateEvent, namespace string) {
 	h.mu.RLock()
 	h.log.Debug("handling create event action: %s type: %s", req.Action, req.EventType)
 	if recorder, ok := h.eventNsRecorder[fmt.Sprintf("%s-%s", namespace, req.Reporter)]; ok {

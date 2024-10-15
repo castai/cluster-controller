@@ -11,7 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/castai/cluster-controller/internal/types"
+	"github.com/castai/cluster-controller/internal/castai"
 )
 
 func TestCheckNodeDeletedHandler(t *testing.T) {
@@ -35,9 +35,9 @@ func TestCheckNodeDeletedHandler(t *testing.T) {
 			cfg:       checkNodeDeletedConfig{},
 		}
 
-		action := &types.ClusterAction{
+		action := &castai.ClusterAction{
 			ID:                     uuid.New().String(),
-			ActionCheckNodeDeleted: &types.ActionCheckNodeDeleted{NodeName: "node1"},
+			ActionCheckNodeDeleted: &castai.ActionCheckNodeDeleted{NodeName: "node1"},
 		}
 
 		err := h.Handle(context.Background(), action)
@@ -53,9 +53,9 @@ func TestCheckNodeDeletedHandler(t *testing.T) {
 			cfg:       checkNodeDeletedConfig{},
 		}
 
-		action := &types.ClusterAction{
+		action := &castai.ClusterAction{
 			ID:                     uuid.New().String(),
-			ActionCheckNodeDeleted: &types.ActionCheckNodeDeleted{NodeName: "node1"},
+			ActionCheckNodeDeleted: &castai.ActionCheckNodeDeleted{NodeName: "node1"},
 		}
 
 		err := h.Handle(context.Background(), action)

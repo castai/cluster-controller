@@ -12,7 +12,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/internal/actions/csr"
-	"github.com/castai/cluster-controller/internal/types"
+	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
 
@@ -20,7 +20,7 @@ const (
 	approveCSRTimeout = 4 * time.Minute
 )
 
-var _ types.ActionHandler = &ApproveCSRHandler{}
+var _ ActionHandler = &ApproveCSRHandler{}
 
 func NewApproveCSRHandler(log logrus.FieldLogger, clientset kubernetes.Interface) *ApproveCSRHandler {
 	return &ApproveCSRHandler{
@@ -38,15 +38,15 @@ type ApproveCSRHandler struct {
 	csrFetchInterval       time.Duration
 }
 
-func (h *ApproveCSRHandler) Handle(ctx context.Context, action *types.ClusterAction) error {
-	req, ok := action.Data().(*types.ActionApproveCSR)
+func (h *ApproveCSRHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+	req, ok := action.Data().(*castai.ActionApproveCSR)
 	if !ok {
 		return fmt.Errorf("unexpected type %T for approve csr handler", action.Data())
 	}
 	log := h.log.WithFields(logrus.Fields{
 		"node_name":      req.NodeName,
 		"node_id":        req.NodeID,
-		"type":           reflect.TypeOf(action.Data().(*types.ActionApproveCSR)).String(),
+		"type":           reflect.TypeOf(action.Data().(*castai.ActionApproveCSR)).String(),
 		ActionIDLogField: action.ID,
 	})
 

@@ -8,7 +8,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	types "github.com/castai/cluster-controller/internal/types"
+	castai "github.com/castai/cluster-controller/internal/castai"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -36,7 +36,7 @@ func (m *MockCastAIClient) EXPECT() *MockCastAIClientMockRecorder {
 }
 
 // AckAction mocks base method.
-func (m *MockCastAIClient) AckAction(arg0 context.Context, arg1 string, arg2 *types.AckClusterActionRequest) error {
+func (m *MockCastAIClient) AckAction(arg0 context.Context, arg1 string, arg2 *castai.AckClusterActionRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AckAction", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
@@ -50,10 +50,10 @@ func (mr *MockCastAIClientMockRecorder) AckAction(arg0, arg1, arg2 interface{}) 
 }
 
 // GetActions mocks base method.
-func (m *MockCastAIClient) GetActions(arg0 context.Context, arg1 string) ([]*types.ClusterAction, error) {
+func (m *MockCastAIClient) GetActions(arg0 context.Context, arg1 string) ([]*castai.ClusterAction, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetActions", arg0, arg1)
-	ret0, _ := ret[0].([]*types.ClusterAction)
+	ret0, _ := ret[0].([]*castai.ClusterAction)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -65,7 +65,7 @@ func (mr *MockCastAIClientMockRecorder) GetActions(arg0, arg1 interface{}) *gomo
 }
 
 // SendAKSInitData mocks base method.
-func (m *MockCastAIClient) SendAKSInitData(arg0 context.Context, arg1 *types.AKSInitDataRequest) error {
+func (m *MockCastAIClient) SendAKSInitData(arg0 context.Context, arg1 *castai.AKSInitDataRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SendAKSInitData", arg0, arg1)
 	ret0, _ := ret[0].(error)

@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"github.com/castai/cluster-controller/health"
-	mock_castai "github.com/castai/cluster-controller/internal/castai/mock"
-	"github.com/castai/cluster-controller/internal/types"
-	mock_types "github.com/castai/cluster-controller/internal/types/mock"
+	mock_actions "github.com/castai/cluster-controller/internal/actions/mock"
+	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/castai/mock"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
@@ -31,7 +31,7 @@ func TestController_Run(t *testing.T) {
 	type fields struct {
 		cfg                  Config
 		tuneMockCastAIClient func(m *mock_castai.MockCastAIClient)
-		tuneMockHandler      func(m *mock_types.MockActionHandler)
+		tuneMockHandler      func(m *mock_actions.MockActionHandler)
 		k8sVersion           string
 	}
 	type args struct {
@@ -68,29 +68,29 @@ func TestController_Run(t *testing.T) {
 			fields: fields{
 				cfg:        cfg,
 				k8sVersion: "1.20.1",
-				tuneMockHandler: func(m *mock_types.MockActionHandler) {
+				tuneMockHandler: func(m *mock_actions.MockActionHandler) {
 					m.EXPECT().Handle(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 				},
 				tuneMockCastAIClient: func(m *mock_castai.MockCastAIClient) {
-					m.EXPECT().GetActions(gomock.Any(), gomock.Any()).Return([]*types.ClusterAction{
+					m.EXPECT().GetActions(gomock.Any(), gomock.Any()).Return([]*castai.ClusterAction{
 						{
 							ID:        "a1",
 							CreatedAt: time.Now(),
-							ActionDeleteNode: &types.ActionDeleteNode{
+							ActionDeleteNode: &castai.ActionDeleteNode{
 								NodeName: "n1",
 							},
 						},
 						{
 							ID:        "a2",
 							CreatedAt: time.Now(),
-							ActionDrainNode: &types.ActionDrainNode{
+							ActionDrainNode: &castai.ActionDrainNode{
 								NodeName: "n1",
 							},
 						},
 						{
 							ID:        "a3",
 							CreatedAt: time.Now(),
-							ActionPatchNode: &types.ActionPatchNode{
+							ActionPatchNode: &castai.ActionPatchNode{
 								NodeName: "n1",
 							},
 						},
@@ -112,21 +112,21 @@ func TestController_Run(t *testing.T) {
 			fields: fields{
 				cfg:        cfg,
 				k8sVersion: "1.20.1",
-				tuneMockHandler: func(m *mock_types.MockActionHandler) {
+				tuneMockHandler: func(m *mock_actions.MockActionHandler) {
 					m.EXPECT().Handle(gomock.Any(), gomock.Any()).Return(fmt.Errorf("test handle action error")).MinTimes(1)
 				},
 				tuneMockCastAIClient: func(m *mock_castai.MockCastAIClient) {
-					m.EXPECT().GetActions(gomock.Any(), gomock.Any()).Return([]*types.ClusterAction{
+					m.EXPECT().GetActions(gomock.Any(), gomock.Any()).Return([]*castai.ClusterAction{
 						{
 							ID:        "a1",
 							CreatedAt: time.Now(),
-							ActionDeleteNode: &types.ActionDeleteNode{
+							ActionDeleteNode: &castai.ActionDeleteNode{
 								NodeName: "n1",
 							},
 						},
 					}, nil).Times(1).MinTimes(1)
 					m.EXPECT().AckAction(gomock.Any(), "a1", gomock.Any()).
-						DoAndReturn(func(ctx context.Context, actionID string, req *types.AckClusterActionRequest) error {
+						DoAndReturn(func(ctx context.Context, actionID string, req *castai.AckClusterActionRequest) error {
 							require.NotNil(t, req.Error)
 							return nil
 						}).MinTimes(1)
@@ -144,15 +144,15 @@ func TestController_Run(t *testing.T) {
 			fields: fields{
 				cfg:        cfg,
 				k8sVersion: "1.20.1",
-				tuneMockHandler: func(m *mock_types.MockActionHandler) {
+				tuneMockHandler: func(m *mock_actions.MockActionHandler) {
 					m.EXPECT().Handle(gomock.Any(), gomock.Any()).Return(context.Canceled).MinTimes(1)
 				},
 				tuneMockCastAIClient: func(m *mock_castai.MockCastAIClient) {
-					m.EXPECT().GetActions(gomock.Any(), gomock.Any()).Return([]*types.ClusterAction{
+					m.EXPECT().GetActions(gomock.Any(), gomock.Any()).Return([]*castai.ClusterAction{
 						{
 							ID:        "a1",
 							CreatedAt: time.Now(),
-							ActionDeleteNode: &types.ActionDeleteNode{
+							ActionDeleteNode: &castai.ActionDeleteNode{
 								NodeName: "n1",
 							},
 						},
@@ -171,25 +171,25 @@ func TestController_Run(t *testing.T) {
 			fields: fields{
 				cfg:        cfg,
 				k8sVersion: "1.20.1",
-				tuneMockHandler: func(m *mock_types.MockActionHandler) {
+				tuneMockHandler: func(m *mock_actions.MockActionHandler) {
 					m.EXPECT().Handle(gomock.Any(), gomock.Any()).
-						DoAndReturn(func(ctx context.Context, action *types.ClusterAction) error {
+						DoAndReturn(func(ctx context.Context, action *castai.ClusterAction) error {
 							panic("ups")
 						}).
 						MinTimes(1)
 				},
 				tuneMockCastAIClient: func(m *mock_castai.MockCastAIClient) {
-					m.EXPECT().GetActions(gomock.Any(), gomock.Any()).Return([]*types.ClusterAction{
+					m.EXPECT().GetActions(gomock.Any(), gomock.Any()).Return([]*castai.ClusterAction{
 						{
 							ID:        "a1",
 							CreatedAt: time.Now(),
-							ActionDeleteNode: &types.ActionDeleteNode{
+							ActionDeleteNode: &castai.ActionDeleteNode{
 								NodeName: "n1",
 							},
 						},
 					}, nil).Times(1).MinTimes(1)
 					m.EXPECT().AckAction(gomock.Any(), "a1", gomock.Any()).
-						DoAndReturn(func(ctx context.Context, actionID string, req *types.AckClusterActionRequest) error {
+						DoAndReturn(func(ctx context.Context, actionID string, req *castai.AckClusterActionRequest) error {
 							require.NotNil(t, req.Error)
 							return nil
 						}).MinTimes(1)
@@ -216,7 +216,7 @@ func TestController_Run(t *testing.T) {
 				client,
 				nil,
 				health.NewHealthzProvider(health.HealthzCfg{HealthyPollIntervalLimit: pollTimeout}, logrus.New()))
-			handler := mock_types.NewMockActionHandler(m)
+			handler := mock_actions.NewMockActionHandler(m)
 			if tt.fields.tuneMockHandler != nil {
 				tt.fields.tuneMockHandler(handler)
 			}

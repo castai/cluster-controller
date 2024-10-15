@@ -17,7 +17,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/record"
 
-	"github.com/castai/cluster-controller/internal/types"
+	"github.com/castai/cluster-controller/internal/castai"
 )
 
 func TestCreateEvent(t *testing.T) {
@@ -26,16 +26,16 @@ func TestCreateEvent(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		action        *types.ClusterAction
+		action        *castai.ClusterAction
 		actionCount   int
 		object        runtime.Object
 		expectedEvent *corev1.Event
 	}{
 		{
 			name: "create single pod event",
-			action: &types.ClusterAction{
+			action: &castai.ClusterAction{
 				ID: uuid.New().String(),
-				ActionCreateEvent: &types.ActionCreateEvent{
+				ActionCreateEvent: &castai.ActionCreateEvent{
 					Reporter:  "autoscaler.cast.ai",
 					ObjectRef: podObjReference(testPod(id)),
 					EventTime: time.Now(),
@@ -59,9 +59,9 @@ func TestCreateEvent(t *testing.T) {
 		},
 		{
 			name: "create several pod events",
-			action: &types.ClusterAction{
+			action: &castai.ClusterAction{
 				ID: "",
-				ActionCreateEvent: &types.ActionCreateEvent{
+				ActionCreateEvent: &castai.ActionCreateEvent{
 					Reporter:  "provisioning.cast.ai",
 					ObjectRef: podObjReference(testPod(id)),
 					EventTime: time.Now(),
@@ -152,9 +152,9 @@ func TestRandomNs(t *testing.T) {
 	wg.Add(actionCount)
 	for i := 0; i < actionCount; i++ {
 		go func() {
-			err := h.Handle(ctx, &types.ClusterAction{
+			err := h.Handle(ctx, &castai.ClusterAction{
 				ID: uuid.New().String(),
-				ActionCreateEvent: &types.ActionCreateEvent{
+				ActionCreateEvent: &castai.ActionCreateEvent{
 					ObjectRef: podObjReference(
 						&corev1.Pod{
 							ObjectMeta: metav1.ObjectMeta{

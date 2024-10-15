@@ -7,11 +7,11 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/helm"
-	"github.com/castai/cluster-controller/internal/types"
 )
 
-var _ types.ActionHandler = &ChartUninstallHandler{}
+var _ ActionHandler = &ChartUninstallHandler{}
 
 func NewChartUninstallHandler(log logrus.FieldLogger, helm helm.Client) *ChartUninstallHandler {
 	return &ChartUninstallHandler{
@@ -25,8 +25,8 @@ type ChartUninstallHandler struct {
 	helm helm.Client
 }
 
-func (c *ChartUninstallHandler) Handle(_ context.Context, action *types.ClusterAction) error {
-	req, ok := action.Data().(*types.ActionChartUninstall)
+func (c *ChartUninstallHandler) Handle(_ context.Context, action *castai.ClusterAction) error {
+	req, ok := action.Data().(*castai.ActionChartUninstall)
 	if !ok {
 		return fmt.Errorf("unexpected type %T for upsert uninstall handler", action.Data())
 	}
@@ -41,7 +41,7 @@ func (c *ChartUninstallHandler) Handle(_ context.Context, action *types.ClusterA
 	return err
 }
 
-func (c *ChartUninstallHandler) validateRequest(req *types.ActionChartUninstall) error {
+func (c *ChartUninstallHandler) validateRequest(req *castai.ActionChartUninstall) error {
 	if req.ReleaseName == "" {
 		return errors.New("bad request: releaseName not provided")
 	}

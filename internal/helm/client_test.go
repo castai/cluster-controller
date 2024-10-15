@@ -5,7 +5,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/castai/cluster-controller/internal/types"
+	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v3/pkg/action"
@@ -153,7 +153,7 @@ type testChartLoader struct {
 	chart *chart.Chart
 }
 
-func (t *testChartLoader) Load(_ context.Context, _ *types.ChartSource) (*chart.Chart, error) {
+func (t *testChartLoader) Load(_ context.Context, _ *castai.ChartSource) (*chart.Chart, error) {
 	return t.chart, nil
 }
 

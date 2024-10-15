@@ -13,7 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/castai/cluster-controller/internal/types"
+	"github.com/castai/cluster-controller/internal/castai"
 )
 
 func TestPatchNodeHandler(t *testing.T) {
@@ -56,9 +56,9 @@ func TestPatchNodeHandler(t *testing.T) {
 			clientset: clientset,
 		}
 
-		action := &types.ClusterAction{
+		action := &castai.ClusterAction{
 			ID: uuid.New().String(),
-			ActionPatchNode: &types.ActionPatchNode{
+			ActionPatchNode: &castai.ActionPatchNode{
 				NodeName: "node1",
 				Labels: map[string]string{
 					"-l1": "",
@@ -68,7 +68,7 @@ func TestPatchNodeHandler(t *testing.T) {
 					"-a1": "",
 					"a2":  "",
 				},
-				Taints: []types.NodeTaint{
+				Taints: []castai.NodeTaint{
 					{
 						Key:    "t3",
 						Value:  "t3",
@@ -120,9 +120,9 @@ func TestPatchNodeHandler(t *testing.T) {
 		}
 		clientset := fake.NewSimpleClientset(node)
 
-		action := &types.ClusterAction{
+		action := &castai.ClusterAction{
 			ID: uuid.New().String(),
-			ActionPatchNode: &types.ActionPatchNode{
+			ActionPatchNode: &castai.ActionPatchNode{
 				NodeName: "already-deleted-node",
 			},
 		}
@@ -155,9 +155,9 @@ func TestPatchNodeHandler(t *testing.T) {
 			clientset: clientset,
 		}
 
-		action := &types.ClusterAction{
+		action := &castai.ClusterAction{
 			ID: uuid.New().String(),
-			ActionPatchNode: &types.ActionPatchNode{
+			ActionPatchNode: &castai.ActionPatchNode{
 				NodeName:      "node1",
 				Unschedulable: lo.ToPtr(true),
 			},

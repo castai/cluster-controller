@@ -20,11 +20,11 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/kubectl/pkg/drain"
 
-	"github.com/castai/cluster-controller/internal/types"
+	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
 
-var _ types.ActionHandler = &DrainNodeHandler{}
+var _ ActionHandler = &DrainNodeHandler{}
 
 const (
 	minDrainTimeout = 0 // Minimal pod drain timeout
@@ -58,7 +58,7 @@ func NewDrainNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface,
 
 // getDrainTimeout returns drain timeout adjusted to action creation time.
 // the result is clamped between 0s and the requested timeout.
-func (h *DrainNodeHandler) getDrainTimeout(action *types.ClusterAction) time.Duration {
+func (h *DrainNodeHandler) getDrainTimeout(action *castai.ClusterAction) time.Duration {
 	timeSinceCreated := time.Since(action.CreatedAt)
 	requestedTimeout := time.Duration(action.ActionDrainNode.DrainTimeoutSeconds) * time.Second
 
@@ -73,8 +73,8 @@ type DrainNodeHandler struct {
 	cfg       drainNodeConfig
 }
 
-func (h *DrainNodeHandler) Handle(ctx context.Context, action *types.ClusterAction) error {
-	req, ok := action.Data().(*types.ActionDrainNode)
+func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+	req, ok := action.Data().(*castai.ActionDrainNode)
 	if !ok {
 		return fmt.Errorf("unexpected type %T for drain handler", action.Data())
 	}
@@ -83,7 +83,7 @@ func (h *DrainNodeHandler) Handle(ctx context.Context, action *types.ClusterActi
 	log := h.log.WithFields(logrus.Fields{
 		"node_name":      req.NodeName,
 		"node_id":        req.NodeID,
-		"action":         reflect.TypeOf(action.Data().(*types.ActionDrainNode)).String(),
+		"action":         reflect.TypeOf(action.Data().(*castai.ActionDrainNode)).String(),
 		ActionIDLogField: action.ID,
 	})
 

@@ -14,7 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/castai/cluster-controller/internal/types"
+	"github.com/castai/cluster-controller/internal/castai"
 )
 
 func TestDeleteNodeHandler(t *testing.T) {
@@ -31,9 +31,9 @@ func TestDeleteNodeHandler(t *testing.T) {
 		}
 		clientset := fake.NewSimpleClientset(node)
 
-		action := &types.ClusterAction{
+		action := &castai.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDeleteNode: &types.ActionDeleteNode{
+			ActionDeleteNode: &castai.ActionDeleteNode{
 				NodeName: "node1",
 			},
 		}
@@ -62,9 +62,9 @@ func TestDeleteNodeHandler(t *testing.T) {
 		}
 		clientset := fake.NewSimpleClientset(node)
 
-		action := &types.ClusterAction{
+		action := &castai.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDeleteNode: &types.ActionDeleteNode{
+			ActionDeleteNode: &castai.ActionDeleteNode{
 				NodeName: "already-deleted-node",
 			},
 		}
@@ -89,15 +89,15 @@ func TestDeleteNodeHandler(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: nodeName,
 				Labels: map[string]string{
-					types.LabelNodeID: "node-id",
+					castai.LabelNodeID: "node-id",
 				},
 			},
 		}
 		clientset := fake.NewSimpleClientset(node)
 
-		action := &types.ClusterAction{
+		action := &castai.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDeleteNode: &types.ActionDeleteNode{
+			ActionDeleteNode: &castai.ActionDeleteNode{
 				NodeName: "node1",
 				NodeID:   "another-node-id",
 			},
@@ -114,7 +114,7 @@ func TestDeleteNodeHandler(t *testing.T) {
 
 		existing, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
 		r.NoError(err)
-		existing.Labels[types.LabelNodeID] = "node-id"
+		existing.Labels[castai.LabelNodeID] = "node-id"
 	})
 
 	t.Run("delete node with pods", func(t *testing.T) {
@@ -123,9 +123,9 @@ func TestDeleteNodeHandler(t *testing.T) {
 		podName := "pod1"
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 
-		action := &types.ClusterAction{
+		action := &castai.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDeleteNode: &types.ActionDeleteNode{
+			ActionDeleteNode: &castai.ActionDeleteNode{
 				NodeName: nodeName,
 			},
 		}

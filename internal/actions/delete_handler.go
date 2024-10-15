@@ -11,10 +11,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 
-	"github.com/castai/cluster-controller/internal/types"
+	"github.com/castai/cluster-controller/internal/castai"
 )
 
-var _ types.ActionHandler = &DeleteHandler{}
+var _ ActionHandler = &DeleteHandler{}
 
 type DeleteHandler struct {
 	log    logrus.FieldLogger
@@ -28,8 +28,8 @@ func NewDeleteHandler(log logrus.FieldLogger, client dynamic.Interface) *DeleteH
 	}
 }
 
-func (h *DeleteHandler) Handle(ctx context.Context, action *types.ClusterAction) error {
-	req, ok := action.Data().(*types.ActionDelete)
+func (h *DeleteHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+	req, ok := action.Data().(*castai.ActionDelete)
 	if !ok {
 		return newUnexpectedTypeErr(action.Data(), req)
 	}

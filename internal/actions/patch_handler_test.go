@@ -15,24 +15,24 @@ import (
 	"k8s.io/client-go/dynamic/fake"
 	client_testing "k8s.io/client-go/testing"
 
-	"github.com/castai/cluster-controller/internal/types"
+	"github.com/castai/cluster-controller/internal/castai"
 )
 
 func TestPatchHandler(t *testing.T) {
 	tests := map[string]struct {
 		objs   []runtime.Object
-		action *types.ClusterAction
+		action *castai.ClusterAction
 		err    error
 	}{
 		"should return an error when the action is nil": {
-			action: &types.ClusterAction{},
-			err:    newUnexpectedTypeErr(nil, &types.ActionPatch{}),
+			action: &castai.ClusterAction{},
+			err:    newUnexpectedTypeErr(nil, &castai.ActionPatch{}),
 		},
 		"should return an error when the action is of a different type": {
-			action: &types.ClusterAction{
-				ActionDeleteNode: &types.ActionDeleteNode{},
+			action: &castai.ClusterAction{
+				ActionDeleteNode: &castai.ActionDeleteNode{},
 			},
-			err: newUnexpectedTypeErr(&types.ActionDeleteNode{}, &types.ActionPatch{}),
+			err: newUnexpectedTypeErr(&castai.ActionDeleteNode{}, &castai.ActionPatch{}),
 		},
 		"should forward patch to the api in the request": {
 			objs: []runtime.Object{
@@ -50,10 +50,10 @@ func TestPatchHandler(t *testing.T) {
 					},
 				},
 			},
-			action: &types.ClusterAction{
-				ActionPatch: &types.ActionPatch{
-					ID: types.ObjectID{
-						GroupVersionResource: types.GroupVersionResource{
+			action: &castai.ClusterAction{
+				ActionPatch: &castai.ActionPatch{
+					ID: castai.ObjectID{
+						GroupVersionResource: castai.GroupVersionResource{
 							Group:    "apps",
 							Version:  "v1",
 							Resource: "deployments",

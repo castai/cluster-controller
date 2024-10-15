@@ -1,4 +1,4 @@
-//go:generate mockgen -destination ./mock/actions.go . CastAIClient
+//go:generate mockgen -destination ./mock/client.go . CastAIClient
 package castai
 
 import (
@@ -16,7 +16,6 @@ import (
 
 	"github.com/castai/cluster-controller/internal/config"
 	"github.com/castai/cluster-controller/internal/logexporter"
-	"github.com/castai/cluster-controller/internal/types"
 )
 
 const (
@@ -27,9 +26,9 @@ const (
 
 // CastAIClient lists functions used by actions package.
 type CastAIClient interface {
-	GetActions(ctx context.Context, k8sVersion string) ([]*types.ClusterAction, error)
-	AckAction(ctx context.Context, actionID string, req *types.AckClusterActionRequest) error
-	SendAKSInitData(ctx context.Context, req *types.AKSInitDataRequest) error
+	GetActions(ctx context.Context, k8sVersion string) ([]*ClusterAction, error)
+	AckAction(ctx context.Context, actionID string, req *AckClusterActionRequest) error
+	SendAKSInitData(ctx context.Context, req *AKSInitDataRequest) error
 }
 
 // Client talks to Cast AI. It can poll and acknowledge actions
@@ -119,7 +118,7 @@ func createTLSConfig(ca string) (*tls.Config, error) {
 	}, nil
 }
 
-func (c *Client) SendAKSInitData(ctx context.Context, req *types.AKSInitDataRequest) error {
+func (c *Client) SendAKSInitData(ctx context.Context, req *AKSInitDataRequest) error {
 	resp, err := c.rest.R().
 		SetBody(req).
 		SetContext(ctx).
@@ -161,8 +160,8 @@ func (c *Client) SendLog(ctx context.Context, e *logexporter.LogEntry) error {
 	return nil
 }
 
-func (c *Client) GetActions(ctx context.Context, k8sVersion string) ([]*types.ClusterAction, error) {
-	res := &types.GetClusterActionsResponse{}
+func (c *Client) GetActions(ctx context.Context, k8sVersion string) ([]*ClusterAction, error) {
+	res := &GetClusterActionsResponse{}
 	resp, err := c.rest.R().
 		SetContext(ctx).
 		SetResult(res).
@@ -177,7 +176,7 @@ func (c *Client) GetActions(ctx context.Context, k8sVersion string) ([]*types.Cl
 	return res.Items, nil
 }
 
-func (c *Client) AckAction(ctx context.Context, actionID string, req *types.AckClusterActionRequest) error {
+func (c *Client) AckAction(ctx context.Context, actionID string, req *AckClusterActionRequest) error {
 	resp, err := c.rest.R().
 		SetContext(ctx).
 		SetBody(req).

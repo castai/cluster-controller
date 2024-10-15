@@ -14,11 +14,11 @@ import (
 
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/castai/cluster-controller/internal/types"
+	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
 
-var _ types.ActionHandler = &CheckNodeStatusHandler{}
+var _ ActionHandler = &CheckNodeStatusHandler{}
 
 func NewCheckNodeStatusHandler(log logrus.FieldLogger, clientset kubernetes.Interface) *CheckNodeStatusHandler {
 	return &CheckNodeStatusHandler{
@@ -32,8 +32,8 @@ type CheckNodeStatusHandler struct {
 	clientset kubernetes.Interface
 }
 
-func (h *CheckNodeStatusHandler) Handle(ctx context.Context, action *types.ClusterAction) error {
-	req, ok := action.Data().(*types.ActionCheckNodeStatus)
+func (h *CheckNodeStatusHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+	req, ok := action.Data().(*castai.ActionCheckNodeStatus)
 	if !ok {
 		return fmt.Errorf("unexpected type %T for check node status handler", action.Data())
 	}
@@ -42,15 +42,15 @@ func (h *CheckNodeStatusHandler) Handle(ctx context.Context, action *types.Clust
 		"node_name":      req.NodeName,
 		"node_id":        req.NodeID,
 		"node_status":    req.NodeStatus,
-		"type":           reflect.TypeOf(action.Data().(*types.ActionCheckNodeStatus)).String(),
+		"type":           reflect.TypeOf(action.Data().(*castai.ActionCheckNodeStatus)).String(),
 		ActionIDLogField: action.ID,
 	})
 
 	switch req.NodeStatus {
-	case types.ActionCheckNodeStatus_READY:
+	case castai.ActionCheckNodeStatus_READY:
 		log.Info("checking node ready")
 		return h.checkNodeReady(ctx, log, req)
-	case types.ActionCheckNodeStatus_DELETED:
+	case castai.ActionCheckNodeStatus_DELETED:
 		log.Info("checking node deleted")
 		return h.checkNodeDeleted(ctx, log, req)
 
@@ -59,7 +59,7 @@ func (h *CheckNodeStatusHandler) Handle(ctx context.Context, action *types.Clust
 	return fmt.Errorf("unknown status to check provided node=%s status=%s", req.NodeName, req.NodeStatus)
 }
 
-func (h *CheckNodeStatusHandler) checkNodeDeleted(ctx context.Context, log *logrus.Entry, req *types.ActionCheckNodeStatus) error {
+func (h *CheckNodeStatusHandler) checkNodeDeleted(ctx context.Context, log *logrus.Entry, req *castai.ActionCheckNodeStatus) error {
 	timeout := 10
 	if req.WaitTimeoutSeconds != nil {
 		timeout = int(*req.WaitTimeoutSeconds)
@@ -87,7 +87,7 @@ func (h *CheckNodeStatusHandler) checkNodeDeleted(ctx context.Context, log *logr
 				return false, nil
 			}
 
-			currentNodeID, ok := n.Labels[types.LabelNodeID]
+			currentNodeID, ok := n.Labels[castai.LabelNodeID]
 			if !ok {
 				log.Info("node doesn't have castai node id label")
 			}
@@ -113,7 +113,7 @@ func (h *CheckNodeStatusHandler) checkNodeDeleted(ctx context.Context, log *logr
 	)
 }
 
-func (h *CheckNodeStatusHandler) checkNodeReady(ctx context.Context, log *logrus.Entry, req *types.ActionCheckNodeStatus) error {
+func (h *CheckNodeStatusHandler) checkNodeReady(ctx context.Context, log *logrus.Entry, req *castai.ActionCheckNodeStatus) error {
 	timeout := 9 * time.Minute
 	watchObject := metav1.SingleObject(metav1.ObjectMeta{Name: req.NodeName})
 	if req.WaitTimeoutSeconds != nil {
@@ -142,7 +142,7 @@ func (h *CheckNodeStatusHandler) checkNodeReady(ctx context.Context, log *logrus
 func isNodeReady(node *corev1.Node, castNodeID string) bool {
 	// if node has castai node id label, check if it matches the one we are waiting for
 	// if it doesn't match, we can skip this node
-	if val, ok := node.Labels[types.LabelNodeID]; ok {
+	if val, ok := node.Labels[castai.LabelNodeID]; ok {
 		if val != "" && val != castNodeID {
 			return false
 		}

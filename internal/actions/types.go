@@ -1,7 +1,10 @@
+//go:generate mockgen -destination ./mock/handler.go . ActionHandler
 package actions
 
 import (
+	"context"
 	"fmt"
+	"github.com/castai/cluster-controller/internal/castai"
 )
 
 const (
@@ -12,4 +15,8 @@ const (
 
 func newUnexpectedTypeErr(value interface{}, expectedType interface{}) error {
 	return fmt.Errorf("unexpected type %T, expected %T", value, expectedType)
+}
+
+type ActionHandler interface {
+	Handle(ctx context.Context, action *castai.ClusterAction) error
 }

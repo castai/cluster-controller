@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/castai/cluster-controller/internal/types"
+	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
@@ -15,7 +15,7 @@ func TestIntegration_ChartLoader(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	chart := &types.ChartSource{
+	chart := &castai.ChartSource{
 		RepoURL: "https://castai.github.io/helm-charts",
 		Name:    "castai-cluster-controller",
 		Version: "0.4.3",

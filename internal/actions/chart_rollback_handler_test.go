@@ -10,9 +10,9 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
+	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/helm"
 	"github.com/castai/cluster-controller/internal/helm/mock"
-	"github.com/castai/cluster-controller/internal/types"
 )
 
 func TestChartRollbackHandler(t *testing.T) {
@@ -24,7 +24,7 @@ func TestChartRollbackHandler(t *testing.T) {
 	handler := NewChartRollbackHandler(logrus.New(), helmMock, "v0.20.0")
 
 	t.Run("successfully rollback chart", func(t *testing.T) {
-		action := &types.ClusterAction{
+		action := &castai.ClusterAction{
 			ID:                  uuid.New().String(),
 			ActionChartRollback: newRollbackAction(),
 		}
@@ -38,7 +38,7 @@ func TestChartRollbackHandler(t *testing.T) {
 	})
 
 	t.Run("skip rollback if version mismatch", func(t *testing.T) {
-		action := &types.ClusterAction{
+		action := &castai.ClusterAction{
 			ID:                  uuid.New().String(),
 			ActionChartRollback: newRollbackAction(),
 		}
@@ -47,7 +47,7 @@ func TestChartRollbackHandler(t *testing.T) {
 	})
 
 	t.Run("error when rolling back chart", func(t *testing.T) {
-		action := &types.ClusterAction{
+		action := &castai.ClusterAction{
 			ID:                  uuid.New().String(),
 			ActionChartRollback: newRollbackAction(),
 		}
@@ -61,7 +61,7 @@ func TestChartRollbackHandler(t *testing.T) {
 	})
 
 	t.Run("namespace is missing in rollback action", func(t *testing.T) {
-		action := &types.ClusterAction{
+		action := &castai.ClusterAction{
 			ID:                  uuid.New().String(),
 			ActionChartRollback: newRollbackAction(),
 		}
@@ -71,7 +71,7 @@ func TestChartRollbackHandler(t *testing.T) {
 	})
 
 	t.Run("helm release is missing in rollback action", func(t *testing.T) {
-		action := &types.ClusterAction{
+		action := &castai.ClusterAction{
 			ID:                  uuid.New().String(),
 			ActionChartRollback: newRollbackAction(),
 		}
@@ -81,8 +81,8 @@ func TestChartRollbackHandler(t *testing.T) {
 	})
 }
 
-func newRollbackAction() *types.ActionChartRollback {
-	return &types.ActionChartRollback{
+func newRollbackAction() *castai.ActionChartRollback {
+	return &castai.ActionChartRollback{
 		Namespace:   "test",
 		ReleaseName: "new-release",
 		Version:     "v0.20.0",

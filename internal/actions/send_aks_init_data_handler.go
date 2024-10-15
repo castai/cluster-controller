@@ -19,10 +19,9 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/castai/cluster-controller/internal/castai"
-	"github.com/castai/cluster-controller/internal/types"
 )
 
-var _ types.ActionHandler = &SendAKSInitDataHandler{}
+var _ ActionHandler = &SendAKSInitDataHandler{}
 
 func NewSendAKSInitDataHandler(log logrus.FieldLogger, client castai.CastAIClient) *SendAKSInitDataHandler {
 	return &SendAKSInitDataHandler{
@@ -42,7 +41,7 @@ type SendAKSInitDataHandler struct {
 	cloudConfigPath string
 }
 
-func (s *SendAKSInitDataHandler) Handle(ctx context.Context, _ *types.ClusterAction) error {
+func (s *SendAKSInitDataHandler) Handle(ctx context.Context, _ *castai.ClusterAction) error {
 	cloudConfig, err := s.readCloudConfigBase64(s.cloudConfigPath)
 	if err != nil {
 		return fmt.Errorf("reading cloud config: %w", err)
@@ -59,7 +58,7 @@ func (s *SendAKSInitDataHandler) Handle(ctx context.Context, _ *types.ClusterAct
 	if err != nil {
 		return fmt.Errorf("protected settings decrypt failed: %w", err)
 	}
-	return s.client.SendAKSInitData(ctx, &types.AKSInitDataRequest{
+	return s.client.SendAKSInitData(ctx, &castai.AKSInitDataRequest{
 		CloudConfigBase64:       string(cloudConfig),
 		ProtectedSettingsBase64: base64.StdEncoding.EncodeToString(protectedSettings),
 	})
