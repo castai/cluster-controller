@@ -89,7 +89,7 @@ func (s *SendAKSInitDataHandler) findSettingsPath(baseDir string) (string, error
 		}
 		return err
 	})
-	if errors.Is(err, io.EOF) {
+	if !errors.Is(err, io.EOF) {
 		return "", err
 	}
 	if res == "" {
