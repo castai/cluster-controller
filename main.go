@@ -29,12 +29,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
 	"github.com/castai/cluster-controller/health"
-	"github.com/castai/cluster-controller/helm"
 	"github.com/castai/cluster-controller/internal/actions"
 	castai2 "github.com/castai/cluster-controller/internal/castai"
 	config2 "github.com/castai/cluster-controller/internal/config"
 	"github.com/castai/cluster-controller/internal/csr"
+	helm2 "github.com/castai/cluster-controller/internal/helm"
 	"github.com/castai/cluster-controller/internal/k8sversion"
+	"github.com/castai/cluster-controller/internal/logexporter"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
 
@@ -76,7 +77,7 @@ func main() {
 	}
 	client := castai2.NewClient(logger, cl, cfg.ClusterID)
 
-	e := castai2.NewLogExporter(logger, client)
+	e := logexporter.NewLogExporter(logger, client)
 	logger.AddHook(e)
 	logrus.RegisterExitHandler(e.Wait)
 
@@ -120,7 +121,7 @@ func run(
 	restConfigLeader.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(float32(cfg.KubeClient.QPS), cfg.KubeClient.Burst)
 	restConfigDynamic.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(float32(cfg.KubeClient.QPS), cfg.KubeClient.Burst)
 
-	helmClient := helm.NewClient(logger, helm.NewChartLoader(logger), restconfig)
+	helmClient := helm2.NewClient(logger, helm2.NewChartLoader(logger), restconfig)
 
 	clientset, err := kubernetes.NewForConfig(restconfig)
 	if err != nil {

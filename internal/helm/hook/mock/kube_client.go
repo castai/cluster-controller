@@ -10,9 +10,9 @@ import (
 )
 
 // MockKubeClient mocks Helm KubernetesClient interface
-type MockKubeClient struct {}
+type MockKubeClient struct{}
 
-func (m *MockKubeClient) Create(resources kube.ResourceList) (*kube.Result, error){
+func (m *MockKubeClient) Create(resources kube.ResourceList) (*kube.Result, error) {
 	return nil, nil
 }
 

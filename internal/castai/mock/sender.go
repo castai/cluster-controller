@@ -8,7 +8,7 @@ import (
 	"context"
 	"reflect"
 
-	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/logexporter"
 	"github.com/golang/mock/gomock"
 )
 
@@ -36,7 +36,7 @@ func (m *MockLogSender) EXPECT() *MockLogSenderMockRecorder {
 }
 
 // SendLog mocks base method.
-func (m *MockLogSender) SendLog(arg0 context.Context, arg1 *castai.LogEntry) error {
+func (m *MockLogSender) SendLog(arg0 context.Context, arg1 *logexporter.LogEntry) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SendLog", arg0, arg1)
 	ret0, _ := ret[0].(error)

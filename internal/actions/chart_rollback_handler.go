@@ -7,8 +7,8 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/castai/cluster-controller/helm"
 	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/helm"
 )
 
 func newChartRollbackHandler(log logrus.FieldLogger, helm helm.Client, version string) ActionHandler {

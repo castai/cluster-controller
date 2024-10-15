@@ -11,7 +11,7 @@ import (
 	"helm.sh/helm/v3/pkg/release"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	"github.com/castai/cluster-controller/helm/hook/mock"
+	"github.com/castai/cluster-controller/internal/helm/hook/mock"
 )
 
 type componentVersions struct {

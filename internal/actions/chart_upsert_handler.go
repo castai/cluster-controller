@@ -9,8 +9,8 @@ import (
 	"helm.sh/helm/v3/pkg/release"
 	helmdriver "helm.sh/helm/v3/pkg/storage/driver"
 
-	"github.com/castai/cluster-controller/helm"
 	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/helm"
 )
 
 func newChartUpsertHandler(log logrus.FieldLogger, helm helm.Client) ActionHandler {

@@ -1,5 +1,5 @@
 //go:generate mockgen -destination ./mock/sender.go . LogSender
-package castai
+package logexporter
 
 import (
 	"context"

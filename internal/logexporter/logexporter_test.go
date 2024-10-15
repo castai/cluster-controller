@@ -1,11 +1,11 @@
-package castai_test
+package logexporter_test
 
 import (
 	"testing"
 
 	"fmt"
-	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/castai/mock"
+	"github.com/castai/cluster-controller/internal/logexporter"
 	"github.com/golang/mock/gomock"
 	"github.com/sirupsen/logrus"
 	"github.com/sirupsen/logrus/hooks/test"
@@ -66,7 +66,7 @@ func TestSetupLogExporter(t *testing.T) {
 			logger, hook := test.NewNullLogger()
 			defer hook.Reset()
 
-			e := castai.NewLogExporter(logger, sender)
+			e := logexporter.NewLogExporter(logger, sender)
 			logger.AddHook(e)
 			log := logger.WithFields(logrus.Fields{
 				"cluster_id": "test-cluster",
