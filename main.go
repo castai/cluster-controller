@@ -28,14 +28,13 @@ import (
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
-	"github.com/castai/cluster-controller/actions"
-	"github.com/castai/cluster-controller/castai"
-	"github.com/castai/cluster-controller/config"
-	"github.com/castai/cluster-controller/csr"
 	"github.com/castai/cluster-controller/health"
 	"github.com/castai/cluster-controller/helm"
-	"github.com/castai/cluster-controller/version"
-	"github.com/castai/cluster-controller/waitext"
+	"github.com/castai/cluster-controller/internal/actions"
+	castai2 "github.com/castai/cluster-controller/internal/castai"
+	config2 "github.com/castai/cluster-controller/internal/config"
+	"github.com/castai/cluster-controller/internal/csr"
+	"github.com/castai/cluster-controller/internal/waitext"
 )
 
 // These should be set via `go build` during a release.
@@ -51,9 +50,9 @@ const (
 
 func main() {
 	log := logrus.WithFields(logrus.Fields{})
-	cfg := config.Get()
+	cfg := config2.Get()
 
-	binVersion := &config.ClusterControllerVersion{
+	binVersion := &config2.ClusterControllerVersion{
 		GitCommit: GitCommit,
 		GitRef:    GitRef,
 		Version:   Version,
@@ -69,14 +68,14 @@ func main() {
 			return fmt.Sprintf("%s()", f.Function), fmt.Sprintf("%s:%d", filename, f.Line)
 		},
 	}
-	cl, err := castai.NewRestyClient(cfg.API.URL, cfg.API.Key, cfg.TLS.CACert, logger.Level, binVersion, maxRequestTimeout)
+	cl, err := castai2.NewRestyClient(cfg.API.URL, cfg.API.Key, cfg.TLS.CACert, logger.Level, binVersion, maxRequestTimeout)
 	if err != nil {
 		log.Fatalf("failed to create castai client: %v", err)
 
 	}
-	client := castai.NewClient(logger, cl, cfg.ClusterID)
+	client := castai2.NewClient(logger, cl, cfg.ClusterID)
 
-	e := castai.NewLogExporter(logger, client)
+	e := castai2.NewLogExporter(logger, client)
 	logger.AddHook(e)
 	logrus.RegisterExitHandler(e.Wait)
 
@@ -92,10 +91,10 @@ func main() {
 
 func run(
 	ctx context.Context,
-	client castai.ActionsClient,
+	client castai2.ActionsClient,
 	logger *logrus.Logger,
-	cfg config.Config,
-	binVersion *config.ClusterControllerVersion,
+	cfg config2.Config,
+	binVersion *config2.ClusterControllerVersion,
 ) (reterr error) {
 	fields := logrus.Fields{}
 
@@ -136,7 +135,7 @@ func run(
 		return err
 	}
 
-	k8sVersion, err := version.Get(clientset)
+	k8sVersion, err := k8sversion.Get(clientset)
 	if err != nil {
 		return fmt.Errorf("getting kubernetes version: %w", err)
 	}
@@ -228,7 +227,7 @@ func runWithLeaderElection(
 	log logrus.FieldLogger,
 	clientset kubernetes.Interface,
 	watchDog *leaderelection.HealthzAdaptor,
-	cfg config.LeaderElection,
+	cfg config2.LeaderElection,
 	runFunc func(ctx context.Context),
 ) error {
 	id, err := os.Hostname()
@@ -303,7 +302,7 @@ func installPprofHandlers(mux *http.ServeMux) {
 }
 
 func kubeConfigFromEnv() (*rest.Config, error) {
-	kubepath := config.Get().Kubeconfig
+	kubepath := config2.Get().Kubeconfig
 	if kubepath == "" {
 		return nil, nil
 	}
@@ -391,7 +390,7 @@ func (e *logContextErr) Unwrap() error {
 	return e.err
 }
 
-func runningOnGKE(clientset *kubernetes.Clientset, cfg config.Config) (isGKE bool, err error) {
+func runningOnGKE(clientset *kubernetes.Clientset, cfg config2.Config) (isGKE bool, err error) {
 	err = waitext.Retry(context.Background(), waitext.DefaultExponentialBackoff(), 3, func(ctx context.Context) (bool, error) {
 		node, err := clientset.CoreV1().Nodes().Get(ctx, cfg.NodeName, metav1.GetOptions{})
 		if err != nil {
