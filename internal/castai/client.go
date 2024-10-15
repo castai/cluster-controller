@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	headerAPIKey            = "X-API-Key"
+	headerAPIKey            = "X-API-Key" //nolint: gosec
 	headerUserAgent         = "User-Agent"
 	headerKubernetesVersion = "X-K8s-Version"
 )
@@ -112,9 +112,13 @@ func createTLSConfig(ca string) (*tls.Config, error) {
 	if !certPool.AppendCertsFromPEM([]byte(ca)) {
 		return nil, fmt.Errorf("failed to add root certificate to CA pool")
 	}
+	// If the user did not configure a MinVersion and did not configure a
+	// MaxVersion < 1.2, use MinVersion=1.2, which is required by
+	// https://datatracker.ietf.org/doc/html/rfc7540#section-9.2
 
 	return &tls.Config{
-		RootCAs: certPool,
+		RootCAs:    certPool,
+		MinVersion: tls.VersionTLS12,
 	}, nil
 }
 
