@@ -33,10 +33,6 @@ type Config struct {
 	Namespace        string
 }
 
-type Service interface {
-	Run(ctx context.Context)
-}
-
 func NewService(
 	log logrus.FieldLogger,
 	cfg Config,
@@ -46,7 +42,7 @@ func NewService(
 	castaiClient castai.CastAIClient,
 	helmClient helm.Client,
 	healthCheck *health.HealthzProvider,
-) Service {
+) *Controller {
 	return &Controller{
 		log:            log,
 		cfg:            cfg,

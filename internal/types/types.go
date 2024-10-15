@@ -1,3 +1,5 @@
+//go:generate mockgen -destination ./mock/actions.go . ActionHandler
+
 package types
 
 import (
