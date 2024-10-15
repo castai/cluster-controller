@@ -133,7 +133,7 @@ func (c *Client) SendAKSInitData(ctx context.Context, req *AKSInitDataRequest) e
 	return nil
 }
 
-func (c *Client) SendLog(ctx context.Context, e *logEntry) error {
+func (c *Client) SendLog(ctx context.Context, e *LogEntry) error {
 	// Server expects fields values to be strings. If they're not it fails with BAD_REQUEST/400.
 	// Alternatively we could use "google/protobuf/any.proto" on server side but ATM it doesn't work.
 	for k, v := range e.Fields {

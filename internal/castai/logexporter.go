@@ -1,3 +1,5 @@
+//go:generate mockgen -destination ./mock/sender.go . LogSender
+
 package castai
 
 import (
@@ -14,24 +16,24 @@ import (
 )
 
 const (
-	sendTimeout = 15 * time.Second
+	sendTimeout = 150 * time.Second
 )
 
-type logEntry struct {
+type LogEntry struct {
 	Level   string        `json:"level"`
 	Time    time.Time     `json:"time"`
 	Message string        `json:"message"`
 	Fields  logrus.Fields `json:"fields"`
 }
 
-type logSender interface {
-	SendLog(ctx context.Context, e *logEntry) error
+type LogSender interface {
+	SendLog(ctx context.Context, e *LogEntry) error
 }
 
 // LogExporter hooks into logrus and sends logs to Mothership.
 type LogExporter struct {
 	logger *logrus.Logger
-	sender logSender
+	sender LogSender
 	wg     sync.WaitGroup
 }
 
@@ -52,7 +54,7 @@ func NewLogger(logLevel uint32) *logrus.Logger {
 	return logger
 }
 
-func SetupLogExporter(logger *logrus.Logger, sender logSender) {
+func SetupLogExporter(logger *logrus.Logger, sender LogSender) {
 	logExporter := newLogExporter(logger, sender)
 	logger.AddHook(logExporter)
 	logrus.RegisterExitHandler(logExporter.Wait)
@@ -60,7 +62,7 @@ func SetupLogExporter(logger *logrus.Logger, sender logSender) {
 
 // NewLogExporter returns new exporter that can be hooked into logrus
 // to inject logs into Cast AI.
-func newLogExporter(logger *logrus.Logger, sender logSender) *LogExporter {
+func newLogExporter(logger *logrus.Logger, sender LogSender) *LogExporter {
 	return &LogExporter{
 		logger: logger,
 		sender: sender,
@@ -100,7 +102,7 @@ func (e *LogExporter) sendLogEvent(log *logrus.Entry) {
 	ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
 	defer cancel()
 
-	logEntry := &logEntry{
+	logEntry := &LogEntry{
 		Level:   log.Level.String(),
 		Time:    log.Time,
 		Message: log.Message,
