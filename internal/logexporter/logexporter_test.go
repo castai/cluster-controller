@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"fmt"
-	"github.com/castai/cluster-controller/internal/castai/mock"
 	"github.com/castai/cluster-controller/internal/logexporter"
+	mock_logexporter "github.com/castai/cluster-controller/internal/logexporter/mock"
 	"github.com/golang/mock/gomock"
 	"github.com/sirupsen/logrus"
 	"github.com/sirupsen/logrus/hooks/test"
@@ -19,7 +19,7 @@ func TestMain(m *testing.M) {
 func TestSetupLogExporter(t *testing.T) {
 	t.Parallel()
 	type args struct {
-		tuneMockSender func(sender *mock_castai.MockLogSender)
+		tuneMockSender func(sender *mock_logexporter.MockLogSender)
 		msg            map[int]string // level -> message
 	}
 	tests := []struct {
@@ -33,7 +33,7 @@ func TestSetupLogExporter(t *testing.T) {
 					int(logrus.ErrorLevel): "foo",
 					int(logrus.DebugLevel): "bar",
 				},
-				tuneMockSender: func(sender *mock_castai.MockLogSender) {
+				tuneMockSender: func(sender *mock_logexporter.MockLogSender) {
 					sender.EXPECT().SendLog(gomock.Any(), gomock.Any()).
 						Return(nil).Times(1)
 				},
@@ -46,7 +46,7 @@ func TestSetupLogExporter(t *testing.T) {
 					int(logrus.ErrorLevel): "foo",
 					int(logrus.DebugLevel): "bar",
 				},
-				tuneMockSender: func(sender *mock_castai.MockLogSender) {
+				tuneMockSender: func(sender *mock_logexporter.MockLogSender) {
 					sender.EXPECT().SendLog(gomock.Any(), gomock.Any()).
 						Return(fmt.Errorf("test-error")).Times(4)
 				},
@@ -59,7 +59,7 @@ func TestSetupLogExporter(t *testing.T) {
 			t.Parallel()
 			m := gomock.NewController(t)
 			defer m.Finish()
-			sender := mock_castai.NewMockLogSender(m)
+			sender := mock_logexporter.NewMockLogSender(m)
 			if tt.args.tuneMockSender != nil {
 				tt.args.tuneMockSender(sender)
 			}

@@ -14,9 +14,11 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/types"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
+
+var _ ActionHandler = &DeleteNodeHandler{}
 
 type deleteNodeConfig struct {
 	deleteRetries       int
@@ -26,8 +28,8 @@ type deleteNodeConfig struct {
 
 var errNodeMismatch = errors.New("node id mismatch")
 
-func newDeleteNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface) ActionHandler {
-	return &deleteNodeHandler{
+func NewDeleteNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface) *DeleteNodeHandler {
+	return &DeleteNodeHandler{
 		log:       log,
 		clientset: clientset,
 		cfg: deleteNodeConfig{
@@ -35,22 +37,22 @@ func newDeleteNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface
 			deleteRetryWait:     5 * time.Second,
 			podsTerminationWait: 30 * time.Second,
 		},
-		drainNodeHandler: drainNodeHandler{
+		DrainNodeHandler: DrainNodeHandler{
 			log:       log,
 			clientset: clientset,
 		},
 	}
 }
 
-type deleteNodeHandler struct {
-	drainNodeHandler
+type DeleteNodeHandler struct {
+	DrainNodeHandler
 	log       logrus.FieldLogger
 	clientset kubernetes.Interface
 	cfg       deleteNodeConfig
 }
 
-func (h *deleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
-	req, ok := action.Data().(*castai.ActionDeleteNode)
+func (h *DeleteNodeHandler) Handle(ctx context.Context, action *types.ClusterAction) error {
+	req, ok := action.Data().(*types.ActionDeleteNode)
 	if !ok {
 		return fmt.Errorf("unexpected type %T for delete node handler", action.Data())
 	}
@@ -58,8 +60,8 @@ func (h *deleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 	log := h.log.WithFields(logrus.Fields{
 		"node_name":      req.NodeName,
 		"node_id":        req.NodeID,
-		"type":           reflect.TypeOf(action.Data().(*castai.ActionDeleteNode)).String(),
-		actionIDLogField: action.ID,
+		"type":           reflect.TypeOf(action.Data().(*types.ActionDeleteNode)).String(),
+		ActionIDLogField: action.ID,
 	})
 	log.Info("deleting kubernetes node")
 
@@ -78,7 +80,7 @@ func (h *deleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 				return true, fmt.Errorf("error getting node: %w", err)
 			}
 
-			if val, ok := current.Labels[castai.LabelNodeID]; ok {
+			if val, ok := current.Labels[types.LabelNodeID]; ok {
 				if val != "" && val != req.NodeID {
 					log.Infof("node id mismatch, expected %q got %q. Skipping delete.", req.NodeID, val)
 					return true, errNodeMismatch
@@ -175,7 +177,7 @@ func (h *deleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 	)
 }
 
-func (h *deleteNodeHandler) deleteNodeVolumeAttachments(ctx context.Context, nodeName string) error {
+func (h *DeleteNodeHandler) deleteNodeVolumeAttachments(ctx context.Context, nodeName string) error {
 	volumeAttachments, err := h.clientset.StorageV1().VolumeAttachments().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return err

@@ -1,4 +1,4 @@
-package actions
+package controller
 
 import (
 	"context"
@@ -15,20 +15,12 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/health"
-	castai2 "github.com/castai/cluster-controller/internal/castai"
+	actions2 "github.com/castai/cluster-controller/internal/actions"
+	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/helm"
+	"github.com/castai/cluster-controller/internal/types"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
-
-const (
-	// actionIDLogField is the log field name for action ID.
-	// This field is used in backend to detect actions ID in logs.
-	actionIDLogField = "id"
-)
-
-func newUnexpectedTypeErr(value interface{}, expectedType interface{}) error {
-	return fmt.Errorf("unexpected type %T, expected %T", value, expectedType)
-}
 
 type Config struct {
 	PollWaitInterval time.Duration // How long to wait unit next long polling request.
@@ -45,55 +37,51 @@ type Service interface {
 	Run(ctx context.Context)
 }
 
-type ActionHandler interface {
-	Handle(ctx context.Context, action *castai2.ClusterAction) error
-}
-
 func NewService(
 	log logrus.FieldLogger,
 	cfg Config,
 	k8sVersion string,
 	clientset *kubernetes.Clientset,
 	dynamicClient dynamic.Interface,
-	castaiClient castai2.ActionsClient,
+	castaiClient castai.CastAIClient,
 	helmClient helm.Client,
 	healthCheck *health.HealthzProvider,
 ) Service {
-	return &service{
+	return &Controller{
 		log:            log,
 		cfg:            cfg,
 		k8sVersion:     k8sVersion,
 		castAIClient:   castaiClient,
 		startedActions: map[string]struct{}{},
-		actionHandlers: map[reflect.Type]ActionHandler{
-			reflect.TypeOf(&castai2.ActionDeleteNode{}):        newDeleteNodeHandler(log, clientset),
-			reflect.TypeOf(&castai2.ActionDrainNode{}):         newDrainNodeHandler(log, clientset, cfg.Namespace),
-			reflect.TypeOf(&castai2.ActionPatchNode{}):         newPatchNodeHandler(log, clientset),
-			reflect.TypeOf(&castai2.ActionCreateEvent{}):       newCreateEventHandler(log, clientset),
-			reflect.TypeOf(&castai2.ActionApproveCSR{}):        newApproveCSRHandler(log, clientset),
-			reflect.TypeOf(&castai2.ActionChartUpsert{}):       newChartUpsertHandler(log, helmClient),
-			reflect.TypeOf(&castai2.ActionChartUninstall{}):    newChartUninstallHandler(log, helmClient),
-			reflect.TypeOf(&castai2.ActionChartRollback{}):     newChartRollbackHandler(log, helmClient, cfg.Version),
-			reflect.TypeOf(&castai2.ActionDisconnectCluster{}): newDisconnectClusterHandler(log, clientset),
-			reflect.TypeOf(&castai2.ActionSendAKSInitData{}):   newSendAKSInitDataHandler(log, castaiClient),
-			reflect.TypeOf(&castai2.ActionCheckNodeDeleted{}):  newCheckNodeDeletedHandler(log, clientset),
-			reflect.TypeOf(&castai2.ActionCheckNodeStatus{}):   newCheckNodeStatusHandler(log, clientset),
-			reflect.TypeOf(&castai2.ActionPatch{}):             newPatchHandler(log, dynamicClient),
-			reflect.TypeOf(&castai2.ActionCreate{}):            newCreateHandler(log, dynamicClient),
-			reflect.TypeOf(&castai2.ActionDelete{}):            newDeleteHandler(log, dynamicClient),
+		actionHandlers: map[reflect.Type]actions2.ActionHandler{
+			reflect.TypeOf(&types.ActionDeleteNode{}):        actions2.NewDeleteNodeHandler(log, clientset),
+			reflect.TypeOf(&types.ActionDrainNode{}):         actions2.NewDrainNodeHandler(log, clientset, cfg.Namespace),
+			reflect.TypeOf(&types.ActionPatchNode{}):         actions2.NewPatchNodeHandler(log, clientset),
+			reflect.TypeOf(&types.ActionCreateEvent{}):       actions2.NewCreateEventHandler(log, clientset),
+			reflect.TypeOf(&types.ActionApproveCSR{}):        actions2.NewApproveCSRHandler(log, clientset),
+			reflect.TypeOf(&types.ActionChartUpsert{}):       actions2.NewChartUpsertHandler(log, helmClient),
+			reflect.TypeOf(&types.ActionChartUninstall{}):    actions2.NewChartUninstallHandler(log, helmClient),
+			reflect.TypeOf(&types.ActionChartRollback{}):     actions2.NewChartRollbackHandler(log, helmClient, cfg.Version),
+			reflect.TypeOf(&types.ActionDisconnectCluster{}): actions2.NewDisconnectClusterHandler(log, clientset),
+			reflect.TypeOf(&types.ActionSendAKSInitData{}):   actions2.NewSendAKSInitDataHandler(log, castaiClient),
+			reflect.TypeOf(&types.ActionCheckNodeDeleted{}):  actions2.NewCheckNodeDeletedHandler(log, clientset),
+			reflect.TypeOf(&types.ActionCheckNodeStatus{}):   actions2.NewCheckNodeStatusHandler(log, clientset),
+			reflect.TypeOf(&types.ActionPatch{}):             actions2.NewPatchHandler(log, dynamicClient),
+			reflect.TypeOf(&types.ActionCreate{}):            actions2.NewCreateHandler(log, dynamicClient),
+			reflect.TypeOf(&types.ActionDelete{}):            actions2.NewDeleteHandler(log, dynamicClient),
 		},
 		healthCheck: healthCheck,
 	}
 }
 
-type service struct {
+type Controller struct {
 	log          logrus.FieldLogger
 	cfg          Config
-	castAIClient castai2.ActionsClient
+	castAIClient castai.CastAIClient
 
 	k8sVersion string
 
-	actionHandlers map[reflect.Type]ActionHandler
+	actionHandlers map[reflect.Type]actions2.ActionHandler
 
 	startedActionsWg sync.WaitGroup
 	startedActions   map[string]struct{}
@@ -101,7 +89,7 @@ type service struct {
 	healthCheck      *health.HealthzProvider
 }
 
-func (s *service) Run(ctx context.Context) {
+func (s *Controller) Run(ctx context.Context) {
 	s.healthCheck.Initializing()
 	for {
 		select {
@@ -123,11 +111,11 @@ func (s *service) Run(ctx context.Context) {
 	}
 }
 
-func (s *service) doWork(ctx context.Context) error {
+func (s *Controller) doWork(ctx context.Context) error {
 	s.log.Info("polling actions")
 	start := time.Now()
 	var (
-		actions   []*castai2.ClusterAction
+		actions   []*types.ClusterAction
 		err       error
 		iteration int
 	)
@@ -161,13 +149,13 @@ func (s *service) doWork(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) handleActions(ctx context.Context, actions []*castai2.ClusterAction) {
-	for _, action := range actions {
+func (s *Controller) handleActions(ctx context.Context, clusterActions []*types.ClusterAction) {
+	for _, action := range clusterActions {
 		if !s.startProcessing(action.ID) {
 			continue
 		}
 
-		go func(action *castai2.ClusterAction) {
+		go func(action *types.ClusterAction) {
 			defer s.finishProcessing(action.ID)
 
 			var err error
@@ -185,15 +173,15 @@ func (s *service) handleActions(ctx context.Context, actions []*castai2.ClusterA
 			}
 			if err != nil {
 				s.log.WithFields(logrus.Fields{
-					actionIDLogField: action.ID,
-					"error":          err.Error(),
+					actions2.ActionIDLogField: action.ID,
+					"error":                   err.Error(),
 				}).Error("handle actions")
 			}
 		}(action)
 	}
 }
 
-func (s *service) finishProcessing(actionID string) {
+func (s *Controller) finishProcessing(actionID string) {
 	s.startedActionsMu.Lock()
 	defer s.startedActionsMu.Unlock()
 
@@ -201,7 +189,7 @@ func (s *service) finishProcessing(actionID string) {
 	delete(s.startedActions, actionID)
 }
 
-func (s *service) startProcessing(actionID string) bool {
+func (s *Controller) startProcessing(actionID string) bool {
 	s.startedActionsMu.Lock()
 	defer s.startedActionsMu.Unlock()
 
@@ -214,7 +202,7 @@ func (s *service) startProcessing(actionID string) bool {
 	return true
 }
 
-func (s *service) handleAction(ctx context.Context, action *castai2.ClusterAction) (err error) {
+func (s *Controller) handleAction(ctx context.Context, action *types.ClusterAction) (err error) {
 	actionType := reflect.TypeOf(action.Data())
 
 	defer func() {
@@ -224,8 +212,8 @@ func (s *service) handleAction(ctx context.Context, action *castai2.ClusterActio
 	}()
 
 	s.log.WithFields(logrus.Fields{
-		actionIDLogField: action.ID,
-		"type":           actionType.String(),
+		actions2.ActionIDLogField: action.ID,
+		"type":                    actionType.String(),
 	}).Info("handle action")
 	handler, ok := s.actionHandlers[actionType]
 	if !ok {
@@ -238,11 +226,11 @@ func (s *service) handleAction(ctx context.Context, action *castai2.ClusterActio
 	return nil
 }
 
-func (s *service) ackAction(ctx context.Context, action *castai2.ClusterAction, handleErr error) error {
+func (s *Controller) ackAction(ctx context.Context, action *types.ClusterAction, handleErr error) error {
 	actionType := reflect.TypeOf(action.Data())
 	s.log.WithFields(logrus.Fields{
-		actionIDLogField: action.ID,
-		"type":           actionType.String(),
+		actions2.ActionIDLogField: action.ID,
+		"type":                    actionType.String(),
 	}).Info("ack action")
 
 	boff := waitext.NewConstantBackoff(s.cfg.AckRetryWait)
@@ -250,7 +238,7 @@ func (s *service) ackAction(ctx context.Context, action *castai2.ClusterAction, 
 	return waitext.Retry(ctx, boff, s.cfg.AckRetriesCount, func(ctx context.Context) (bool, error) {
 		ctx, cancel := context.WithTimeout(ctx, s.cfg.AckTimeout)
 		defer cancel()
-		return true, s.castAIClient.AckAction(ctx, action.ID, &castai2.AckClusterActionRequest{
+		return true, s.castAIClient.AckAction(ctx, action.ID, &types.AckClusterActionRequest{
 			Error: getHandlerError(handleErr),
 		})
 	}, func(err error) {

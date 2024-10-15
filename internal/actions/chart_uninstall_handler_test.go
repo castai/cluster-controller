@@ -10,9 +10,9 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
-	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/helm"
 	"github.com/castai/cluster-controller/internal/helm/mock"
+	"github.com/castai/cluster-controller/internal/types"
 )
 
 func TestChartUninstallHandler(t *testing.T) {
@@ -21,10 +21,10 @@ func TestChartUninstallHandler(t *testing.T) {
 	helmMock := mock_helm.NewMockClient(ctrl)
 	ctx := context.Background()
 
-	handler := newChartUninstallHandler(logrus.New(), helmMock)
+	handler := NewChartUninstallHandler(logrus.New(), helmMock)
 
 	t.Run("successfully uninstall chart", func(t *testing.T) {
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID:                   uuid.New().String(),
 			ActionChartUninstall: newUninstallAction(),
 		}
@@ -38,7 +38,7 @@ func TestChartUninstallHandler(t *testing.T) {
 	})
 
 	t.Run("error when uninstalling chart", func(t *testing.T) {
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID:                   uuid.New().String(),
 			ActionChartUninstall: newUninstallAction(),
 		}
@@ -53,7 +53,7 @@ func TestChartUninstallHandler(t *testing.T) {
 	})
 
 	t.Run("namespace is missing in uninstall action", func(t *testing.T) {
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID:                   uuid.New().String(),
 			ActionChartUninstall: newUninstallAction(),
 		}
@@ -63,7 +63,7 @@ func TestChartUninstallHandler(t *testing.T) {
 	})
 
 	t.Run("helm release is missing in uninstall action", func(t *testing.T) {
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID:                   uuid.New().String(),
 			ActionChartUninstall: newUninstallAction(),
 		}
@@ -73,8 +73,8 @@ func TestChartUninstallHandler(t *testing.T) {
 	})
 }
 
-func newUninstallAction() *castai.ActionChartUninstall {
-	return &castai.ActionChartUninstall{
+func newUninstallAction() *types.ActionChartUninstall {
+	return &types.ActionChartUninstall{
 		Namespace:   "test",
 		ReleaseName: "new-release",
 	}

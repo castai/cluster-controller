@@ -12,7 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/types"
 )
 
 func TestDisconnectClusterHandler(t *testing.T) {
@@ -27,11 +27,11 @@ func TestDisconnectClusterHandler(t *testing.T) {
 	}
 	clientset := fake.NewSimpleClientset(node)
 
-	action := &castai.ClusterAction{
+	action := &types.ClusterAction{
 		ID:                      uuid.New().String(),
-		ActionDisconnectCluster: &castai.ActionDisconnectCluster{},
+		ActionDisconnectCluster: &types.ActionDisconnectCluster{},
 	}
-	handler := newDisconnectClusterHandler(logrus.New(), clientset)
+	handler := NewDisconnectClusterHandler(logrus.New(), clientset)
 
 	err := handler.Handle(ctx, action)
 	r.NoError(err)

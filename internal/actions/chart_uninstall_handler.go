@@ -7,24 +7,26 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/helm"
+	"github.com/castai/cluster-controller/internal/types"
 )
 
-func newChartUninstallHandler(log logrus.FieldLogger, helm helm.Client) ActionHandler {
-	return &chartUninstallHandler{
+var _ ActionHandler = &ChartUninstallHandler{}
+
+func NewChartUninstallHandler(log logrus.FieldLogger, helm helm.Client) *ChartUninstallHandler {
+	return &ChartUninstallHandler{
 		log:  log,
 		helm: helm,
 	}
 }
 
-type chartUninstallHandler struct {
+type ChartUninstallHandler struct {
 	log  logrus.FieldLogger
 	helm helm.Client
 }
 
-func (c *chartUninstallHandler) Handle(_ context.Context, action *castai.ClusterAction) error {
-	req, ok := action.Data().(*castai.ActionChartUninstall)
+func (c *ChartUninstallHandler) Handle(_ context.Context, action *types.ClusterAction) error {
+	req, ok := action.Data().(*types.ActionChartUninstall)
 	if !ok {
 		return fmt.Errorf("unexpected type %T for upsert uninstall handler", action.Data())
 	}
@@ -39,7 +41,7 @@ func (c *chartUninstallHandler) Handle(_ context.Context, action *castai.Cluster
 	return err
 }
 
-func (c *chartUninstallHandler) validateRequest(req *castai.ActionChartUninstall) error {
+func (c *ChartUninstallHandler) validateRequest(req *types.ActionChartUninstall) error {
 	if req.ReleaseName == "" {
 		return errors.New("bad request: releaseName not provided")
 	}

@@ -16,7 +16,7 @@ import (
 	"k8s.io/client-go/dynamic/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/types"
 )
 
 func Test_newCreateHandler(t *testing.T) {
@@ -27,29 +27,29 @@ func Test_newCreateHandler(t *testing.T) {
 	now := metav1.Time{Time: time.Date(2024, time.September, 1, 0, 0, 0, 0, time.Local)}
 	tests := map[string]struct {
 		objs      []runtime.Object
-		action    *castai.ClusterAction
+		action    *types.ClusterAction
 		convertFn func(i map[string]interface{}) client.Object
 		err       error
 		want      *appsv1.Deployment
 	}{
 		"should return error when action is of a different type": {
-			action: &castai.ClusterAction{
-				ActionDeleteNode: &castai.ActionDeleteNode{},
+			action: &types.ClusterAction{
+				ActionDeleteNode: &types.ActionDeleteNode{},
 			},
-			err: newUnexpectedTypeErr(&castai.ActionDeleteNode{}, &castai.ActionCreate{}),
+			err: newUnexpectedTypeErr(&types.ActionDeleteNode{}, &types.ActionCreate{}),
 		},
 		"should return error when object is not provided": {
-			action: &castai.ClusterAction{
-				ActionCreate: &castai.ActionCreate{
-					GroupVersionResource: castai.GroupVersionResource{},
+			action: &types.ClusterAction{
+				ActionCreate: &types.ActionCreate{
+					GroupVersionResource: types.GroupVersionResource{},
 				},
 			},
 			err: errors.New("no object provided"),
 		},
 		"should create new deployment": {
-			action: &castai.ClusterAction{
-				ActionCreate: &castai.ActionCreate{
-					GroupVersionResource: castai.GroupVersionResource{
+			action: &types.ClusterAction{
+				ActionCreate: &types.ActionCreate{
+					GroupVersionResource: types.GroupVersionResource{
 						Group:    appsv1.SchemeGroupVersion.Group,
 						Version:  appsv1.SchemeGroupVersion.Version,
 						Resource: "deployments",
@@ -65,9 +65,9 @@ func Test_newCreateHandler(t *testing.T) {
 			},
 		},
 		"should patch already existing resource": {
-			action: &castai.ClusterAction{
-				ActionCreate: &castai.ActionCreate{
-					GroupVersionResource: castai.GroupVersionResource{
+			action: &types.ClusterAction{
+				ActionCreate: &types.ActionCreate{
+					GroupVersionResource: types.GroupVersionResource{
 						Group:    appsv1.SchemeGroupVersion.Group,
 						Version:  appsv1.SchemeGroupVersion.Version,
 						Resource: "deployments",
@@ -91,9 +91,9 @@ func Test_newCreateHandler(t *testing.T) {
 			},
 		},
 		"should not patch already existing resource finalizers": {
-			action: &castai.ClusterAction{
-				ActionCreate: &castai.ActionCreate{
-					GroupVersionResource: castai.GroupVersionResource{
+			action: &types.ClusterAction{
+				ActionCreate: &types.ActionCreate{
+					GroupVersionResource: types.GroupVersionResource{
 						Group:    appsv1.SchemeGroupVersion.Group,
 						Version:  appsv1.SchemeGroupVersion.Version,
 						Resource: "deployments",
@@ -125,7 +125,7 @@ func Test_newCreateHandler(t *testing.T) {
 			log := logrus.New()
 
 			c := fake.NewSimpleDynamicClient(scheme, test.objs...)
-			handler := newCreateHandler(log, c)
+			handler := NewCreateHandler(log, c)
 			err := handler.Handle(ctx, test.action)
 			if test.err != nil {
 				r.Error(err)

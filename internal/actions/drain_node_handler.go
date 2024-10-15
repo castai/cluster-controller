@@ -20,9 +20,11 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/kubectl/pkg/drain"
 
-	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/types"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
+
+var _ ActionHandler = &DrainNodeHandler{}
 
 const (
 	minDrainTimeout = 0 // Minimal pod drain timeout
@@ -38,8 +40,8 @@ type drainNodeConfig struct {
 	skipDeletedTimeoutSeconds     int
 }
 
-func newDrainNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface, castNamespace string) ActionHandler {
-	return &drainNodeHandler{
+func NewDrainNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface, castNamespace string) *DrainNodeHandler {
+	return &DrainNodeHandler{
 		log:       log,
 		clientset: clientset,
 		cfg: drainNodeConfig{
@@ -56,7 +58,7 @@ func newDrainNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface,
 
 // getDrainTimeout returns drain timeout adjusted to action creation time.
 // the result is clamped between 0s and the requested timeout.
-func (h *drainNodeHandler) getDrainTimeout(action *castai.ClusterAction) time.Duration {
+func (h *DrainNodeHandler) getDrainTimeout(action *types.ClusterAction) time.Duration {
 	timeSinceCreated := time.Since(action.CreatedAt)
 	requestedTimeout := time.Duration(action.ActionDrainNode.DrainTimeoutSeconds) * time.Second
 
@@ -65,14 +67,14 @@ func (h *drainNodeHandler) getDrainTimeout(action *castai.ClusterAction) time.Du
 	return lo.Clamp(drainTimeout, minDrainTimeout*time.Second, requestedTimeout)
 }
 
-type drainNodeHandler struct {
+type DrainNodeHandler struct {
 	log       logrus.FieldLogger
 	clientset kubernetes.Interface
 	cfg       drainNodeConfig
 }
 
-func (h *drainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
-	req, ok := action.Data().(*castai.ActionDrainNode)
+func (h *DrainNodeHandler) Handle(ctx context.Context, action *types.ClusterAction) error {
+	req, ok := action.Data().(*types.ActionDrainNode)
 	if !ok {
 		return fmt.Errorf("unexpected type %T for drain handler", action.Data())
 	}
@@ -81,8 +83,8 @@ func (h *drainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	log := h.log.WithFields(logrus.Fields{
 		"node_name":      req.NodeName,
 		"node_id":        req.NodeID,
-		"action":         reflect.TypeOf(action.Data().(*castai.ActionDrainNode)).String(),
-		actionIDLogField: action.ID,
+		"action":         reflect.TypeOf(action.Data().(*types.ActionDrainNode)).String(),
+		ActionIDLogField: action.ID,
 	})
 
 	node, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
@@ -165,7 +167,7 @@ func (h *drainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	return deleteErr
 }
 
-func (h *drainNodeHandler) cordonNode(ctx context.Context, node *v1.Node) error {
+func (h *DrainNodeHandler) cordonNode(ctx context.Context, node *v1.Node) error {
 	if node.Spec.Unschedulable {
 		return nil
 	}
@@ -187,7 +189,7 @@ func (h *drainNodeHandler) cordonNode(ctx context.Context, node *v1.Node) error 
 // Errors in calling EVICT for individual pods are accumulated. If at least one pod failed this but termination was successful, an instance of podFailedActionError is returned.
 // The method will still wait for termination of other evicted pods first.
 // A return value of nil means all pods on the node should be evicted and terminated.
-func (h *drainNodeHandler) evictNodePods(ctx context.Context, log logrus.FieldLogger, node *v1.Node) error {
+func (h *DrainNodeHandler) evictNodePods(ctx context.Context, log logrus.FieldLogger, node *v1.Node) error {
 	pods, err := h.listNodePodsToEvict(ctx, log, node)
 	if err != nil {
 		return err
@@ -239,7 +241,7 @@ func (h *drainNodeHandler) evictNodePods(ctx context.Context, log logrus.FieldLo
 // Errors in calling DELETE for individual pods are accumulated. If at least one pod failed this but termination was successful, an instance of podFailedActionError is returned.
 // The method will still wait for termination of other deleted pods first.
 // A return value of nil means all pods on the node should be deleted and terminated.
-func (h *drainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldLogger, node *v1.Node, options metav1.DeleteOptions) error {
+func (h *DrainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldLogger, node *v1.Node, options metav1.DeleteOptions) error {
 	pods, err := h.listNodePodsToEvict(ctx, log, node)
 	if err != nil {
 		return err
@@ -293,7 +295,7 @@ func (h *drainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldL
 //   - DaemonSet pods
 //   - pods that are already finished (Succeeded or Failed)
 //   - pods that were marked for deletion recently (Terminating state); the meaning of "recently" is controlled by config
-func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.FieldLogger, node *v1.Node) ([]v1.Pod, error) {
+func (h *DrainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.FieldLogger, node *v1.Node) ([]v1.Pod, error) {
 	var pods *v1.PodList
 	err := waitext.Retry(
 		ctx,
@@ -352,7 +354,7 @@ func (h *drainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.F
 // If podsToIgnore is not empty, the list is further filtered by it.
 // This is useful when you don't expect some pods on the node to terminate (e.g. because eviction failed for them) so there is no reason to wait until timeout.
 // The wait can potentially run forever if pods are scheduled on the node and are not evicted/deleted by anything. Use a timeout to avoid infinite wait.
-func (h *drainNodeHandler) waitNodePodsTerminated(ctx context.Context, log logrus.FieldLogger, node *v1.Node, podsToIgnore []*v1.Pod) error {
+func (h *DrainNodeHandler) waitNodePodsTerminated(ctx context.Context, log logrus.FieldLogger, node *v1.Node, podsToIgnore []*v1.Pod) error {
 	// Check if context is cancelled before starting any work.
 	select {
 	case <-ctx.Done():
@@ -399,7 +401,7 @@ func (h *drainNodeHandler) waitNodePodsTerminated(ctx context.Context, log logru
 
 // evictPod from the k8s node. Error handling is based on eviction api documentation:
 // https://kubernetes.io/docs/tasks/administer-cluster/safely-drain-node/#the-eviction-api
-func (h *drainNodeHandler) evictPod(ctx context.Context, pod v1.Pod, groupVersion schema.GroupVersion) error {
+func (h *DrainNodeHandler) evictPod(ctx context.Context, pod v1.Pod, groupVersion schema.GroupVersion) error {
 	b := waitext.NewConstantBackoff(h.cfg.podEvictRetryDelay)
 	action := func(ctx context.Context) (bool, error) {
 		var err error
@@ -453,7 +455,7 @@ func (h *drainNodeHandler) evictPod(ctx context.Context, pod v1.Pod, groupVersio
 	return nil
 }
 
-func (h *drainNodeHandler) deletePod(ctx context.Context, options metav1.DeleteOptions, pod v1.Pod) error {
+func (h *DrainNodeHandler) deletePod(ctx context.Context, options metav1.DeleteOptions, pod v1.Pod) error {
 	b := waitext.NewConstantBackoff(h.cfg.podDeleteRetryDelay)
 	action := func(ctx context.Context) (bool, error) {
 		err := h.clientset.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, options)

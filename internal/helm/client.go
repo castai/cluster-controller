@@ -20,12 +20,12 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/helm/hook"
+	"github.com/castai/cluster-controller/internal/types"
 )
 
 type InstallOptions struct {
-	ChartSource     *castai.ChartSource
+	ChartSource     *types.ChartSource
 	Namespace       string
 	CreateNamespace bool
 	ReleaseName     string
@@ -38,7 +38,7 @@ type UninstallOptions struct {
 }
 
 type UpgradeOptions struct {
-	ChartSource          *castai.ChartSource
+	ChartSource          *types.ChartSource
 	Release              *release.Release
 	ValuesOverrides      map[string]string
 	MaxHistory           int

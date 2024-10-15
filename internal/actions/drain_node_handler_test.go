@@ -19,7 +19,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	ktest "k8s.io/client-go/testing"
 
-	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/types"
 )
 
 func TestDrainNodeHandler(t *testing.T) {
@@ -37,16 +37,16 @@ func TestDrainNodeHandler(t *testing.T) {
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 		prependEvictionReaction(t, clientset, true, false)
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDrainNode: &castai.ActionDrainNode{
+			ActionDrainNode: &types.ActionDrainNode{
 				NodeName:            "node1",
 				DrainTimeoutSeconds: 1,
 				Force:               true,
 			},
 			CreatedAt: time.Now().UTC(),
 		}
-		h := drainNodeHandler{
+		h := DrainNodeHandler{
 			log:       log,
 			clientset: clientset,
 			cfg:       drainNodeConfig{},
@@ -79,9 +79,9 @@ func TestDrainNodeHandler(t *testing.T) {
 		podName := "pod1"
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDrainNode: &castai.ActionDrainNode{
+			ActionDrainNode: &types.ActionDrainNode{
 				NodeName:            "already-deleted-node",
 				DrainTimeoutSeconds: 1,
 				Force:               true,
@@ -89,7 +89,7 @@ func TestDrainNodeHandler(t *testing.T) {
 			CreatedAt: time.Now().UTC(),
 		}
 
-		h := drainNodeHandler{
+		h := DrainNodeHandler{
 			log:       log,
 			clientset: clientset,
 			cfg:       drainNodeConfig{},
@@ -110,9 +110,9 @@ func TestDrainNodeHandler(t *testing.T) {
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 		prependEvictionReaction(t, clientset, false, false)
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDrainNode: &castai.ActionDrainNode{
+			ActionDrainNode: &types.ActionDrainNode{
 				NodeName:            "node1",
 				DrainTimeoutSeconds: 1,
 				Force:               false,
@@ -120,7 +120,7 @@ func TestDrainNodeHandler(t *testing.T) {
 			CreatedAt: time.Now().UTC(),
 		}
 
-		h := drainNodeHandler{
+		h := DrainNodeHandler{
 			log:       log,
 			clientset: clientset,
 			cfg:       drainNodeConfig{},
@@ -147,9 +147,9 @@ func TestDrainNodeHandler(t *testing.T) {
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 		prependEvictionReaction(t, clientset, false, true)
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDrainNode: &castai.ActionDrainNode{
+			ActionDrainNode: &types.ActionDrainNode{
 				NodeName:            "node1",
 				DrainTimeoutSeconds: 0,
 				Force:               false,
@@ -157,7 +157,7 @@ func TestDrainNodeHandler(t *testing.T) {
 			CreatedAt: time.Now().UTC(),
 		}
 
-		h := drainNodeHandler{
+		h := DrainNodeHandler{
 			log:       log,
 			clientset: clientset,
 			cfg:       drainNodeConfig{},
@@ -207,9 +207,9 @@ func TestDrainNodeHandler(t *testing.T) {
 				clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 				prependEvictionReaction(t, clientset, false, tc.retryablePodEvictionErr)
 
-				action := &castai.ClusterAction{
+				action := &types.ClusterAction{
 					ID: uuid.New().String(),
-					ActionDrainNode: &castai.ActionDrainNode{
+					ActionDrainNode: &types.ActionDrainNode{
 						NodeName:            "node1",
 						DrainTimeoutSeconds: tc.drainTimeoutSeconds,
 						Force:               true,
@@ -217,7 +217,7 @@ func TestDrainNodeHandler(t *testing.T) {
 					CreatedAt: time.Now().UTC(),
 				}
 
-				h := drainNodeHandler{
+				h := DrainNodeHandler{
 					log:       log,
 					clientset: clientset,
 					cfg: drainNodeConfig{
@@ -266,9 +266,9 @@ func TestDrainNodeHandler(t *testing.T) {
 		podName := "pod1"
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDrainNode: &castai.ActionDrainNode{
+			ActionDrainNode: &types.ActionDrainNode{
 				NodeName:            "node1",
 				DrainTimeoutSeconds: 1,
 				Force:               true,
@@ -276,7 +276,7 @@ func TestDrainNodeHandler(t *testing.T) {
 			CreatedAt: time.Now().UTC(),
 		}
 
-		h := drainNodeHandler{
+		h := DrainNodeHandler{
 			log:       log,
 			clientset: clientset,
 			cfg: drainNodeConfig{
@@ -315,9 +315,9 @@ func TestDrainNodeHandler(t *testing.T) {
 		podName := "pod1"
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDrainNode: &castai.ActionDrainNode{
+			ActionDrainNode: &types.ActionDrainNode{
 				NodeName:            "node1",
 				DrainTimeoutSeconds: 1,
 				Force:               true,
@@ -325,7 +325,7 @@ func TestDrainNodeHandler(t *testing.T) {
 			CreatedAt: time.Now().UTC(),
 		}
 
-		h := drainNodeHandler{
+		h := DrainNodeHandler{
 			log:       log,
 			clientset: clientset,
 			cfg: drainNodeConfig{
@@ -383,9 +383,9 @@ func TestDrainNodeHandler(t *testing.T) {
 				}}
 		})
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDrainNode: &castai.ActionDrainNode{
+			ActionDrainNode: &types.ActionDrainNode{
 				NodeName:            "node1",
 				DrainTimeoutSeconds: 2,
 				Force:               false,
@@ -393,7 +393,7 @@ func TestDrainNodeHandler(t *testing.T) {
 			CreatedAt: time.Now().UTC(),
 		}
 
-		h := drainNodeHandler{
+		h := DrainNodeHandler{
 			log:       log,
 			clientset: clientset,
 			cfg:       drainNodeConfig{},
@@ -420,16 +420,16 @@ func TestGetDrainTimeout(t *testing.T) {
 
 	t.Run("drain timeout for new action should be the same like in request", func(t *testing.T) {
 		r := require.New(t)
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDrainNode: &castai.ActionDrainNode{
+			ActionDrainNode: &types.ActionDrainNode{
 				NodeName:            "node1",
 				DrainTimeoutSeconds: 100,
 				Force:               true,
 			},
 			CreatedAt: time.Now().UTC(),
 		}
-		h := drainNodeHandler{
+		h := DrainNodeHandler{
 			log: log,
 			cfg: drainNodeConfig{},
 		}
@@ -442,16 +442,16 @@ func TestGetDrainTimeout(t *testing.T) {
 
 	t.Run("drain timeout for older action should be decreased by time since action creation", func(t *testing.T) {
 		r := require.New(t)
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDrainNode: &castai.ActionDrainNode{
+			ActionDrainNode: &types.ActionDrainNode{
 				NodeName:            "node1",
 				DrainTimeoutSeconds: 600,
 				Force:               true,
 			},
 			CreatedAt: time.Now().UTC().Add(-3 * time.Minute),
 		}
-		h := drainNodeHandler{
+		h := DrainNodeHandler{
 			log: log,
 			cfg: drainNodeConfig{},
 		}
@@ -462,16 +462,16 @@ func TestGetDrainTimeout(t *testing.T) {
 
 	t.Run("drain timeout min wait timeout should be 0s", func(t *testing.T) {
 		r := require.New(t)
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDrainNode: &castai.ActionDrainNode{
+			ActionDrainNode: &types.ActionDrainNode{
 				NodeName:            "node1",
 				DrainTimeoutSeconds: 600,
 				Force:               true,
 			},
 			CreatedAt: time.Now().UTC().Add(-60 * time.Minute),
 		}
-		h := drainNodeHandler{
+		h := DrainNodeHandler{
 			log: log,
 			cfg: drainNodeConfig{},
 		}

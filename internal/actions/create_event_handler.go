@@ -11,10 +11,12 @@ import (
 	typedv1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/record"
 
-	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/types"
 )
 
-func newCreateEventHandler(log logrus.FieldLogger, clientset kubernetes.Interface) ActionHandler {
+var _ ActionHandler = &CreateEventHandler{}
+
+func NewCreateEventHandler(log logrus.FieldLogger, clientset kubernetes.Interface) *CreateEventHandler {
 	factory := func(ns, reporter string) (record.EventBroadcaster, record.EventRecorder) {
 		eventBroadcaster := record.NewBroadcaster()
 		eventBroadcaster.StartRecordingToSink(&typedv1core.EventSinkImpl{Interface: clientset.CoreV1().Events(ns)})
@@ -26,7 +28,7 @@ func newCreateEventHandler(log logrus.FieldLogger, clientset kubernetes.Interfac
 			Host:      reporter,
 		})
 	}
-	return &createEventHandler{
+	return &CreateEventHandler{
 		log:                log,
 		clientSet:          clientset,
 		recorderFactory:    factory,
@@ -35,7 +37,7 @@ func newCreateEventHandler(log logrus.FieldLogger, clientset kubernetes.Interfac
 	}
 }
 
-type createEventHandler struct {
+type CreateEventHandler struct {
 	log                logrus.FieldLogger
 	clientSet          kubernetes.Interface
 	recorderFactory    func(string, string) (record.EventBroadcaster, record.EventRecorder)
@@ -44,8 +46,8 @@ type createEventHandler struct {
 	eventNsRecorder    map[string]record.EventRecorder
 }
 
-func (h *createEventHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
-	req, ok := action.Data().(*castai.ActionCreateEvent)
+func (h *CreateEventHandler) Handle(ctx context.Context, action *types.ClusterAction) error {
+	req, ok := action.Data().(*types.ActionCreateEvent)
 	if !ok {
 		return fmt.Errorf("unexpected type %T for create event handler", action.Data())
 	}
@@ -57,7 +59,7 @@ func (h *createEventHandler) Handle(ctx context.Context, action *castai.ClusterA
 	return nil
 }
 
-func (h *createEventHandler) handleEventV1(_ context.Context, req *castai.ActionCreateEvent, namespace string) {
+func (h *CreateEventHandler) handleEventV1(_ context.Context, req *types.ActionCreateEvent, namespace string) {
 	h.mu.RLock()
 	h.log.Debug("handling create event action: %s type: %s", req.Action, req.EventType)
 	if recorder, ok := h.eventNsRecorder[fmt.Sprintf("%s-%s", namespace, req.Reporter)]; ok {

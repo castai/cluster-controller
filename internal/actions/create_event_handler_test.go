@@ -17,7 +17,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/record"
 
-	"github.com/castai/cluster-controller/internal/castai"
+	types2 "github.com/castai/cluster-controller/internal/types"
 )
 
 func TestCreateEvent(t *testing.T) {
@@ -26,16 +26,16 @@ func TestCreateEvent(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		action        *castai.ClusterAction
+		action        *types2.ClusterAction
 		actionCount   int
 		object        runtime.Object
 		expectedEvent *corev1.Event
 	}{
 		{
 			name: "create single pod event",
-			action: &castai.ClusterAction{
+			action: &types2.ClusterAction{
 				ID: uuid.New().String(),
-				ActionCreateEvent: &castai.ActionCreateEvent{
+				ActionCreateEvent: &types2.ActionCreateEvent{
 					Reporter:  "autoscaler.cast.ai",
 					ObjectRef: podObjReference(testPod(id)),
 					EventTime: time.Now(),
@@ -59,9 +59,9 @@ func TestCreateEvent(t *testing.T) {
 		},
 		{
 			name: "create several pod events",
-			action: &castai.ClusterAction{
+			action: &types2.ClusterAction{
 				ID: "",
-				ActionCreateEvent: &castai.ActionCreateEvent{
+				ActionCreateEvent: &types2.ActionCreateEvent{
 					Reporter:  "provisioning.cast.ai",
 					ObjectRef: podObjReference(testPod(id)),
 					EventTime: time.Now(),
@@ -89,7 +89,7 @@ func TestCreateEvent(t *testing.T) {
 			clientSet := fake.NewSimpleClientset(test.object)
 			recorder := record.NewFakeRecorder(test.actionCount)
 			broadCaster := record.NewBroadcasterForTests(time.Second * 10)
-			h := createEventHandler{
+			h := CreateEventHandler{
 				log:       logrus.New(),
 				clientSet: clientSet,
 				eventNsRecorder: map[string]record.EventRecorder{
@@ -135,7 +135,7 @@ func TestRandomNs(t *testing.T) {
 	actionCount := 10
 	clientSet := fake.NewSimpleClientset(testPod(types.UID(uuid.New().String())))
 	recorders := make([]*record.FakeRecorder, 0, actionCount)
-	h := createEventHandler{
+	h := CreateEventHandler{
 		log:       logrus.New(),
 		clientSet: clientSet,
 		recorderFactory: func(ns, reporter string) (record.EventBroadcaster, record.EventRecorder) {
@@ -152,9 +152,9 @@ func TestRandomNs(t *testing.T) {
 	wg.Add(actionCount)
 	for i := 0; i < actionCount; i++ {
 		go func() {
-			err := h.Handle(ctx, &castai.ClusterAction{
+			err := h.Handle(ctx, &types2.ClusterAction{
 				ID: uuid.New().String(),
-				ActionCreateEvent: &castai.ActionCreateEvent{
+				ActionCreateEvent: &types2.ActionCreateEvent{
 					ObjectRef: podObjReference(
 						&corev1.Pod{
 							ObjectMeta: metav1.ObjectMeta{

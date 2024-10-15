@@ -8,7 +8,7 @@ import (
 	"context"
 	"reflect"
 
-	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/castai"
 	"github.com/golang/mock/gomock"
 	"helm.sh/helm/v3/pkg/chart"
 )

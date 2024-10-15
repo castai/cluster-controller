@@ -29,10 +29,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
 	"github.com/castai/cluster-controller/health"
-	"github.com/castai/cluster-controller/internal/actions"
-	castai2 "github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/actions/csr"
+	"github.com/castai/cluster-controller/internal/castai"
 	config2 "github.com/castai/cluster-controller/internal/config"
-	"github.com/castai/cluster-controller/internal/csr"
+	"github.com/castai/cluster-controller/internal/controller"
 	helm2 "github.com/castai/cluster-controller/internal/helm"
 	"github.com/castai/cluster-controller/internal/k8sversion"
 	"github.com/castai/cluster-controller/internal/logexporter"
@@ -70,12 +70,12 @@ func main() {
 			return fmt.Sprintf("%s()", f.Function), fmt.Sprintf("%s:%d", filename, f.Line)
 		},
 	}
-	cl, err := castai2.NewRestyClient(cfg.API.URL, cfg.API.Key, cfg.TLS.CACert, logger.Level, binVersion, maxRequestTimeout)
+	cl, err := castai.NewRestyClient(cfg.API.URL, cfg.API.Key, cfg.TLS.CACert, logger.Level, binVersion, maxRequestTimeout)
 	if err != nil {
 		log.Fatalf("failed to create castai client: %v", err)
 
 	}
-	client := castai2.NewClient(logger, cl, cfg.ClusterID)
+	client := castai.NewClient(logger, cl, cfg.ClusterID)
 
 	e := logexporter.NewLogExporter(logger, client)
 	logger.AddHook(e)
@@ -93,7 +93,7 @@ func main() {
 
 func run(
 	ctx context.Context,
-	client castai2.ActionsClient,
+	client castai.CastAIClient,
 	logger *logrus.Logger,
 	cfg config2.Config,
 	binVersion *config2.ClusterControllerVersion,
@@ -155,7 +155,7 @@ func run(
 
 	log.Infof("running castai-cluster-controller version %v, log-level: %v", binVersion, logger.Level)
 
-	actionsConfig := actions.Config{
+	actionsConfig := controller.Config{
 		PollWaitInterval: 5 * time.Second,
 		PollTimeout:      maxRequestTimeout,
 		AckTimeout:       30 * time.Second,
@@ -167,7 +167,7 @@ func run(
 	}
 	healthzAction := health.NewHealthzProvider(health.HealthzCfg{HealthyPollIntervalLimit: (actionsConfig.PollWaitInterval + actionsConfig.PollTimeout) * 2, StartTimeLimit: 2 * time.Minute}, log)
 
-	svc := actions.NewService(
+	svc := controller.NewService(
 		log,
 		actionsConfig,
 		k8sVersion.Full(),

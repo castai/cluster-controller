@@ -15,23 +15,25 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 
-	"github.com/castai/cluster-controller/internal/castai"
+	types2 "github.com/castai/cluster-controller/internal/types"
 )
 
-type createHandler struct {
+var _ ActionHandler = &CreateHandler{}
+
+type CreateHandler struct {
 	log    logrus.FieldLogger
 	client dynamic.Interface
 }
 
-func newCreateHandler(log logrus.FieldLogger, client dynamic.Interface) ActionHandler {
-	return &createHandler{
+func NewCreateHandler(log logrus.FieldLogger, client dynamic.Interface) *CreateHandler {
+	return &CreateHandler{
 		log:    log,
 		client: client,
 	}
 }
 
-func (h *createHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
-	req, ok := action.Data().(*castai.ActionCreate)
+func (h *CreateHandler) Handle(ctx context.Context, action *types2.ClusterAction) error {
+	req, ok := action.Data().(*types2.ActionCreate)
 	if !ok {
 		return newUnexpectedTypeErr(action.Data(), req)
 	}
@@ -46,7 +48,7 @@ func (h *createHandler) Handle(ctx context.Context, action *castai.ClusterAction
 	}
 
 	log := h.log.WithFields(logrus.Fields{
-		actionIDLogField: action.ID,
+		ActionIDLogField: action.ID,
 		"action":         reflect.TypeOf(action.Data()).String(),
 		"gvr":            req.GroupVersionResource.String(),
 		"name":           newObj.GetName(),

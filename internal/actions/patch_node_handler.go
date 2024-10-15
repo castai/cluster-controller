@@ -13,23 +13,25 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/types"
 )
 
-func newPatchNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface) ActionHandler {
-	return &patchNodeHandler{
+var _ ActionHandler = &PatchNodeHandler{}
+
+func NewPatchNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface) *PatchNodeHandler {
+	return &PatchNodeHandler{
 		log:       log,
 		clientset: clientset,
 	}
 }
 
-type patchNodeHandler struct {
+type PatchNodeHandler struct {
 	log       logrus.FieldLogger
 	clientset kubernetes.Interface
 }
 
-func (h *patchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
-	req, ok := action.Data().(*castai.ActionPatchNode)
+func (h *PatchNodeHandler) Handle(ctx context.Context, action *types.ClusterAction) error {
+	req, ok := action.Data().(*types.ActionPatchNode)
 	if !ok {
 		return fmt.Errorf("unexpected type %T for delete patch handler", action.Data())
 	}
@@ -52,8 +54,8 @@ func (h *patchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	log := h.log.WithFields(logrus.Fields{
 		"node_name":      req.NodeName,
 		"node_id":        req.NodeID,
-		"action":         reflect.TypeOf(action.Data().(*castai.ActionPatchNode)).String(),
-		actionIDLogField: action.ID,
+		"action":         reflect.TypeOf(action.Data().(*types.ActionPatchNode)).String(),
+		ActionIDLogField: action.ID,
 	})
 
 	node, err := getNodeForPatching(ctx, h.log, h.clientset, req.NodeName)
@@ -121,7 +123,7 @@ func patchNodeMapField(values map[string]string, patch map[string]string) map[st
 	return values
 }
 
-func patchTaints(taints []v1.Taint, patch []castai.NodeTaint) []v1.Taint {
+func patchTaints(taints []v1.Taint, patch []types.NodeTaint) []v1.Taint {
 	for _, v := range patch {
 		taint := &v1.Taint{Key: v.Key, Value: v.Value, Effect: v1.TaintEffect(v.Effect)}
 		if v.Key[0] == '-' {

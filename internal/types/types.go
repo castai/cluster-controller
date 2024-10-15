@@ -1,4 +1,4 @@
-package castai
+package types
 
 import (
 	"errors"

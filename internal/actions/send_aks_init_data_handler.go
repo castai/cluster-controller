@@ -18,11 +18,14 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	castai2 "github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/types"
 )
 
-func newSendAKSInitDataHandler(log logrus.FieldLogger, client castai2.ActionsClient) ActionHandler {
-	return &sendAKSInitDataHandler{
+var _ ActionHandler = &SendAKSInitDataHandler{}
+
+func NewSendAKSInitDataHandler(log logrus.FieldLogger, client castai.CastAIClient) *SendAKSInitDataHandler {
+	return &SendAKSInitDataHandler{
 		log:    log,
 		client: client,
 
@@ -31,15 +34,15 @@ func newSendAKSInitDataHandler(log logrus.FieldLogger, client castai2.ActionsCli
 	}
 }
 
-type sendAKSInitDataHandler struct {
+type SendAKSInitDataHandler struct {
 	log    logrus.FieldLogger
-	client castai2.ActionsClient
+	client castai.CastAIClient
 
 	baseDir         string
 	cloudConfigPath string
 }
 
-func (s *sendAKSInitDataHandler) Handle(ctx context.Context, _ *castai2.ClusterAction) error {
+func (s *SendAKSInitDataHandler) Handle(ctx context.Context, _ *types.ClusterAction) error {
 	cloudConfig, err := s.readCloudConfigBase64(s.cloudConfigPath)
 	if err != nil {
 		return fmt.Errorf("reading cloud config: %w", err)
@@ -56,14 +59,14 @@ func (s *sendAKSInitDataHandler) Handle(ctx context.Context, _ *castai2.ClusterA
 	if err != nil {
 		return fmt.Errorf("protected settings decrypt failed: %w", err)
 	}
-	return s.client.SendAKSInitData(ctx, &castai2.AKSInitDataRequest{
+	return s.client.SendAKSInitData(ctx, &types.AKSInitDataRequest{
 		CloudConfigBase64:       string(cloudConfig),
 		ProtectedSettingsBase64: base64.StdEncoding.EncodeToString(protectedSettings),
 	})
 }
 
 // readCloudConfigBase64 extracts base64 encoded cloud config content from XML file.
-func (s *sendAKSInitDataHandler) readCloudConfigBase64(cloudConfigPath string) ([]byte, error) {
+func (s *SendAKSInitDataHandler) readCloudConfigBase64(cloudConfigPath string) ([]byte, error) {
 	xmlContent, err := os.ReadFile(cloudConfigPath)
 	if err != nil {
 		return nil, err
@@ -80,7 +83,7 @@ func (s *sendAKSInitDataHandler) readCloudConfigBase64(cloudConfigPath string) (
 }
 
 // findSettingsPath searches for custom script settings file path which contains encrypted init data env variables.
-func (s *sendAKSInitDataHandler) findSettingsPath(baseDir string) (string, error) {
+func (s *SendAKSInitDataHandler) findSettingsPath(baseDir string) (string, error) {
 	var res string
 	err := filepath.WalkDir(baseDir, func(path string, d fs.DirEntry, err error) error {
 		if strings.Contains(path, "Microsoft.Azure.Extensions.CustomScript-") && strings.HasSuffix(path, "settings") {
@@ -98,7 +101,7 @@ func (s *sendAKSInitDataHandler) findSettingsPath(baseDir string) (string, error
 	return res, nil
 }
 
-func (s *sendAKSInitDataHandler) readSettings(settingsFilePath string) (*settings, error) {
+func (s *SendAKSInitDataHandler) readSettings(settingsFilePath string) (*settings, error) {
 	var res settings
 	settingsContent, err := os.ReadFile(settingsFilePath)
 	if err != nil {
@@ -110,7 +113,7 @@ func (s *sendAKSInitDataHandler) readSettings(settingsFilePath string) (*setting
 	return &res, nil
 }
 
-func (s *sendAKSInitDataHandler) decryptProtectedSettings(settings *settings) ([]byte, error) {
+func (s *SendAKSInitDataHandler) decryptProtectedSettings(settings *settings) ([]byte, error) {
 	protectedsettings := settings.Runtimesettings[0].Handlersettings.Protectedsettings
 	protectedSettingsBytes, err := base64.StdEncoding.DecodeString(protectedsettings)
 	if err != nil {

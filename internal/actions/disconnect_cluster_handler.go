@@ -5,26 +5,28 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/types"
 	"github.com/sirupsen/logrus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
-func newDisconnectClusterHandler(log logrus.FieldLogger, client kubernetes.Interface) ActionHandler {
-	return &disconnectClusterHandler{
+var _ ActionHandler = &DisconnectClusterHandler{}
+
+func NewDisconnectClusterHandler(log logrus.FieldLogger, client kubernetes.Interface) *DisconnectClusterHandler {
+	return &DisconnectClusterHandler{
 		log:    log,
 		client: client,
 	}
 }
 
-type disconnectClusterHandler struct {
+type DisconnectClusterHandler struct {
 	log    logrus.FieldLogger
 	client kubernetes.Interface
 }
 
-func (c *disconnectClusterHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+func (c *DisconnectClusterHandler) Handle(ctx context.Context, action *types.ClusterAction) error {
 	ns := "castai-agent"
 	_, err := c.client.CoreV1().Namespaces().Get(ctx, ns, metav1.GetOptions{})
 	if err != nil {
@@ -40,8 +42,8 @@ func (c *disconnectClusterHandler) Handle(ctx context.Context, action *castai.Cl
 		return err
 	}
 	log := c.log.WithFields(logrus.Fields{
-		"type":           reflect.TypeOf(action.Data().(*castai.ActionDisconnectCluster)).String(),
-		actionIDLogField: action.ID,
+		"type":           reflect.TypeOf(action.Data().(*types.ActionDisconnectCluster)).String(),
+		ActionIDLogField: action.ID,
 	})
 
 	log.Infof("deleting namespace %q", ns)

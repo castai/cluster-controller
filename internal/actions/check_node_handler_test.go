@@ -11,7 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/types"
 )
 
 func TestCheckNodeDeletedHandler(t *testing.T) {
@@ -29,15 +29,15 @@ func TestCheckNodeDeletedHandler(t *testing.T) {
 		}
 		clientset := fake.NewSimpleClientset(node)
 
-		h := checkNodeDeletedHandler{
+		h := CheckNodeDeletedHandler{
 			log:       log,
 			clientset: clientset,
 			cfg:       checkNodeDeletedConfig{},
 		}
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID:                     uuid.New().String(),
-			ActionCheckNodeDeleted: &castai.ActionCheckNodeDeleted{NodeName: "node1"},
+			ActionCheckNodeDeleted: &types.ActionCheckNodeDeleted{NodeName: "node1"},
 		}
 
 		err := h.Handle(context.Background(), action)
@@ -47,15 +47,15 @@ func TestCheckNodeDeletedHandler(t *testing.T) {
 	t.Run("handle check successfully when node is not found", func(t *testing.T) {
 		clientset := fake.NewSimpleClientset()
 
-		h := checkNodeDeletedHandler{
+		h := CheckNodeDeletedHandler{
 			log:       log,
 			clientset: clientset,
 			cfg:       checkNodeDeletedConfig{},
 		}
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID:                     uuid.New().String(),
-			ActionCheckNodeDeleted: &castai.ActionCheckNodeDeleted{NodeName: "node1"},
+			ActionCheckNodeDeleted: &types.ActionCheckNodeDeleted{NodeName: "node1"},
 		}
 
 		err := h.Handle(context.Background(), action)

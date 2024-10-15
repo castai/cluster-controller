@@ -11,9 +11,9 @@ import (
 	"helm.sh/helm/v3/pkg/release"
 	helmdriver "helm.sh/helm/v3/pkg/storage/driver"
 
-	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/helm"
 	"github.com/castai/cluster-controller/internal/helm/mock"
+	"github.com/castai/cluster-controller/internal/types"
 )
 
 func TestChartUpsertHandler(t *testing.T) {
@@ -22,10 +22,10 @@ func TestChartUpsertHandler(t *testing.T) {
 	helmMock := mock_helm.NewMockClient(ctrl)
 	ctx := context.Background()
 
-	handler := newChartUpsertHandler(logrus.New(), helmMock)
+	handler := NewChartUpsertHandler(logrus.New(), helmMock)
 
 	t.Run("install chart given release is not found", func(t *testing.T) {
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID:                uuid.New().String(),
 			ActionChartUpsert: chartUpsertAction(),
 		}
@@ -46,7 +46,7 @@ func TestChartUpsertHandler(t *testing.T) {
 	})
 
 	t.Run("upgrade chart given release is found", func(t *testing.T) {
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID:                uuid.New().String(),
 			ActionChartUpsert: chartUpsertAction(),
 		}
@@ -76,7 +76,7 @@ func TestChartUpsertHandler(t *testing.T) {
 	})
 
 	t.Run("rollback previous release before upgrade", func(t *testing.T) {
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID:                uuid.New().String(),
 			ActionChartUpsert: chartUpsertAction(),
 		}
@@ -103,12 +103,12 @@ func TestChartUpsertHandler(t *testing.T) {
 	})
 }
 
-func chartUpsertAction() *castai.ActionChartUpsert {
-	return &castai.ActionChartUpsert{
+func chartUpsertAction() *types.ActionChartUpsert {
+	return &types.ActionChartUpsert{
 		Namespace:       "test",
 		ReleaseName:     "new-release",
 		ValuesOverrides: map[string]string{"image.tag": "1.0.0"},
-		ChartSource: castai.ChartSource{
+		ChartSource: types.ChartSource{
 			RepoURL: "https://my-charts.repo",
 			Name:    "super-chart",
 			Version: "1.5.0",

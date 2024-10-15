@@ -22,8 +22,8 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	ktest "k8s.io/client-go/testing"
 
-	"github.com/castai/cluster-controller/internal/castai"
-	"github.com/castai/cluster-controller/internal/csr"
+	"github.com/castai/cluster-controller/internal/actions/csr"
+	"github.com/castai/cluster-controller/internal/types"
 )
 
 func TestApproveCSRHandler(t *testing.T) {
@@ -57,13 +57,13 @@ func TestApproveCSRHandler(t *testing.T) {
 			return true, approved, nil
 		})
 
-		actionApproveCSR := &castai.ClusterAction{
+		actionApproveCSR := &types.ClusterAction{
 			ID:               uuid.New().String(),
-			ActionApproveCSR: &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"},
+			ActionApproveCSR: &types.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"},
 			CreatedAt:        time.Time{},
 		}
 
-		h := &approveCSRHandler{
+		h := &ApproveCSRHandler{
 			log:                    log,
 			clientset:              client,
 			csrFetchInterval:       1 * time.Millisecond,
@@ -90,12 +90,12 @@ func TestApproveCSRHandler(t *testing.T) {
 		}
 		client := fake.NewSimpleClientset(csrRes)
 
-		actionApproveCSR := &castai.ClusterAction{
+		actionApproveCSR := &types.ClusterAction{
 			ID:               uuid.New().String(),
-			ActionApproveCSR: &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"},
+			ActionApproveCSR: &types.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"},
 			CreatedAt:        time.Time{},
 		}
-		h := &approveCSRHandler{
+		h := &ApproveCSRHandler{
 			log:                    log,
 			clientset:              client,
 			csrFetchInterval:       1 * time.Millisecond,
@@ -123,12 +123,12 @@ func TestApproveCSRHandler(t *testing.T) {
 		client := fake.NewSimpleClientset(csrRes)
 		client.PrependReactor("list", "certificatesigningrequests", fn)
 
-		actionApproveCSR := &castai.ClusterAction{
+		actionApproveCSR := &types.ClusterAction{
 			ID:               uuid.New().String(),
-			ActionApproveCSR: &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"},
+			ActionApproveCSR: &types.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"},
 			CreatedAt:        time.Time{},
 		}
-		h := &approveCSRHandler{
+		h := &ApproveCSRHandler{
 			log:                    log,
 			clientset:              client,
 			csrFetchInterval:       500 * time.Millisecond,
@@ -182,12 +182,12 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 			return true, approved, nil
 		})
 
-		actionApproveCSR := &castai.ClusterAction{
+		actionApproveCSR := &types.ClusterAction{
 			ID:               uuid.New().String(),
-			ActionApproveCSR: &castai.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"},
+			ActionApproveCSR: &types.ActionApproveCSR{NodeName: "gke-am-gcp-cast-5dc4f4ec"},
 			CreatedAt:        time.Time{},
 		}
-		h := &approveCSRHandler{
+		h := &ApproveCSRHandler{
 			log:                    log,
 			clientset:              client,
 			csrFetchInterval:       1 * time.Millisecond,
@@ -203,7 +203,7 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 		r := require.New(t)
 
 		client := fake.NewSimpleClientset()
-		h := &approveCSRHandler{
+		h := &ApproveCSRHandler{
 			log:                    log,
 			clientset:              client,
 			csrFetchInterval:       1 * time.Millisecond,
@@ -214,9 +214,9 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 		watcher.Stop()
 		client.PrependWatchReactor("certificatesigningrequests", ktest.DefaultWatchReactor(watcher, nil))
 
-		actionApproveCSR := &castai.ClusterAction{
+		actionApproveCSR := &types.ClusterAction{
 			ID:               uuid.New().String(),
-			ActionApproveCSR: &castai.ActionApproveCSR{NodeName: "node"},
+			ActionApproveCSR: &types.ActionApproveCSR{NodeName: "node"},
 			CreatedAt:        time.Time{},
 		}
 

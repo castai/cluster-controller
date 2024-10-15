@@ -14,7 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/types"
 )
 
 func TestDeleteNodeHandler(t *testing.T) {
@@ -31,14 +31,14 @@ func TestDeleteNodeHandler(t *testing.T) {
 		}
 		clientset := fake.NewSimpleClientset(node)
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDeleteNode: &castai.ActionDeleteNode{
+			ActionDeleteNode: &types.ActionDeleteNode{
 				NodeName: "node1",
 			},
 		}
 
-		h := deleteNodeHandler{
+		h := DeleteNodeHandler{
 			log:       log,
 			clientset: clientset,
 			cfg:       deleteNodeConfig{},
@@ -62,14 +62,14 @@ func TestDeleteNodeHandler(t *testing.T) {
 		}
 		clientset := fake.NewSimpleClientset(node)
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDeleteNode: &castai.ActionDeleteNode{
+			ActionDeleteNode: &types.ActionDeleteNode{
 				NodeName: "already-deleted-node",
 			},
 		}
 
-		h := deleteNodeHandler{
+		h := DeleteNodeHandler{
 			log:       log,
 			clientset: clientset,
 			cfg:       deleteNodeConfig{},
@@ -89,21 +89,21 @@ func TestDeleteNodeHandler(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: nodeName,
 				Labels: map[string]string{
-					castai.LabelNodeID: "node-id",
+					types.LabelNodeID: "node-id",
 				},
 			},
 		}
 		clientset := fake.NewSimpleClientset(node)
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDeleteNode: &castai.ActionDeleteNode{
+			ActionDeleteNode: &types.ActionDeleteNode{
 				NodeName: "node1",
 				NodeID:   "another-node-id",
 			},
 		}
 
-		h := deleteNodeHandler{
+		h := DeleteNodeHandler{
 			log:       log,
 			clientset: clientset,
 			cfg:       deleteNodeConfig{},
@@ -114,7 +114,7 @@ func TestDeleteNodeHandler(t *testing.T) {
 
 		existing, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
 		r.NoError(err)
-		existing.Labels[castai.LabelNodeID] = "node-id"
+		existing.Labels[types.LabelNodeID] = "node-id"
 	})
 
 	t.Run("delete node with pods", func(t *testing.T) {
@@ -123,20 +123,20 @@ func TestDeleteNodeHandler(t *testing.T) {
 		podName := "pod1"
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 
-		action := &castai.ClusterAction{
+		action := &types.ClusterAction{
 			ID: uuid.New().String(),
-			ActionDeleteNode: &castai.ActionDeleteNode{
+			ActionDeleteNode: &types.ActionDeleteNode{
 				NodeName: nodeName,
 			},
 		}
 
-		h := deleteNodeHandler{
+		h := DeleteNodeHandler{
 			log:       log,
 			clientset: clientset,
 			cfg: deleteNodeConfig{
 				podsTerminationWait: 1,
 			},
-			drainNodeHandler: drainNodeHandler{clientset: clientset, log: log},
+			DrainNodeHandler: DrainNodeHandler{clientset: clientset, log: log},
 		}
 
 		err := h.Handle(context.Background(), action)

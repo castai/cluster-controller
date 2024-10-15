@@ -12,17 +12,19 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/types"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
+
+var _ ActionHandler = &CheckNodeDeletedHandler{}
 
 type checkNodeDeletedConfig struct {
 	retries   int
 	retryWait time.Duration
 }
 
-func newCheckNodeDeletedHandler(log logrus.FieldLogger, clientset kubernetes.Interface) ActionHandler {
-	return &checkNodeDeletedHandler{
+func NewCheckNodeDeletedHandler(log logrus.FieldLogger, clientset kubernetes.Interface) *CheckNodeDeletedHandler {
+	return &CheckNodeDeletedHandler{
 		log:       log,
 		clientset: clientset,
 		cfg: checkNodeDeletedConfig{
@@ -32,14 +34,14 @@ func newCheckNodeDeletedHandler(log logrus.FieldLogger, clientset kubernetes.Int
 	}
 }
 
-type checkNodeDeletedHandler struct {
+type CheckNodeDeletedHandler struct {
 	log       logrus.FieldLogger
 	clientset kubernetes.Interface
 	cfg       checkNodeDeletedConfig
 }
 
-func (h *checkNodeDeletedHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
-	req, ok := action.Data().(*castai.ActionCheckNodeDeleted)
+func (h *CheckNodeDeletedHandler) Handle(ctx context.Context, action *types.ClusterAction) error {
+	req, ok := action.Data().(*types.ActionCheckNodeDeleted)
 	if !ok {
 		return fmt.Errorf("unexpected type %T for check node deleted handler", action.Data())
 	}
@@ -47,8 +49,8 @@ func (h *checkNodeDeletedHandler) Handle(ctx context.Context, action *castai.Clu
 	log := h.log.WithFields(logrus.Fields{
 		"node_name":      req.NodeName,
 		"node_id":        req.NodeID,
-		"type":           reflect.TypeOf(action.Data().(*castai.ActionCheckNodeDeleted)).String(),
-		actionIDLogField: action.ID,
+		"type":           reflect.TypeOf(action.Data().(*types.ActionCheckNodeDeleted)).String(),
+		ActionIDLogField: action.ID,
 	})
 	log.Info("checking if node is deleted")
 
@@ -68,7 +70,7 @@ func (h *checkNodeDeletedHandler) Handle(ctx context.Context, action *castai.Clu
 				return false, nil
 			}
 
-			currentNodeID, ok := n.Labels[castai.LabelNodeID]
+			currentNodeID, ok := n.Labels[types.LabelNodeID]
 			if !ok {
 				log.Info("node doesn't have castai node id label")
 			}
