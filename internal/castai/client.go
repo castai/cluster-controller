@@ -60,7 +60,7 @@ func NewRestyClient(url, key, ca string, level logrus.Level, binVersion *config.
 		Transport: clientTransport,
 	})
 
-	client.SetHostURL(url)
+	client.SetBaseURL(url)
 	client.Header.Set(headerAPIKey, key)
 	client.Header.Set(headerUserAgent, "castai-cluster-controller/"+binVersion.Version)
 	if level == logrus.TraceLevel {
@@ -73,7 +73,7 @@ func NewRestyClient(url, key, ca string, level logrus.Level, binVersion *config.
 func createHTTPTransport(ca string) (*http.Transport, error) {
 	tlsConfig, err := createTLSConfig(ca)
 	if err != nil {
-		return nil, fmt.Errorf("creating TLS config: %v", err)
+		return nil, fmt.Errorf("creating TLS config: %w", err)
 	}
 	t1 := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
@@ -123,7 +123,6 @@ func (c *Client) SendAKSInitData(ctx context.Context, req *AKSInitDataRequest) e
 		SetBody(req).
 		SetContext(ctx).
 		Post(fmt.Sprintf("/v1/kubernetes/external-clusters/%s/aks-init-data", c.clusterID))
-
 	if err != nil {
 		return fmt.Errorf("sending aks init data: %w", err)
 	}
@@ -149,7 +148,6 @@ func (c *Client) SendLog(ctx context.Context, e *logexporter.LogEntry) error {
 		SetBody(e).
 		SetContext(ctx).
 		Post(fmt.Sprintf("/v1/kubernetes/clusters/%s/actions/logs", c.clusterID))
-
 	if err != nil {
 		return fmt.Errorf("sending logs: %w", err)
 	}
@@ -182,7 +180,7 @@ func (c *Client) AckAction(ctx context.Context, actionID string, req *AckCluster
 		SetBody(req).
 		Post(fmt.Sprintf("/v1/kubernetes/clusters/%s/actions/%s/ack", c.clusterID, actionID))
 	if err != nil {
-		return fmt.Errorf("failed to request cluster-actions ack: %v", err)
+		return fmt.Errorf("failed to request cluster-actions ack: %w", err)
 	}
 	if resp.IsError() {
 		return fmt.Errorf("ack cluster-actions: request error status_code=%d body=%s", resp.StatusCode(), resp.Body())

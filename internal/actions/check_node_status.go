@@ -11,7 +11,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/internal/castai"
@@ -81,7 +80,7 @@ func (h *CheckNodeStatusHandler) checkNodeDeleted(ctx context.Context, log *logr
 			// If node is nil - deleted
 			// If label is present and doesn't match - node was reused - deleted
 			// If label is present and matches - node is not deleted
-			// If label is not present and node is not nil - node is not deleted (potentially corrupted state)
+			// If label is not present and node is not nil - node is not deleted (potentially corrupted state).
 
 			if n == nil {
 				return false, nil
@@ -113,7 +112,7 @@ func (h *CheckNodeStatusHandler) checkNodeDeleted(ctx context.Context, log *logr
 	)
 }
 
-func (h *CheckNodeStatusHandler) checkNodeReady(ctx context.Context, log *logrus.Entry, req *castai.ActionCheckNodeStatus) error {
+func (h *CheckNodeStatusHandler) checkNodeReady(ctx context.Context, _ *logrus.Entry, req *castai.ActionCheckNodeStatus) error {
 	timeout := 9 * time.Minute
 	watchObject := metav1.SingleObject(metav1.ObjectMeta{Name: req.NodeName})
 	if req.WaitTimeoutSeconds != nil {
@@ -141,7 +140,7 @@ func (h *CheckNodeStatusHandler) checkNodeReady(ctx context.Context, log *logrus
 
 func isNodeReady(node *corev1.Node, castNodeID string) bool {
 	// if node has castai node id label, check if it matches the one we are waiting for
-	// if it doesn't match, we can skip this node
+	// if it doesn't match, we can skip this node.
 	if val, ok := node.Labels[castai.LabelNodeID]; ok {
 		if val != "" && val != castNodeID {
 			return false

@@ -108,7 +108,7 @@ func (h *PatchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	return nil
 }
 
-func patchNodeMapField(values map[string]string, patch map[string]string) map[string]string {
+func patchNodeMapField(values, patch map[string]string) map[string]string {
 	if values == nil {
 		values = map[string]string{}
 	}

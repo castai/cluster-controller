@@ -178,11 +178,9 @@ type ActionCreateEvent struct {
 	Message   string             `json:"message"`
 }
 
-type ActionDisconnectCluster struct {
-}
+type ActionDisconnectCluster struct{}
 
-type ActionSendAKSInitData struct {
-}
+type ActionSendAKSInitData struct{}
 
 type ActionCheckNodeDeleted struct {
 	NodeName string `json:"nodeName"`

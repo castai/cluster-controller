@@ -36,6 +36,7 @@ type ApprovalManager struct {
 func (h *ApprovalManager) Start(ctx context.Context) {
 	go h.runAutoApproveForCastAINodes(ctx)
 }
+
 func (h *ApprovalManager) Stop(ctx context.Context) {
 	h.stopAutoApproveForCastAINodes()
 }
@@ -96,7 +97,7 @@ func (h *ApprovalManager) runAutoApproveForCastAINodes(ctx context.Context) {
 	defer cancel()
 
 	if !h.startAutoApprove(cancel) {
-		return // already running
+		return // already running.
 	}
 	defer h.stopAutoApproveForCastAINodes()
 

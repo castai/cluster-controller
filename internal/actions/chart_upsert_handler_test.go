@@ -2,10 +2,10 @@ package actions
 
 import (
 	"context"
-	"github.com/google/uuid"
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v3/pkg/release"

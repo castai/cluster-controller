@@ -24,7 +24,7 @@ func TestConfig(t *testing.T) {
 
 	expected := Config{
 		Log: Log{
-			Level: int(logrus.InfoLevel),
+			Level: uint32(logrus.InfoLevel),
 		},
 		PprofPort: 6060,
 		API: API{

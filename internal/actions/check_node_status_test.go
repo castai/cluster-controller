@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
@@ -356,7 +355,7 @@ func TestCheckStatus_Ready(t *testing.T) {
 		// 1. node is deleted
 		// 2. new node is created with the same name and different id
 		// 3. node is ready
-		// 4. checkNodeStatusHandler.Handle() is called
+		// 4. checkNodeStatusHandler.Handle() is called.
 		var wg sync.WaitGroup
 		wg.Add(2)
 		var err error

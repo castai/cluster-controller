@@ -3,20 +3,23 @@ package controller
 import (
 	"context"
 	"fmt"
-	"github.com/castai/cluster-controller/health"
-	mock_actions "github.com/castai/cluster-controller/internal/actions/mock"
-	"github.com/castai/cluster-controller/internal/castai"
-	"github.com/castai/cluster-controller/internal/castai/mock"
+	"testing"
+	"time"
+
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 	"k8s.io/client-go/kubernetes"
-	"testing"
-	"time"
+
+	"github.com/castai/cluster-controller/health"
+	mock_actions "github.com/castai/cluster-controller/internal/actions/mock"
+	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/castai/mock"
 )
 
+// nolint: govet
 func TestController_Run(t *testing.T) {
 	t.Parallel()
 	pollTimeout := 100 * time.Millisecond

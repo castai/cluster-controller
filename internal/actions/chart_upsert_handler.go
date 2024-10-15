@@ -41,7 +41,6 @@ func (c *ChartUpsertHandler) Handle(ctx context.Context, action *castai.ClusterA
 		Namespace:   req.Namespace,
 		ReleaseName: req.ReleaseName,
 	})
-
 	if err != nil {
 		if !errors.Is(err, helmdriver.ErrReleaseNotFound) {
 			return fmt.Errorf("getting helm release %q in namespace %q: %w", req.ReleaseName, req.Namespace, err)

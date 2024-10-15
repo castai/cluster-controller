@@ -253,6 +253,6 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 			Usages:     []certv1.KeyUsage{"kubelet"},
 			Username:   "kubelet-bootstrap",
 		},
-		//Status: certv1.CertificateSigningRequestStatus{},
+		// Status: certv1.CertificateSigningRequestStatus{},.
 	}
 }

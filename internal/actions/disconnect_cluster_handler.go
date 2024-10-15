@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/sirupsen/logrus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/castai/cluster-controller/internal/castai"
 )
 
 var _ ActionHandler = &DisconnectClusterHandler{}
@@ -49,7 +50,7 @@ func (c *DisconnectClusterHandler) Handle(ctx context.Context, action *castai.Cl
 	log.Infof("deleting namespace %q", ns)
 	gracePeriod := int64(0) // Delete immediately.
 	if err := c.client.CoreV1().Namespaces().Delete(ctx, ns, metav1.DeleteOptions{GracePeriodSeconds: &gracePeriod}); err != nil {
-		return fmt.Errorf("deleting namespace %q: %v", ns, err)
+		return fmt.Errorf("deleting namespace %q: %w", ns, err)
 	}
 
 	return nil

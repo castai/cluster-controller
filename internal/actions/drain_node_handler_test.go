@@ -226,7 +226,8 @@ func TestDrainNodeHandler(t *testing.T) {
 						podDeleteRetryDelay:           500 * time.Millisecond,
 						podEvictRetryDelay:            500 * time.Millisecond,
 						podsTerminationWaitRetryDelay: 1000 * time.Millisecond,
-					}}
+					},
+				}
 
 				actualCalls := 0
 				clientset.PrependReactor("delete", "pods", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
@@ -234,11 +235,11 @@ func TestDrainNodeHandler(t *testing.T) {
 					if deleteAction.Name == podName {
 						actualCalls++
 						// First call should be graceful; simulate it failed to validate we'll do the forced part.
-						// This relies on us not retrying 404s (or let's say it tests it :) )
+						// This relies on us not retrying 404s (or let's say it tests it :) ).
 						if deleteAction.DeleteOptions.GracePeriodSeconds == nil {
 							return true, nil, &apierrors.StatusError{ErrStatus: metav1.Status{Reason: metav1.StatusReasonNotFound}}
 						}
-						// Second call should be forced
+						// Second call should be forced.
 						r.Equal(int64(0), *deleteAction.DeleteOptions.GracePeriodSeconds)
 						return false, nil, nil
 					}
@@ -285,7 +286,8 @@ func TestDrainNodeHandler(t *testing.T) {
 				podDeleteRetryDelay:           5 * time.Second,
 				podEvictRetryDelay:            5 * time.Second,
 				podsTerminationWaitRetryDelay: 10 * time.Second,
-			}}
+			},
+		}
 
 		clientset.PrependReactor("delete", "pods", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
 			deleteAction := action.(ktest.DeleteActionImpl)
@@ -329,12 +331,13 @@ func TestDrainNodeHandler(t *testing.T) {
 			log:       log,
 			clientset: clientset,
 			cfg: drainNodeConfig{
-				podsDeleteTimeout:             0, // Force delete to timeout immediately
+				podsDeleteTimeout:             0, // Force delete to timeout immediately.
 				podDeleteRetries:              5,
 				podDeleteRetryDelay:           5 * time.Second,
 				podEvictRetryDelay:            5 * time.Second,
 				podsTerminationWaitRetryDelay: 10 * time.Second,
-			}}
+			},
+		}
 
 		actualDeleteCalls := 0
 		clientset.PrependReactor("delete", "pods", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
@@ -358,7 +361,7 @@ func TestDrainNodeHandler(t *testing.T) {
 	t.Run("force=true, failed eviction for PDBs should be retried until timeout before deleting", func(t *testing.T) {
 		t.Parallel()
 
-		// tests specifically that PDB error in eviction is retried and not failed fast
+		// tests specifically that PDB error in eviction is retried and not failed fast.
 		nodeName := "node1"
 		podName := "pod1"
 		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
@@ -436,7 +439,7 @@ func TestGetDrainTimeout(t *testing.T) {
 
 		timeout := h.getDrainTimeout(action)
 
-		// We give some wiggle room as the test might get here a few milliseconds late
+		// We give some wiggle room as the test might get here a few milliseconds late.
 		r.InDelta((100 * time.Second).Milliseconds(), timeout.Milliseconds(), 10)
 	})
 
@@ -504,7 +507,6 @@ func TestLogCastPodsToEvict(t *testing.T) {
 
 		r.Len(hook.Entries, 0)
 	})
-
 }
 
 func prependEvictionReaction(t *testing.T, c *fake.Clientset, success, retryableFailure bool) {
@@ -524,7 +526,7 @@ func prependEvictionReaction(t *testing.T, c *fake.Clientset, success, retryable
 			return true, nil, nil
 		}
 
-		// Simulate failure that should be retried by client
+		// Simulate failure that should be retried by client.
 		if retryableFailure {
 			return true, nil, &apierrors.StatusError{ErrStatus: metav1.Status{Reason: metav1.StatusReasonTooManyRequests}}
 		}
@@ -533,6 +535,7 @@ func prependEvictionReaction(t *testing.T, c *fake.Clientset, success, retryable
 	})
 }
 
+// nolint: unparam
 func setupFakeClientWithNodePodEviction(nodeName, podName string) *fake.Clientset {
 	node := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{

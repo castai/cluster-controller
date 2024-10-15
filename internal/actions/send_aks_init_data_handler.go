@@ -64,13 +64,11 @@ func (s *SendAKSInitDataHandler) Handle(ctx context.Context, _ *castai.ClusterAc
 	})
 }
 
+var customDataRegex = regexp.MustCompile(`<ns1:CustomData>(.*?)<\/ns1:CustomData>`)
+
 // readCloudConfigBase64 extracts base64 encoded cloud config content from XML file.
 func (s *SendAKSInitDataHandler) readCloudConfigBase64(cloudConfigPath string) ([]byte, error) {
 	xmlContent, err := os.ReadFile(cloudConfigPath)
-	if err != nil {
-		return nil, err
-	}
-	customDataRegex, err := regexp.Compile(`<ns1:CustomData>(.*?)<\/ns1:CustomData>`)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +89,7 @@ func (s *SendAKSInitDataHandler) findSettingsPath(baseDir string) (string, error
 		}
 		return err
 	})
-	if err != nil && err != io.EOF {
+	if errors.Is(err, io.EOF) {
 		return "", err
 	}
 	if res == "" {
@@ -145,10 +143,9 @@ func (s *SendAKSInitDataHandler) decryptProtectedSettings(settings *settings) ([
 type settings struct {
 	Runtimesettings []struct {
 		Handlersettings struct {
-			Publicsettings struct {
-			} `json:"publicSettings"`
-			Protectedsettings               string `json:"protectedSettings"`
-			Protectedsettingscertthumbprint string `json:"protectedSettingsCertThumbprint"`
+			Publicsettings                  struct{} `json:"publicSettings"`
+			Protectedsettings               string   `json:"protectedSettings"`
+			Protectedsettingscertthumbprint string   `json:"protectedSettingsCertThumbprint"`
 		} `json:"handlerSettings"`
 	} `json:"runtimeSettings"`
 }

@@ -23,7 +23,7 @@ type Config struct {
 }
 
 type Log struct {
-	Level int
+	Level uint32
 }
 
 type API struct {
@@ -80,11 +80,11 @@ func Get() Config {
 
 	cfg = &Config{}
 	if err := viper.Unmarshal(&cfg); err != nil {
-		panic(fmt.Errorf("parsing configuration: %v", err))
+		panic(fmt.Errorf("parsing configuration: %w", err))
 	}
 
 	if cfg.Log.Level == 0 {
-		cfg.Log.Level = int(logrus.InfoLevel)
+		cfg.Log.Level = uint32(logrus.InfoLevel)
 	}
 	if cfg.PprofPort == 0 {
 		cfg.PprofPort = 6060

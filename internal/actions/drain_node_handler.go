@@ -27,7 +27,7 @@ import (
 var _ ActionHandler = &DrainNodeHandler{}
 
 const (
-	minDrainTimeout = 0 // Minimal pod drain timeout
+	minDrainTimeout = 0 // Minimal pod drain timeout.
 )
 
 type drainNodeConfig struct {
@@ -126,7 +126,7 @@ func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	case errors.As(err, &podsFailedEvictionErr):
 		log.Infof("some pods failed eviction, force=%v, starting pod deletion: %v", req.Force, err)
 	default:
-		// Expected to be errors where we can't continue at all; e.g. missing permissions or lack of connectivity
+		// Expected to be errors where we can't continue at all; e.g. missing permissions or lack of connectivity.
 		return fmt.Errorf("evicting node pods: %w", err)
 	}
 
@@ -143,7 +143,7 @@ func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 
 		deleteErr = h.deleteNodePods(deleteCtx, log, node, o)
 
-		// Clean-up the child context if we got here; no reason to wait for the function to exit
+		// Clean-up the child context if we got here; no reason to wait for the function to exit.
 		deleteCancel()
 
 		if deleteErr == nil {
@@ -181,7 +181,7 @@ func (h *DrainNodeHandler) cordonNode(ctx context.Context, node *v1.Node) error 
 	return nil
 }
 
-// Return error if at least one pod failed (but don't wait for it!) => to signal if we should do force delete
+// Return error if at least one pod failed (but don't wait for it!) => to signal if we should do force delete.
 
 // evictNodePods attempts voluntarily eviction for all pods on node.
 // This method will wait until all evictable pods on the node either terminate or fail deletion.
@@ -321,7 +321,7 @@ func (h *DrainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.F
 
 	podsToEvict := make([]v1.Pod, 0)
 	castPods := make([]v1.Pod, 0)
-	// Evict CAST PODs as last ones
+	// Evict CAST PODs as last ones.
 	for _, p := range pods.Items {
 		// Skip pods that have been recently removed.
 		if !p.ObjectMeta.DeletionTimestamp.IsZero() &&
@@ -360,7 +360,7 @@ func (h *DrainNodeHandler) waitNodePodsTerminated(ctx context.Context, log logru
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		// Continue with the work
+		// Continue with the work.
 	}
 
 	podsToIgnoreLookup := make(map[string]struct{})

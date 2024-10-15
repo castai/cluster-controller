@@ -4,6 +4,7 @@ package actions
 import (
 	"context"
 	"fmt"
+
 	"github.com/castai/cluster-controller/internal/castai"
 )
 
@@ -13,7 +14,7 @@ const (
 	ActionIDLogField = "id"
 )
 
-func newUnexpectedTypeErr(value interface{}, expectedType interface{}) error {
+func newUnexpectedTypeErr(value, expectedType interface{}) error {
 	return fmt.Errorf("unexpected type %T, expected %T", value, expectedType)
 }
 

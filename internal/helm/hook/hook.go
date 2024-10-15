@@ -11,7 +11,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// group/version/kind/namespace/name
+// group/version/kind/namespace/name.
 var labelIgnoreResources = map[string]struct{}{
 	"rbac.authorization.k8s.io/v1/ClusterRole//castai-evictor":        {},
 	"rbac.authorization.k8s.io/v1/ClusterRoleBinding//castai-evictor": {},

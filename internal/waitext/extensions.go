@@ -21,7 +21,7 @@ const (
 )
 
 // DefaultExponentialBackoff creates an exponential backoff with sensible default values.
-// Defaults should match ExponentialBackoff in github.com/cenkalti/backoff
+// Defaults should match ExponentialBackoff in github.com/cenkalti/backoff.
 func DefaultExponentialBackoff() wait.Backoff {
 	return wait.Backoff{
 		Duration: defaultInitialInterval,
@@ -34,7 +34,7 @@ func DefaultExponentialBackoff() wait.Backoff {
 
 // NewConstantBackoff creates a backoff that steps at constant intervals.
 // This backoff will run "forever", use WithMaxRetries or a context to put a hard cap.
-// This works similar to ConstantBackOff in github.com/cenkalti/backoff
+// This works similar to ConstantBackOff in github.com/cenkalti/backoff.
 func NewConstantBackoff(interval time.Duration) wait.Backoff {
 	return wait.Backoff{
 		Duration: interval,
@@ -63,20 +63,20 @@ func NewConstantBackoff(interval time.Duration) wait.Backoff {
 //   - a multi-error if context is cancelled that contains - the ctx.Err(), context.Cause() and last encountered error from the operation
 //
 // If retryNotify is passed, it is called when making retries.
-// Caveat: this function is similar to wait.ExponentialBackoff but has some important behavior differences like at-least-one execution and retryable errors
+// Caveat: this function is similar to wait.ExponentialBackoff but has some important behavior differences like at-least-one execution and retryable errors.
 func Retry(ctx context.Context, backoff wait.Backoff, retries int, operation func(context.Context) (bool, error), retryNotify func(error)) error {
 	var lastErr error
 	var shouldRetry bool
 
 	shouldRetry, lastErr = operation(ctx)
 
-	// No retry needed
+	// No retry needed.
 	if lastErr == nil || !shouldRetry {
 		return lastErr
 	}
 
 	for retries > 0 {
-		// Notify about expected retry
+		// Notify about expected retry.
 		if retryNotify != nil {
 			retryNotify(lastErr)
 		}
@@ -91,7 +91,7 @@ func Retry(ctx context.Context, backoff wait.Backoff, retries int, operation fun
 		shouldRetry, lastErr = operation(ctx)
 		retries--
 
-		// We are done
+		// We are done.
 		if lastErr == nil || !shouldRetry {
 			break
 		}

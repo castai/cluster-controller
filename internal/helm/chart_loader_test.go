@@ -5,9 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
+
+	"github.com/castai/cluster-controller/internal/castai"
 )
 
 func TestIntegration_ChartLoader(t *testing.T) {

@@ -3,19 +3,17 @@ package csr
 import (
 	"context"
 	"sync"
-
+	"testing"
 	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	certv1 "k8s.io/api/certificates/v1"
-	"k8s.io/apimachinery/pkg/watch"
-	ktest "k8s.io/client-go/testing"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/fake"
+	ktest "k8s.io/client-go/testing"
 )
-import "testing"
 
 func getCSR(name, username string) *certv1.CertificateSigningRequest {
 	return &certv1.CertificateSigningRequest{
@@ -34,7 +32,7 @@ S59zc2bEaJ3y4aSMXLY3gmri14jZvvnFrxaPDT2PAiEA7C3hvZwrCJsoO61JWKqc
 			Usages:     []certv1.KeyUsage{"kubelet"},
 			Username:   username,
 		},
-		//Status: certv1.CertificateSigningRequestStatus{},
+		// Status: certv1.CertificateSigningRequestStatus{},.
 	}
 }
 

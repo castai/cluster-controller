@@ -69,7 +69,7 @@ func patchNodeStatus(ctx context.Context, log logrus.FieldLogger, clientset kube
 		func(ctx context.Context) (bool, error) {
 			_, err := clientset.CoreV1().Nodes().PatchStatus(ctx, name, patch)
 			if k8serrors.IsForbidden(err) {
-				// permissions might be of older version that can't patch node/status
+				// permissions might be of older version that can't patch node/status.
 				log.WithField("node", name).WithError(err).Warn("skip patch node/status")
 				return false, nil
 			}
@@ -79,7 +79,6 @@ func patchNodeStatus(ctx context.Context, log logrus.FieldLogger, clientset kube
 			log.Warnf("patch node status, will retry: %v", err)
 		},
 	)
-
 	if err != nil {
 		return fmt.Errorf("patch status: %w", err)
 	}
@@ -117,7 +116,6 @@ func getNodeForPatching(ctx context.Context, log logrus.FieldLogger, clientset k
 		return nil, err
 	}
 	return node, nil
-
 }
 
 // executeBatchPodActions executes the action for each pod in the list.

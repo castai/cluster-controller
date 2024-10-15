@@ -56,7 +56,7 @@ func TestRetry(t *testing.T) {
 			backoff.Jitter = 0
 
 			// There is no "initial" wait so 0 index simulates zero.
-			// The rest are calculated as interval * factor^(ix) without jitter for simplicity
+			// The rest are calculated as interval * factor^(ix) without jitter for simplicity.
 			expectedWaitTimes := []time.Duration{
 				time.Millisecond,
 				10 * time.Millisecond,
@@ -76,7 +76,7 @@ func TestRetry(t *testing.T) {
 
 				t.Log("wait time", waitTime)
 
-				// We give some tolerance as we can't be precise to the nanosecond here
+				// We give some tolerance as we can't be precise to the nanosecond here.
 				r.InDelta(expectedWaitTimes[indexWaitTimes], waitTime, float64(2*time.Millisecond))
 				indexWaitTimes++
 

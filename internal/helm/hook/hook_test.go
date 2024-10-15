@@ -26,7 +26,7 @@ type k8sObjectDetails struct {
 	updateLabels bool
 }
 
-func renderManifestTemplate(apiVersion string, kind string, name string, appVersion string, chartVersion string) (string, error) {
+func renderManifestTemplate(apiVersion, kind, name, appVersion, chartVersion string) (string, error) {
 	vars := map[string]interface{}{
 		"ApiVersion":   apiVersion,
 		"Kind":         kind,
@@ -61,7 +61,6 @@ metadata:
 	}
 
 	return renderedTemplate.String(), nil
-
 }
 
 func TestIgnoreHook(t *testing.T) {

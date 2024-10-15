@@ -164,7 +164,7 @@ func (s *Controller) handleActions(ctx context.Context, clusterActions []*castai
 				err = handleErr
 			}
 			if ackErr != nil {
-				err = fmt.Errorf("%v:%w", err, ackErr)
+				err = fmt.Errorf("%v:%w", err, ackErr) // nolint:errorlint
 			}
 			if err != nil {
 				s.log.WithFields(logrus.Fields{

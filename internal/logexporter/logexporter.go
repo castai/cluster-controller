@@ -91,7 +91,6 @@ func (e *LogExporter) sendLogEvent(log *logrus.Entry) {
 	}, func(err error) {
 		e.logger.Debugf("failed to send logs, will retry: %s", err)
 	})
-
 	if err != nil {
 		e.logger.Debugf("sending logs: %v", err)
 	}

@@ -73,7 +73,6 @@ func main() {
 	cl, err := castai.NewRestyClient(cfg.API.URL, cfg.API.Key, cfg.TLS.CACert, logger.Level, binVersion, maxRequestTimeout)
 	if err != nil {
 		log.Fatalf("failed to create castai client: %v", err)
-
 	}
 	client := castai.NewClient(logger, cl, cfg.ClusterID)
 
@@ -83,7 +82,7 @@ func main() {
 
 	ctx := signals.SetupSignalHandler()
 	if err := run(ctx, client, logger, cfg, binVersion); err != nil {
-		logErr := &logContextErr{}
+		logErr := &logContextError{}
 		if errors.As(err, &logErr) {
 			log = logger.WithFields(logErr.fields)
 		}
@@ -104,7 +103,7 @@ func run(
 		if reterr == nil {
 			return
 		}
-		reterr = &logContextErr{
+		reterr = &logContextError{
 			err:    reterr,
 			fields: fields,
 		}
@@ -149,7 +148,7 @@ func run(
 		"ctrl_pod_name": cfg.PodName,
 	})
 
-	// Set logr/klog to logrus adapter so all logging goes through logrus
+	// Set logr/klog to logrus adapter so all logging goes through logrus.
 	logr := logrusr.New(log)
 	klog.SetLogger(logr)
 
@@ -194,6 +193,8 @@ func run(
 		addr := fmt.Sprintf(":%d", cfg.PprofPort)
 		log.Infof("starting pprof server on %s", addr)
 
+		//TODO: remove nolint when we have a proper solution for this
+		//nolint:gosec
 		if err := http.ListenAndServe(addr, httpMux); err != nil {
 			log.Errorf("failed to start pprof http server: %v", err)
 		}
@@ -238,7 +239,7 @@ func runWithLeaderElection(
 	}
 	id = id + "_" + uuid.New().String()
 
-	// Start the leader election code loop
+	// Start the leader election code loop.
 	leaderelection.RunOrDie(ctx, leaderelection.LeaderElectionConfig{
 		Lock: &resourcelock.LeaseLock{
 			LeaseMeta: metav1.ObjectMeta{
@@ -379,16 +380,16 @@ func (rt *kubeRetryTransport) RoundTrip(req *http.Request) (*http.Response, erro
 	return resp, err
 }
 
-type logContextErr struct {
+type logContextError struct {
 	err    error
 	fields logrus.Fields
 }
 
-func (e *logContextErr) Error() string {
+func (e *logContextError) Error() string {
 	return e.err.Error()
 }
 
-func (e *logContextErr) Unwrap() error {
+func (e *logContextError) Unwrap() error {
 	return e.err
 }
 
@@ -399,7 +400,7 @@ func runningOnGKE(clientset *kubernetes.Clientset, cfg config2.Config) (isGKE bo
 			return true, fmt.Errorf("getting node: %w", err)
 		}
 
-		for k, _ := range node.Labels {
+		for k := range node.Labels {
 			if strings.HasPrefix(k, "cloud.google.com/") {
 				isGKE = true
 				return false, nil
@@ -408,7 +409,6 @@ func runningOnGKE(clientset *kubernetes.Clientset, cfg config2.Config) (isGKE bo
 
 		return false, nil
 	}, func(err error) {
-
 	})
 
 	return

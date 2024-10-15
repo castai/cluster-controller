@@ -27,9 +27,7 @@ const (
 	approvedMessage = "This CSR was approved by CAST AI"
 )
 
-var (
-	ErrNodeCertificateNotFound = errors.New("node certificate not found")
-)
+var ErrNodeCertificateNotFound = errors.New("node certificate not found")
 
 // Certificate wraps v1 and v1beta1 csr.
 type Certificate struct {
@@ -311,7 +309,7 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 		case event, ok := <-w.ResultChan():
 			if !ok {
 				log.Debug("watcher closed")
-				go WatchCastAINodeCSRs(ctx, log, client, c) // start over in case of any error
+				go WatchCastAINodeCSRs(ctx, log, client, c) // start over in case of any error.
 				return
 			}
 
@@ -421,6 +419,7 @@ func parseCSR(pemData []byte) (*x509.CertificateRequest, error) {
 	return x509.ParseCertificateRequest(block.Bytes)
 }
 
+//nolint:unparam
 func getOptions(signer string) metav1.ListOptions {
 	return metav1.ListOptions{
 		FieldSelector: fields.SelectorFromSet(fields.Set{

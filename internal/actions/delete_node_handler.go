@@ -189,7 +189,8 @@ func (h *DeleteNodeHandler) deleteNodeVolumeAttachments(ctx context.Context, nod
 			// Delete the volume attachment.
 			if err := h.clientset.StorageV1().VolumeAttachments().
 				Delete(ctx, va.Name, metav1.DeleteOptions{
-					GracePeriodSeconds: &gracePeriod}); err != nil {
+					GracePeriodSeconds: &gracePeriod,
+				}); err != nil {
 				return err
 			}
 		}

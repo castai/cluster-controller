@@ -2,14 +2,15 @@ package actions
 
 import (
 	"context"
-	"github.com/google/uuid"
 	"testing"
+
+	"github.com/golang/mock/gomock"
+	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/require"
 
 	"github.com/castai/cluster-controller/internal/castai"
 	mock_castai "github.com/castai/cluster-controller/internal/castai/mock"
-	"github.com/golang/mock/gomock"
-	"github.com/sirupsen/logrus"
-	"github.com/stretchr/testify/require"
 )
 
 func TestAKSInitDataHandler(t *testing.T) {

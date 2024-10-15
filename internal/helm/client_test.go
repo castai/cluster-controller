@@ -5,7 +5,6 @@ import (
 	"io"
 	"testing"
 
-	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v3/pkg/action"
@@ -16,6 +15,8 @@ import (
 	"helm.sh/helm/v3/pkg/storage"
 	"helm.sh/helm/v3/pkg/storage/driver"
 	"helm.sh/helm/v3/pkg/time"
+
+	"github.com/castai/cluster-controller/internal/castai"
 )
 
 func TestClientInstall(t *testing.T) {
