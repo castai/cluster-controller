@@ -32,7 +32,7 @@ func NewCreateHandler(log logrus.FieldLogger, client dynamic.Interface) *CreateH
 }
 
 func (h *CreateHandler) Handle(ctx context.Context, action *types.ClusterAction) error {
-	req, ok := action.Data().(types.ActionCreate)
+	req, ok := action.Data().(*types.ActionCreate)
 	if !ok {
 		return newUnexpectedTypeErr(action.Data(), req)
 	}
