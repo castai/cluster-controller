@@ -34,6 +34,7 @@ import (
 	castai2 "github.com/castai/cluster-controller/internal/castai"
 	config2 "github.com/castai/cluster-controller/internal/config"
 	"github.com/castai/cluster-controller/internal/csr"
+	"github.com/castai/cluster-controller/internal/k8sversion"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
 
