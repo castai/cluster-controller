@@ -16,7 +16,7 @@ import (
 	"github.com/castai/cluster-controller/internal/waitext"
 )
 
-var _ ActionHandler = &CheckNodeDeletedHandler{}
+var _ types.ActionHandler = &CheckNodeDeletedHandler{}
 
 type checkNodeDeletedConfig struct {
 	retries   int

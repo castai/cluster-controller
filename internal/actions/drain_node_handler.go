@@ -24,7 +24,7 @@ import (
 	"github.com/castai/cluster-controller/internal/waitext"
 )
 
-var _ ActionHandler = &DrainNodeHandler{}
+var _ types.ActionHandler = &DrainNodeHandler{}
 
 const (
 	minDrainTimeout = 0 // Minimal pod drain timeout

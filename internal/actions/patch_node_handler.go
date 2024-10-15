@@ -16,7 +16,7 @@ import (
 	"github.com/castai/cluster-controller/internal/types"
 )
 
-var _ ActionHandler = &PatchNodeHandler{}
+var _ types.ActionHandler = &PatchNodeHandler{}
 
 func NewPatchNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface) *PatchNodeHandler {
 	return &PatchNodeHandler{

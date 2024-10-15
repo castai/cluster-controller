@@ -14,7 +14,7 @@ import (
 	"github.com/castai/cluster-controller/internal/types"
 )
 
-var _ ActionHandler = &CreateEventHandler{}
+var _ types.ActionHandler = &CreateEventHandler{}
 
 func NewCreateEventHandler(log logrus.FieldLogger, clientset kubernetes.Interface) *CreateEventHandler {
 	factory := func(ns, reporter string) (record.EventBroadcaster, record.EventRecorder) {

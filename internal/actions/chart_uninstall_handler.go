@@ -11,7 +11,7 @@ import (
 	"github.com/castai/cluster-controller/internal/types"
 )
 
-var _ ActionHandler = &ChartUninstallHandler{}
+var _ types.ActionHandler = &ChartUninstallHandler{}
 
 func NewChartUninstallHandler(log logrus.FieldLogger, helm helm.Client) *ChartUninstallHandler {
 	return &ChartUninstallHandler{

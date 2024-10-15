@@ -22,7 +22,7 @@ import (
 	"github.com/castai/cluster-controller/internal/types"
 )
 
-var _ ActionHandler = &SendAKSInitDataHandler{}
+var _ types.ActionHandler = &SendAKSInitDataHandler{}
 
 func NewSendAKSInitDataHandler(log logrus.FieldLogger, client castai.CastAIClient) *SendAKSInitDataHandler {
 	return &SendAKSInitDataHandler{

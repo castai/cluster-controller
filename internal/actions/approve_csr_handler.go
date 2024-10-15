@@ -20,7 +20,7 @@ const (
 	approveCSRTimeout = 4 * time.Minute
 )
 
-var _ ActionHandler = &ApproveCSRHandler{}
+var _ types.ActionHandler = &ApproveCSRHandler{}
 
 func NewApproveCSRHandler(log logrus.FieldLogger, clientset kubernetes.Interface) *ApproveCSRHandler {
 	return &ApproveCSRHandler{

@@ -5,11 +5,11 @@
 package mock_castai
 
 import (
-	"context"
-	"reflect"
+	context "context"
+	reflect "reflect"
 
-	"github.com/castai/cluster-controller/internal/types"
-	"github.com/golang/mock/gomock"
+	types "github.com/castai/cluster-controller/internal/types"
+	gomock "github.com/golang/mock/gomock"
 )
 
 // MockCastAIClient is a mock of CastAIClient interface.

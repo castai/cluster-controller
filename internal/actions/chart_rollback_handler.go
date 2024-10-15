@@ -11,7 +11,7 @@ import (
 	"github.com/castai/cluster-controller/internal/types"
 )
 
-var _ ActionHandler = &ChartRollbackHandler{}
+var _ types.ActionHandler = &ChartRollbackHandler{}
 
 func NewChartRollbackHandler(log logrus.FieldLogger, helm helm.Client, version string) *ChartRollbackHandler {
 	return &ChartRollbackHandler{

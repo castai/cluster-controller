@@ -18,7 +18,7 @@ import (
 	"github.com/castai/cluster-controller/internal/waitext"
 )
 
-var _ ActionHandler = &DeleteNodeHandler{}
+var _ types.ActionHandler = &DeleteNodeHandler{}
 
 type deleteNodeConfig struct {
 	deleteRetries       int

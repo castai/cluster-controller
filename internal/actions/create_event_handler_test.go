@@ -13,29 +13,29 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
+	k8s_types "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/record"
 
-	types2 "github.com/castai/cluster-controller/internal/types"
+	"github.com/castai/cluster-controller/internal/types"
 )
 
 func TestCreateEvent(t *testing.T) {
 	r := require.New(t)
-	id := types.UID(uuid.New().String())
+	id := k8s_types.UID(uuid.New().String())
 
 	tests := []struct {
 		name          string
-		action        *types2.ClusterAction
+		action        *types.ClusterAction
 		actionCount   int
 		object        runtime.Object
 		expectedEvent *corev1.Event
 	}{
 		{
 			name: "create single pod event",
-			action: &types2.ClusterAction{
+			action: &types.ClusterAction{
 				ID: uuid.New().String(),
-				ActionCreateEvent: &types2.ActionCreateEvent{
+				ActionCreateEvent: &types.ActionCreateEvent{
 					Reporter:  "autoscaler.cast.ai",
 					ObjectRef: podObjReference(testPod(id)),
 					EventTime: time.Now(),
@@ -59,9 +59,9 @@ func TestCreateEvent(t *testing.T) {
 		},
 		{
 			name: "create several pod events",
-			action: &types2.ClusterAction{
+			action: &types.ClusterAction{
 				ID: "",
-				ActionCreateEvent: &types2.ActionCreateEvent{
+				ActionCreateEvent: &types.ActionCreateEvent{
 					Reporter:  "provisioning.cast.ai",
 					ObjectRef: podObjReference(testPod(id)),
 					EventTime: time.Now(),
@@ -133,7 +133,7 @@ func TestRandomNs(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 	actionCount := 10
-	clientSet := fake.NewSimpleClientset(testPod(types.UID(uuid.New().String())))
+	clientSet := fake.NewSimpleClientset(testPod(k8s_types.UID(uuid.New().String())))
 	recorders := make([]*record.FakeRecorder, 0, actionCount)
 	h := CreateEventHandler{
 		log:       logrus.New(),
@@ -152,9 +152,9 @@ func TestRandomNs(t *testing.T) {
 	wg.Add(actionCount)
 	for i := 0; i < actionCount; i++ {
 		go func() {
-			err := h.Handle(ctx, &types2.ClusterAction{
+			err := h.Handle(ctx, &types.ClusterAction{
 				ID: uuid.New().String(),
-				ActionCreateEvent: &types2.ActionCreateEvent{
+				ActionCreateEvent: &types.ActionCreateEvent{
 					ObjectRef: podObjReference(
 						&corev1.Pod{
 							ObjectMeta: metav1.ObjectMeta{
@@ -196,7 +196,7 @@ func TestRandomNs(t *testing.T) {
 	}
 }
 
-func testPod(id types.UID) *corev1.Pod {
+func testPod(id k8s_types.UID) *corev1.Pod {
 	return &corev1.Pod{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pod",

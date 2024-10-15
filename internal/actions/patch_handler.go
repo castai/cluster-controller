@@ -16,7 +16,7 @@ import (
 	"github.com/castai/cluster-controller/internal/types"
 )
 
-var _ ActionHandler = &PatchHandler{}
+var _ types.ActionHandler = &PatchHandler{}
 
 type PatchHandler struct {
 	log    logrus.FieldLogger

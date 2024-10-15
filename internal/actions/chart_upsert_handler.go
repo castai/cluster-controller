@@ -13,7 +13,7 @@ import (
 	"github.com/castai/cluster-controller/internal/types"
 )
 
-var _ ActionHandler = &ChartUpsertHandler{}
+var _ types.ActionHandler = &ChartUpsertHandler{}
 
 func NewChartUpsertHandler(log logrus.FieldLogger, helm helm.Client) *ChartUpsertHandler {
 	return &ChartUpsertHandler{

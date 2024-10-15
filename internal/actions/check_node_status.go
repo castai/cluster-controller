@@ -18,7 +18,7 @@ import (
 	"github.com/castai/cluster-controller/internal/waitext"
 )
 
-var _ ActionHandler = &CheckNodeStatusHandler{}
+var _ types.ActionHandler = &CheckNodeStatusHandler{}
 
 func NewCheckNodeStatusHandler(log logrus.FieldLogger, clientset kubernetes.Interface) *CheckNodeStatusHandler {
 	return &CheckNodeStatusHandler{

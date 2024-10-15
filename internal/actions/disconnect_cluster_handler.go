@@ -12,7 +12,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-var _ ActionHandler = &DisconnectClusterHandler{}
+var _ types.ActionHandler = &DisconnectClusterHandler{}
 
 func NewDisconnectClusterHandler(log logrus.FieldLogger, client kubernetes.Interface) *DisconnectClusterHandler {
 	return &DisconnectClusterHandler{

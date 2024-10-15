@@ -6,19 +6,18 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/castai/cluster-controller/internal/types"
 	jsonpatch "github.com/evanphx/json-patch"
 	"github.com/sirupsen/logrus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
+	k8s_types "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
-
-	types2 "github.com/castai/cluster-controller/internal/types"
 )
 
-var _ ActionHandler = &CreateHandler{}
+var _ types.ActionHandler = &CreateHandler{}
 
 type CreateHandler struct {
 	log    logrus.FieldLogger
@@ -32,8 +31,8 @@ func NewCreateHandler(log logrus.FieldLogger, client dynamic.Interface) *CreateH
 	}
 }
 
-func (h *CreateHandler) Handle(ctx context.Context, action *types2.ClusterAction) error {
-	req, ok := action.Data().(*types2.ActionCreate)
+func (h *CreateHandler) Handle(ctx context.Context, action *types.ClusterAction) error {
+	req, ok := action.Data().(types.ActionCreate)
 	if !ok {
 		return newUnexpectedTypeErr(action.Data(), req)
 	}
@@ -107,7 +106,7 @@ func (h *CreateHandler) Handle(ctx context.Context, action *types2.ClusterAction
 		}
 
 		log.Infof("patching resource: %s", patch)
-		_, err = r.Patch(ctx, obj.GetName(), types.MergePatchType, patch, metav1.PatchOptions{})
+		_, err = r.Patch(ctx, obj.GetName(), k8s_types.MergePatchType, patch, metav1.PatchOptions{})
 		if err != nil {
 			return fmt.Errorf("patching resource %v: %w", obj.GetName(), err)
 		}

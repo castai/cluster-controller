@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"context"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 )
@@ -246,4 +247,8 @@ type AKSInitDataRequest struct {
 	CloudConfigBase64       string `json:"cloudConfigBase64"`
 	ProtectedSettingsBase64 string `json:"protectedSettingsBase64"`
 	Architecture            string `json:"architecture"`
+}
+
+type ActionHandler interface {
+	Handle(ctx context.Context, action *ClusterAction) error
 }

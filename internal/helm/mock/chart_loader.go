@@ -8,7 +8,7 @@ import (
 	"context"
 	"reflect"
 
-	"github.com/castai/cluster-controller/castai"
+	"github.com/castai/cluster-controller/internal/types"
 	"github.com/golang/mock/gomock"
 	"helm.sh/helm/v3/pkg/chart"
 )
@@ -37,7 +37,7 @@ func (m *MockChartLoader) EXPECT() *MockChartLoaderMockRecorder {
 }
 
 // Load mocks base method.
-func (m *MockChartLoader) Load(arg0 context.Context, arg1 *castai.ChartSource) (*chart.Chart, error) {
+func (m *MockChartLoader) Load(arg0 context.Context, arg1 *types.ChartSource) (*chart.Chart, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Load", arg0, arg1)
 	ret0, _ := ret[0].(*chart.Chart)

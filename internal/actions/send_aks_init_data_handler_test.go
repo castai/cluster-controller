@@ -13,12 +13,17 @@ import (
 )
 
 func TestAKSInitDataHandler(t *testing.T) {
-	r := require.New(t)
 	log := logrus.New()
 	log.SetLevel(logrus.DebugLevel)
 
 	m := gomock.NewController(t)
 	client := mock_castai.NewMockCastAIClient(m)
+	client.EXPECT().SendAKSInitData(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, req *types.AKSInitDataRequest) error {
+			require.NotEmpty(t, req.CloudConfigBase64)
+			require.NotEmpty(t, req.ProtectedSettingsBase64)
+			return nil
+		})
 	h := SendAKSInitDataHandler{
 		log:             log,
 		client:          client,
@@ -32,8 +37,5 @@ func TestAKSInitDataHandler(t *testing.T) {
 	}
 	ctx := context.Background()
 	err := h.Handle(ctx, action)
-
-	r.NoError(err)
-	//r.NotEmpty(client.AKSInitDataReq.CloudConfigBase64)
-	//r.NotEmpty(client.AKSInitDataReq.ProtectedSettingsBase64)
+	require.NoError(t, err)
 }

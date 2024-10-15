@@ -14,7 +14,7 @@ import (
 	"github.com/castai/cluster-controller/internal/types"
 )
 
-var _ ActionHandler = &DeleteHandler{}
+var _ types.ActionHandler = &DeleteHandler{}
 
 type DeleteHandler struct {
 	log    logrus.FieldLogger
