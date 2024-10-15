@@ -5,11 +5,14 @@ go 1.22
 require (
 	github.com/bombsimon/logrusr/v4 v4.0.0
 	github.com/evanphx/json-patch v5.7.0+incompatible
+	github.com/fsnotify/fsnotify v1.7.0
 	github.com/go-resty/resty/v2 v2.5.0
 	github.com/golang/mock v1.6.0
 	github.com/google/uuid v1.3.1
 	github.com/samber/lo v1.21.0
 	github.com/sirupsen/logrus v1.9.3
+	github.com/spf13/cobra v1.8.0
+	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.10.0
 	github.com/stretchr/testify v1.8.4
 	go.uber.org/goleak v1.2.0
@@ -56,7 +59,6 @@ require (
 	github.com/exponent-io/jsonpath v0.0.0-20151013193312-d6023ce2651d // indirect
 	github.com/fatih/color v1.13.0 // indirect
 	github.com/felixge/httpsnoop v1.0.3 // indirect
-	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/go-errors/errors v1.4.2 // indirect
 	github.com/go-gorp/gorp/v3 v3.1.0 // indirect
 	github.com/go-logr/logr v1.3.0 // indirect
@@ -124,9 +126,7 @@ require (
 	github.com/shopspring/decimal v1.3.1 // indirect
 	github.com/spf13/afero v1.6.0 // indirect
 	github.com/spf13/cast v1.5.0 // indirect
-	github.com/spf13/cobra v1.8.0 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
-	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/subosito/gotenv v1.2.0 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect

@@ -5,12 +5,12 @@
 package mock_helm
 
 import (
-	context "context"
-	reflect "reflect"
+	"context"
+	"reflect"
 
-	castai "github.com/castai/cluster-controller/castai"
-	gomock "github.com/golang/mock/gomock"
-	chart "helm.sh/helm/v3/pkg/chart"
+	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/golang/mock/gomock"
+	"helm.sh/helm/v3/pkg/chart"
 )
 
 // MockChartLoader is a mock of ChartLoader interface.
