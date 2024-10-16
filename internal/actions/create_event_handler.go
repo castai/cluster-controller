@@ -1,4 +1,4 @@
-//go:generate mockgen -package=mock_proxy -destination ./mock/event.go k8s.io/client-go/kubernetes/typed/core/v1 EventInterface
+//go:generate mockgen -package=mock_actions -destination ./mock/kubernetes.go k8s.io/client-go/kubernetes Interface
 
 package actions
 
@@ -9,11 +9,11 @@ import (
 
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/kubernetes"
 	typedv1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/record"
 
 	"github.com/castai/cluster-controller/internal/castai"
-	"k8s.io/client-go/kubernetes"
 )
 
 var _ ActionHandler = &CreateEventHandler{}
@@ -58,31 +58,51 @@ func (h *CreateEventHandler) Handle(ctx context.Context, action *castai.ClusterA
 		namespace = v1.NamespaceDefault
 	}
 
-	h.handleEventV1(ctx, req, namespace, action.ID)
+	h.handleEventV1(ctx, req, namespace)
 	return nil
 }
 
-func (h *CreateEventHandler) handleEventV1(_ context.Context, req *castai.ActionCreateEvent, namespace, actionID string) {
-	h.mu.RLock()
-	//h.log.Debug("handling create event action: %s type: %s", req.Action, req.EventType)
-	if recorder, ok := h.eventNsRecorder[fmt.Sprintf("%s-%s", namespace, req.Reporter)]; ok {
-		h.log.Infof("%v handling create event 1: %v %s %s %v %v %v", actionID, fmt.Sprintf("%s-%s", namespace, req.Reporter), req.Action, req.ObjectRef, req.EventType, req.Reason, req.Message)
+func (h *CreateEventHandler) handleEventV1(_ context.Context, req *castai.ActionCreateEvent, namespace string) {
+	h.log.Debug("handling create event action: %s type: %s", req.Action, req.EventType)
+	if recorder, ok := h.getRecorder(namespace, req.Reporter); ok {
 		recorder.Event(&req.ObjectRef, v1.EventTypeNormal, req.Reason, req.Message)
-		h.mu.RUnlock()
 	} else {
-		h.mu.RUnlock()
-		h.mu.Lock()
-		// Double check after acquiring the lock.
-		if recorder, ok := h.eventNsRecorder[namespace]; !ok {
-			broadcaster, rec := h.recorderFactory(namespace, req.Reporter)
-			h.eventNsBroadcaster[fmt.Sprintf("%s-%s", namespace, req.Reporter)] = broadcaster
-			h.eventNsRecorder[fmt.Sprintf("%s-%s", namespace, req.Reporter)] = rec
-			h.log.Infof("%v handling create event 2: %v %s %s %v %v %v", actionID, fmt.Sprintf("%s-%s", namespace, req.Reporter), req.Action, req.ObjectRef, req.EventType, req.Reason, req.Message)
-			rec.Event(&req.ObjectRef, req.EventType, req.Reason, req.Message)
-		} else {
-			h.log.Infof("%v handling create event 3: %v %s %s %v %v %v", actionID, fmt.Sprintf("%s-%s", namespace, req.Reporter), req.Action, req.ObjectRef, req.EventType, req.Reason, req.Message)
-			recorder.Event(&req.ObjectRef, req.EventType, req.Reason, req.Message)
-		}
-		h.mu.Unlock()
+		rec := h.createRecorder(namespace, req.Reporter)
+		rec.Event(&req.ObjectRef, req.EventType, req.Reason, req.Message)
 	}
+}
+
+func (h *CreateEventHandler) getRecorder(namespace, reporter string) (record.EventRecorder, bool) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	recorder, ok := h.eventNsRecorder[fmt.Sprintf("%s-%s", namespace, reporter)]
+	return recorder, ok
+}
+
+func (h *CreateEventHandler) createRecorder(namespace, reporter string) record.EventRecorder {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	key := fmt.Sprintf("%s-%s", namespace, reporter)
+	if _, ok := h.eventNsRecorder[key]; !ok {
+		h.log.Infof("creating event recorder and broadcaster for %v", fmt.Sprintf("%s-%s", namespace, reporter))
+		broadcaster, rec := h.recorderFactory(namespace, reporter)
+		h.eventNsBroadcaster[key] = broadcaster
+		h.eventNsRecorder[key] = rec
+	}
+
+	return h.eventNsRecorder[key]
+}
+
+func (h *CreateEventHandler) Close() error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	for _, broadcaster := range h.eventNsBroadcaster {
+		broadcaster.Shutdown()
+	}
+	h.eventNsBroadcaster = map[string]record.EventBroadcaster{}
+	h.eventNsRecorder = map[string]record.EventRecorder{}
+
+	return nil
 }

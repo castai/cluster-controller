@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -17,6 +18,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/record"
 
+	mock_actions "github.com/castai/cluster-controller/internal/actions/mock"
 	"github.com/castai/cluster-controller/internal/castai"
 )
 
@@ -86,7 +88,7 @@ func TestCreateEvent(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			clientSet := fake.NewSimpleClientset(test.object)
+			clientSet := fake.NewClientset(test.object)
 			recorder := record.NewFakeRecorder(test.actionCount)
 			broadCaster := record.NewBroadcasterForTests(time.Second * 10)
 			h := CreateEventHandler{
@@ -133,7 +135,7 @@ func TestRandomNs(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 	actionCount := 10
-	clientSet := fake.NewSimpleClientset(testPod(k8s_types.UID(uuid.New().String())))
+	clientSet := fake.NewClientset(testPod(k8s_types.UID(uuid.New().String())))
 	recorders := make([]*record.FakeRecorder, 0, actionCount)
 	h := CreateEventHandler{
 		log:       logrus.New(),
@@ -218,5 +220,65 @@ func podObjReference(p *corev1.Pod) corev1.ObjectReference {
 		UID:             p.UID,
 		APIVersion:      p.APIVersion,
 		ResourceVersion: p.ResourceVersion,
+	}
+}
+
+func TestCreateEventHandler_Handle(t *testing.T) {
+	t.Parallel()
+	type fields struct {
+		tuneMockClientSey func(m *mock_actions.MockInterface)
+	}
+	type args struct {
+		action *castai.ClusterAction
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "detect race condition: recorder and broadcaster should be called only once",
+			fields: fields{
+				tuneMockClientSey: func(m *mock_actions.MockInterface) {
+					fakeClientSet := fake.NewClientset()
+					m.EXPECT().CoreV1().Return(fakeClientSet.CoreV1())
+				},
+			},
+			args: args{
+				action: &castai.ClusterAction{
+					ID: "test-id",
+					ActionCreateEvent: &castai.ActionCreateEvent{
+						Reporter: "test-reporter",
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			m := gomock.NewController(t)
+			defer m.Finish()
+			client := mock_actions.NewMockInterface(m)
+			if tt.fields.tuneMockClientSey != nil {
+				tt.fields.tuneMockClientSey(client)
+			}
+			handler := NewCreateEventHandler(logrus.New(), client)
+			// defer handler.Close()
+			actionCount := 10000
+			wg := sync.WaitGroup{}
+			for i := 0; i < actionCount; i++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					if err := handler.Handle(context.Background(), tt.args.action); (err != nil) != tt.wantErr {
+						t.Errorf("Handle() error = %v, wantErr %v", err, tt.wantErr)
+					}
+				}()
+			}
+			wg.Wait()
+		})
 	}
 }
