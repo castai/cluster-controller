@@ -112,13 +112,14 @@ func createTLSConfig(ca string) (*tls.Config, error) {
 	if !certPool.AppendCertsFromPEM([]byte(ca)) {
 		return nil, fmt.Errorf("failed to add root certificate to CA pool")
 	}
-	// If the user did not configure a MinVersion and did not configure a
-	// MaxVersion < 1.2, use MinVersion=1.2, which is required by
-	// https://datatracker.ietf.org/doc/html/rfc7540#section-9.2
 
 	return &tls.Config{
-		RootCAs:    certPool,
-		MinVersion: tls.VersionTLS12,
+		RootCAs: certPool,
+		//TODO set min version
+		// If the user did not configure a MinVersion and did not configure a
+		// MaxVersion < 1.2, use MinVersion=1.2, which is required by
+		// https://datatracker.ietf.org/doc/html/rfc7540#section-9.2
+		//MinVersion: tls.VersionTLS12,
 	}, nil
 }
 
@@ -173,7 +174,7 @@ func (c *Client) GetActions(ctx context.Context, k8sVersion string) ([]*ClusterA
 		return nil, fmt.Errorf("failed to request cluster-actions: %w", err)
 	}
 	if resp.IsError() {
-		return nil, fmt.Errorf("get cluster-actions: request error host=%s, status_code=%d body=%s", c.rest.HostURL, resp.StatusCode(), resp.Body())
+		return nil, fmt.Errorf("get cluster-actions: request error host=%s, status_code=%d body=%s", c.rest.BaseURL, resp.StatusCode(), resp.Body())
 	}
 	return res.Items, nil
 }
