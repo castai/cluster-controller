@@ -112,14 +112,10 @@ func createTLSConfig(ca string) (*tls.Config, error) {
 	if !certPool.AppendCertsFromPEM([]byte(ca)) {
 		return nil, fmt.Errorf("failed to add root certificate to CA pool")
 	}
-	//nolint:gosec
+
 	return &tls.Config{
-		RootCAs: certPool,
-		//TODO set min version
-		// If the user did not configure a MinVersion and did not configure a
-		// MaxVersion < 1.2, use MinVersion=1.2, which is required by
-		// https://datatracker.ietf.org/doc/html/rfc7540#section-9.2
-		//MinVersion: tls.VersionTLS12,
+		RootCAs:    certPool,
+		MinVersion: tls.VersionTLS12,
 	}, nil
 }
 
