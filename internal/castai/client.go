@@ -115,6 +115,7 @@ func createTLSConfig(ca string) (*tls.Config, error) {
 
 	return &tls.Config{
 		RootCAs: certPool,
+		//nolint:gosec
 		//TODO set min version
 		// If the user did not configure a MinVersion and did not configure a
 		// MaxVersion < 1.2, use MinVersion=1.2, which is required by
