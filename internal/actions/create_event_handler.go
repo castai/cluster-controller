@@ -1,3 +1,5 @@
+//go:generate mockgen -package=mock_proxy -destination ./mock/event.go k8s.io/client-go/kubernetes/typed/core/v1 EventInterface
+
 package actions
 
 import (
@@ -7,11 +9,11 @@ import (
 
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/kubernetes"
 	typedv1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/record"
 
 	"github.com/castai/cluster-controller/internal/castai"
+	"k8s.io/client-go/kubernetes"
 )
 
 var _ ActionHandler = &CreateEventHandler{}
@@ -55,14 +57,16 @@ func (h *CreateEventHandler) Handle(ctx context.Context, action *castai.ClusterA
 	if namespace == "" {
 		namespace = v1.NamespaceDefault
 	}
-	h.handleEventV1(ctx, req, namespace)
+
+	h.handleEventV1(ctx, req, namespace, action.ID)
 	return nil
 }
 
-func (h *CreateEventHandler) handleEventV1(_ context.Context, req *castai.ActionCreateEvent, namespace string) {
+func (h *CreateEventHandler) handleEventV1(_ context.Context, req *castai.ActionCreateEvent, namespace, actionID string) {
 	h.mu.RLock()
-	h.log.Debug("handling create event action: %s type: %s", req.Action, req.EventType)
+	//h.log.Debug("handling create event action: %s type: %s", req.Action, req.EventType)
 	if recorder, ok := h.eventNsRecorder[fmt.Sprintf("%s-%s", namespace, req.Reporter)]; ok {
+		h.log.Infof("%v handling create event 1: %v %s %s %v %v %v", actionID, fmt.Sprintf("%s-%s", namespace, req.Reporter), req.Action, req.ObjectRef, req.EventType, req.Reason, req.Message)
 		recorder.Event(&req.ObjectRef, v1.EventTypeNormal, req.Reason, req.Message)
 		h.mu.RUnlock()
 	} else {
@@ -73,8 +77,10 @@ func (h *CreateEventHandler) handleEventV1(_ context.Context, req *castai.Action
 			broadcaster, rec := h.recorderFactory(namespace, req.Reporter)
 			h.eventNsBroadcaster[fmt.Sprintf("%s-%s", namespace, req.Reporter)] = broadcaster
 			h.eventNsRecorder[fmt.Sprintf("%s-%s", namespace, req.Reporter)] = rec
+			h.log.Infof("%v handling create event 2: %v %s %s %v %v %v", actionID, fmt.Sprintf("%s-%s", namespace, req.Reporter), req.Action, req.ObjectRef, req.EventType, req.Reason, req.Message)
 			rec.Event(&req.ObjectRef, req.EventType, req.Reason, req.Message)
 		} else {
+			h.log.Infof("%v handling create event 3: %v %s %s %v %v %v", actionID, fmt.Sprintf("%s-%s", namespace, req.Reporter), req.Action, req.ObjectRef, req.EventType, req.Reason, req.Message)
 			recorder.Event(&req.ObjectRef, req.EventType, req.Reason, req.Message)
 		}
 		h.mu.Unlock()
