@@ -1,9 +1,8 @@
 package health
 
 import (
-	"time"
-
 	"testing"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -11,7 +10,6 @@ import (
 
 func TestNewHealthzProvider(t *testing.T) {
 	t.Run("unhealthy statuses", func(t *testing.T) {
-
 		log := logrus.New()
 
 		t.Run("should return initialize timeout error", func(t *testing.T) {
@@ -36,7 +34,6 @@ func TestNewHealthzProvider(t *testing.T) {
 	})
 
 	t.Run("healthy statuses", func(t *testing.T) {
-
 		log := logrus.New()
 
 		t.Run("cluster-controller is considered healthy before initialization", func(t *testing.T) {
@@ -62,5 +59,4 @@ func TestNewHealthzProvider(t *testing.T) {
 			r.NoError(h.Check(nil))
 		})
 	})
-
 }

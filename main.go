@@ -28,14 +28,15 @@ import (
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
-	"github.com/castai/cluster-controller/actions"
-	"github.com/castai/cluster-controller/castai"
-	"github.com/castai/cluster-controller/config"
-	"github.com/castai/cluster-controller/csr"
 	"github.com/castai/cluster-controller/health"
-	"github.com/castai/cluster-controller/helm"
-	"github.com/castai/cluster-controller/version"
-	"github.com/castai/cluster-controller/waitext"
+	"github.com/castai/cluster-controller/internal/actions/csr"
+	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/config"
+	"github.com/castai/cluster-controller/internal/controller"
+	"github.com/castai/cluster-controller/internal/helm"
+	"github.com/castai/cluster-controller/internal/k8sversion"
+	"github.com/castai/cluster-controller/internal/logexporter"
+	"github.com/castai/cluster-controller/internal/waitext"
 )
 
 // These should be set via `go build` during a release.
@@ -72,17 +73,16 @@ func main() {
 	cl, err := castai.NewRestyClient(cfg.API.URL, cfg.API.Key, cfg.TLS.CACert, logger.Level, binVersion, maxRequestTimeout)
 	if err != nil {
 		log.Fatalf("failed to create castai client: %v", err)
-
 	}
 	client := castai.NewClient(logger, cl, cfg.ClusterID)
 
-	e := castai.NewLogExporter(logger, client)
+	e := logexporter.NewLogExporter(logger, client)
 	logger.AddHook(e)
 	logrus.RegisterExitHandler(e.Wait)
 
 	ctx := signals.SetupSignalHandler()
 	if err := run(ctx, client, logger, cfg, binVersion); err != nil {
-		logErr := &logContextErr{}
+		logErr := &logContextError{}
 		if errors.As(err, &logErr) {
 			log = logger.WithFields(logErr.fields)
 		}
@@ -92,7 +92,7 @@ func main() {
 
 func run(
 	ctx context.Context,
-	client castai.ActionsClient,
+	client castai.CastAIClient,
 	logger *logrus.Logger,
 	cfg config.Config,
 	binVersion *config.ClusterControllerVersion,
@@ -103,7 +103,7 @@ func run(
 		if reterr == nil {
 			return
 		}
-		reterr = &logContextErr{
+		reterr = &logContextError{
 			err:    reterr,
 			fields: fields,
 		}
@@ -136,7 +136,7 @@ func run(
 		return err
 	}
 
-	k8sVersion, err := version.Get(clientset)
+	k8sVersion, err := k8sversion.Get(clientset)
 	if err != nil {
 		return fmt.Errorf("getting kubernetes version: %w", err)
 	}
@@ -148,13 +148,13 @@ func run(
 		"ctrl_pod_name": cfg.PodName,
 	})
 
-	// Set logr/klog to logrus adapter so all logging goes through logrus
+	// Set logr/klog to logrus adapter so all logging goes through logrus.
 	logr := logrusr.New(log)
 	klog.SetLogger(logr)
 
 	log.Infof("running castai-cluster-controller version %v, log-level: %v", binVersion, logger.Level)
 
-	actionsConfig := actions.Config{
+	actionsConfig := controller.Config{
 		PollWaitInterval: 5 * time.Second,
 		PollTimeout:      maxRequestTimeout,
 		AckTimeout:       30 * time.Second,
@@ -166,7 +166,7 @@ func run(
 	}
 	healthzAction := health.NewHealthzProvider(health.HealthzCfg{HealthyPollIntervalLimit: (actionsConfig.PollWaitInterval + actionsConfig.PollTimeout) * 2, StartTimeLimit: 2 * time.Minute}, log)
 
-	svc := actions.NewService(
+	svc := controller.NewService(
 		log,
 		actionsConfig,
 		k8sVersion.Full(),
@@ -176,6 +176,11 @@ func run(
 		helmClient,
 		healthzAction,
 	)
+	defer func() {
+		if err := svc.Close(); err != nil {
+			log.Errorf("failed to close controller service: %v", err)
+		}
+	}()
 
 	httpMux := http.NewServeMux()
 	var checks []healthz.HealthChecker
@@ -193,6 +198,8 @@ func run(
 		addr := fmt.Sprintf(":%d", cfg.PprofPort)
 		log.Infof("starting pprof server on %s", addr)
 
+		//TODO: remove nolint when we have a proper solution for this
+		//nolint:gosec
 		if err := http.ListenAndServe(addr, httpMux); err != nil {
 			log.Errorf("failed to start pprof http server: %v", err)
 		}
@@ -237,7 +244,7 @@ func runWithLeaderElection(
 	}
 	id = id + "_" + uuid.New().String()
 
-	// Start the leader election code loop
+	// Start the leader election code loop.
 	leaderelection.RunOrDie(ctx, leaderelection.LeaderElectionConfig{
 		Lock: &resourcelock.LeaseLock{
 			LeaseMeta: metav1.ObjectMeta{
@@ -378,16 +385,16 @@ func (rt *kubeRetryTransport) RoundTrip(req *http.Request) (*http.Response, erro
 	return resp, err
 }
 
-type logContextErr struct {
+type logContextError struct {
 	err    error
 	fields logrus.Fields
 }
 
-func (e *logContextErr) Error() string {
+func (e *logContextError) Error() string {
 	return e.err.Error()
 }
 
-func (e *logContextErr) Unwrap() error {
+func (e *logContextError) Unwrap() error {
 	return e.err
 }
 
@@ -398,7 +405,7 @@ func runningOnGKE(clientset *kubernetes.Clientset, cfg config.Config) (isGKE boo
 			return true, fmt.Errorf("getting node: %w", err)
 		}
 
-		for k, _ := range node.Labels {
+		for k := range node.Labels {
 			if strings.HasPrefix(k, "cloud.google.com/") {
 				isGKE = true
 				return false, nil
@@ -407,7 +414,6 @@ func runningOnGKE(clientset *kubernetes.Clientset, cfg config.Config) (isGKE boo
 
 		return false, nil
 	}, func(err error) {
-
 	})
 
 	return
