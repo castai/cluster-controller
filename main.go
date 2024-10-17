@@ -31,9 +31,9 @@ import (
 	"github.com/castai/cluster-controller/health"
 	"github.com/castai/cluster-controller/internal/actions/csr"
 	"github.com/castai/cluster-controller/internal/castai"
-	config2 "github.com/castai/cluster-controller/internal/config"
+	"github.com/castai/cluster-controller/internal/config"
 	"github.com/castai/cluster-controller/internal/controller"
-	helm2 "github.com/castai/cluster-controller/internal/helm"
+	"github.com/castai/cluster-controller/internal/helm"
 	"github.com/castai/cluster-controller/internal/k8sversion"
 	"github.com/castai/cluster-controller/internal/logexporter"
 	"github.com/castai/cluster-controller/internal/waitext"
@@ -52,9 +52,9 @@ const (
 
 func main() {
 	log := logrus.WithFields(logrus.Fields{})
-	cfg := config2.Get()
+	cfg := config.Get()
 
-	binVersion := &config2.ClusterControllerVersion{
+	binVersion := &config.ClusterControllerVersion{
 		GitCommit: GitCommit,
 		GitRef:    GitRef,
 		Version:   Version,
@@ -94,8 +94,8 @@ func run(
 	ctx context.Context,
 	client castai.CastAIClient,
 	logger *logrus.Logger,
-	cfg config2.Config,
-	binVersion *config2.ClusterControllerVersion,
+	cfg config.Config,
+	binVersion *config.ClusterControllerVersion,
 ) (reterr error) {
 	fields := logrus.Fields{}
 
@@ -120,7 +120,7 @@ func run(
 	restConfigLeader.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(float32(cfg.KubeClient.QPS), cfg.KubeClient.Burst)
 	restConfigDynamic.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(float32(cfg.KubeClient.QPS), cfg.KubeClient.Burst)
 
-	helmClient := helm2.NewClient(logger, helm2.NewChartLoader(logger), restconfig)
+	helmClient := helm.NewClient(logger, helm.NewChartLoader(logger), restconfig)
 
 	clientset, err := kubernetes.NewForConfig(restconfig)
 	if err != nil {
@@ -230,7 +230,7 @@ func runWithLeaderElection(
 	log logrus.FieldLogger,
 	clientset kubernetes.Interface,
 	watchDog *leaderelection.HealthzAdaptor,
-	cfg config2.LeaderElection,
+	cfg config.LeaderElection,
 	runFunc func(ctx context.Context),
 ) error {
 	id, err := os.Hostname()
@@ -305,7 +305,7 @@ func installPprofHandlers(mux *http.ServeMux) {
 }
 
 func kubeConfigFromEnv() (*rest.Config, error) {
-	kubepath := config2.Get().Kubeconfig
+	kubepath := config.Get().Kubeconfig
 	if kubepath == "" {
 		return nil, nil
 	}
@@ -393,7 +393,7 @@ func (e *logContextError) Unwrap() error {
 	return e.err
 }
 
-func runningOnGKE(clientset *kubernetes.Clientset, cfg config2.Config) (isGKE bool, err error) {
+func runningOnGKE(clientset *kubernetes.Clientset, cfg config.Config) (isGKE bool, err error) {
 	err = waitext.Retry(context.Background(), waitext.DefaultExponentialBackoff(), 3, func(ctx context.Context) (bool, error) {
 		node, err := clientset.CoreV1().Nodes().Get(ctx, cfg.NodeName, metav1.GetOptions{})
 		if err != nil {
