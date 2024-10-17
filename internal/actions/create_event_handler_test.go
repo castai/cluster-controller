@@ -95,10 +95,11 @@ func TestCreateEvent(t *testing.T) {
 				log:       logrus.New(),
 				clientSet: clientSet,
 				eventNsRecorder: map[string]record.EventRecorder{
-					"castai": recorder,
+					"castai-autoscaler.cast.ai":   recorder,
+					"castai-provisioning.cast.ai": recorder,
 				},
 				eventNsBroadcaster: map[string]record.EventBroadcaster{
-					"castai": broadCaster,
+					"castai-provisioning.cast.ai": broadCaster,
 				},
 			}
 			ctx := context.Background()
