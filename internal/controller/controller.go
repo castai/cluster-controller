@@ -248,3 +248,7 @@ func getHandlerError(err error) *string {
 	}
 	return nil
 }
+
+func (s *Controller) Close() error {
+	return s.actionHandlers[reflect.TypeOf(&castai.ActionCreateEvent{})].(*actions.CreateEventHandler).Close()
+}

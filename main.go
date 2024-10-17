@@ -176,6 +176,11 @@ func run(
 		helmClient,
 		healthzAction,
 	)
+	defer func() {
+		if err := svc.Close(); err != nil {
+			log.Errorf("failed to close controller service: %v", err)
+		}
+	}()
 
 	httpMux := http.NewServeMux()
 	var checks []healthz.HealthChecker
