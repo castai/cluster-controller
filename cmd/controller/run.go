@@ -3,11 +3,26 @@ package controller
 import (
 	"context"
 	"fmt"
-
-	"github.com/sirupsen/logrus"
-	"k8s.io/client-go/kubernetes"
+	"net/http"
+	"net/http/pprof"
+	"os"
+	"strings"
+	"time"
 
 	"github.com/bombsimon/logrusr/v4"
+	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apiserver/pkg/server/healthz"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/leaderelection"
+	"k8s.io/client-go/tools/leaderelection/resourcelock"
+	"k8s.io/client-go/util/flowcontrol"
+	"k8s.io/klog/v2"
+
+	"github.com/castai/cluster-controller/cmd/utils"
 	"github.com/castai/cluster-controller/health"
 	"github.com/castai/cluster-controller/internal/actions/csr"
 	"github.com/castai/cluster-controller/internal/castai"
@@ -17,20 +32,6 @@ import (
 	"github.com/castai/cluster-controller/internal/helm"
 	"github.com/castai/cluster-controller/internal/k8sversion"
 	"github.com/castai/cluster-controller/internal/waitext"
-	"github.com/google/uuid"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apiserver/pkg/server/healthz"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/leaderelection"
-	"k8s.io/client-go/tools/leaderelection/resourcelock"
-	"k8s.io/client-go/util/flowcontrol"
-	"k8s.io/klog/v2"
-	"net/http"
-	"net/http/pprof"
-	"os"
-	"strings"
-	"time"
 )
 
 const (
@@ -41,15 +42,14 @@ func run(ctx context.Context) error {
 	log := logrus.WithFields(logrus.Fields{})
 	cfg := config.Get()
 
-	binVersion := ctx.Value("agentVersion").(*config.ClusterControllerVersion)
+	binVersion := ctx.Value(utils.ClusterControllerVersionKey).(*config.ClusterControllerVersion)
 	log.Infof("running castai-cluster-controller version %v", binVersion)
 
-	logger := logexporter.NewLogger(uint32(cfg.Log.Level))
+	logger := logexporter.NewLogger(cfg.Log.Level)
 
 	cl, err := castai.NewRestyClient(cfg.API.URL, cfg.API.Key, cfg.TLS.CACert, logger.Level, binVersion, maxRequestTimeout)
 	if err != nil {
 		log.Fatalf("failed to create castai client: %v", err)
-
 	}
 
 	client := castai.NewClient(logger, cl, cfg.ClusterID)
@@ -75,7 +75,7 @@ func runController(
 		if reterr == nil {
 			return
 		}
-		reterr = &logContextErr{
+		reterr = &logContextError{
 			err:    reterr,
 			fields: fields,
 		}
@@ -281,16 +281,16 @@ func installPprofHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 }
 
-type logContextErr struct {
+type logContextError struct {
 	err    error
 	fields logrus.Fields
 }
 
-func (e *logContextErr) Error() string {
+func (e *logContextError) Error() string {
 	return e.err.Error()
 }
 
-func (e *logContextErr) Unwrap() error {
+func (e *logContextError) Unwrap() error {
 	return e.err
 }
 
@@ -310,7 +310,6 @@ func runningOnGKE(clientset *kubernetes.Clientset, cfg config.Config) (isGKE boo
 
 		return false, nil
 	}, func(err error) {
-
 	})
 
 	return

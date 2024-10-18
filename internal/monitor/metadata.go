@@ -27,7 +27,7 @@ func (m *Metadata) Save(file string) error {
 	if err != nil {
 		return fmt.Errorf("marshaling: %w", err)
 	}
-	return os.WriteFile(file, contents, 0600)
+	return os.WriteFile(file, contents, 0o600)
 }
 
 func (m *Metadata) Load(file string) error {

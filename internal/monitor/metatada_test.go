@@ -14,7 +14,6 @@ import (
 )
 
 func TestSaveMetadata(t *testing.T) {
-
 	tests := map[string]struct {
 		createDir     string
 		file          string
@@ -40,7 +39,7 @@ func TestSaveMetadata(t *testing.T) {
 			r := require.New(t)
 			baseDir := t.TempDir()
 			if tt.createDir != "" {
-				r.NoError(os.MkdirAll(filepath.Join(baseDir, tt.createDir), 0700))
+				r.NoError(os.MkdirAll(filepath.Join(baseDir, tt.createDir), 0o700))
 			}
 			m := Metadata{
 				ClusterID: uuid.New().String(),

@@ -1,18 +1,19 @@
 package config
 
 import (
+	"context"
 	"fmt"
+	"net/http"
+	"os"
 	"time"
 
-	"context"
-	"github.com/castai/cluster-controller/internal/waitext"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"k8s.io/apimachinery/pkg/util/net"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	"net/http"
-	"os"
+
+	"github.com/castai/cluster-controller/internal/waitext"
 )
 
 type Config struct {
@@ -94,7 +95,7 @@ func Get() Config {
 
 	cfg = &Config{}
 	if err := viper.Unmarshal(&cfg); err != nil {
-		panic(fmt.Errorf("parsing configuration: %v", err))
+		panic(fmt.Errorf("parsing configuration: %w", err))
 	}
 
 	if cfg.Log.Level == 0 {

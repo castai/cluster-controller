@@ -1,8 +1,9 @@
 package controller
 
 import (
-	"github.com/castai/cluster-controller/cmd/utils"
 	"github.com/spf13/cobra"
+
+	"github.com/castai/cluster-controller/cmd/utils"
 )
 
 const Use = "controller"

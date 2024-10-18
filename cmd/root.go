@@ -2,13 +2,10 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
 	"github.com/castai/cluster-controller/cmd/controller"
@@ -42,18 +39,18 @@ func preRun(_ *cobra.Command, _ []string) error {
 }
 
 func Execute(ctx context.Context) {
-	// For backwards compatibility: if no command is provided try to get the "mode" from env vars
-	cmd, _, err := rootCmd.Find(os.Args[1:])
-	// default cmd if no cmd is given
-	if err == nil && cmd.Use == rootCmd.Use && !errors.Is(cmd.Flags().Parse(os.Args[1:]), pflag.ErrHelp) {
-		args := os.Args[1:]
-		if mode := os.Getenv("MODE"); strings.ToLower(mode) == "monitor" {
-			args = append([]string{monitor.Use}, os.Args[1:]...)
-		} else {
-			args = append([]string{controller.Use}, os.Args[1:]...)
-		}
-		rootCmd.SetArgs(args)
-	}
+	//// For backwards compatibility: if no command is provided try to get the "mode" from env vars
+	//cmd, _, err := rootCmd.Find(os.Args[1:])
+	//// default cmd if no cmd is given
+	//if err == nil && cmd.Use == rootCmd.Use && !errors.Is(cmd.Flags().Parse(os.Args[1:]), pflag.ErrHelp) {
+	//	args := os.Args[1:]
+	//	if mode := os.Getenv("MODE"); strings.ToLower(mode) == "monitor" {
+	//		args = append([]string{monitor.Use}, os.Args[1:]...)
+	//	} else {
+	//		args = append([]string{controller.Use}, os.Args[1:]...)
+	//	}
+	//	rootCmd.SetArgs(args)
+	//}
 
 	if err := rootCmd.ExecuteContext(ctx); err != nil {
 		fatal(err)

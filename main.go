@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
-	"github.com/castai/cluster-controller/cmd"
-	"github.com/castai/cluster-controller/internal/config"
+
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
+
+	"github.com/castai/cluster-controller/cmd"
+	"github.com/castai/cluster-controller/cmd/utils"
+	"github.com/castai/cluster-controller/internal/config"
 )
 
 // These should be set via `go build` during a release.
@@ -16,7 +19,7 @@ var (
 
 func main() {
 	ctx := signals.SetupSignalHandler()
-	ctx = context.WithValue(ctx, "agentVersion", &config.ClusterControllerVersion{
+	ctx = context.WithValue(ctx, utils.ClusterControllerVersionKey, &config.ClusterControllerVersion{
 		GitCommit: GitCommit,
 		GitRef:    GitRef,
 		Version:   Version,

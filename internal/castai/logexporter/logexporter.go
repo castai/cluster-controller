@@ -4,15 +4,15 @@ package logexporter
 
 import (
 	"context"
+	"fmt"
+	"path"
+	"runtime"
 	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
 
-	"fmt"
 	"github.com/castai/cluster-controller/internal/waitext"
-	"path"
-	"runtime"
 )
 
 const (
@@ -115,7 +115,6 @@ func (e *LogExporter) sendLogEvent(log *logrus.Entry) {
 	}, func(err error) {
 		e.logger.Debugf("failed to send logs, will retry: %s", err)
 	})
-
 	if err != nil {
 		e.logger.Debugf("sending logs: %v", err)
 	}

@@ -4,15 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/castai/cluster-controller/cmd/utils"
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/castai/logexporter"
 	"github.com/castai/cluster-controller/internal/config"
 	"github.com/castai/cluster-controller/internal/monitor"
-	"time"
 )
 
 const (
@@ -27,9 +28,9 @@ func run(ctx context.Context) error {
 	if cfg.API.URL == "" {
 		return errors.New("env variable \"API_URL\" is required")
 	}
-	binVersion := ctx.Value("agentVersion").(*config.ClusterControllerVersion)
+	binVersion := ctx.Value(utils.ClusterControllerVersionKey).(*config.ClusterControllerVersion)
 
-	logger := logexporter.NewLogger(uint32(cfg.Log.Level))
+	logger := logexporter.NewLogger(cfg.Log.Level)
 	log := logger.WithFields(logrus.Fields{
 		"cluster_id": cfg.ClusterID,
 		"version":    binVersion.String(),
@@ -38,7 +39,6 @@ func run(ctx context.Context) error {
 	cl, err := castai.NewRestyClient(cfg.API.URL, cfg.API.Key, cfg.TLS.CACert, logger.Level, binVersion, maxRequestTimeout)
 	if err != nil {
 		log.Fatalf("failed to create castai client: %v", err)
-
 	}
 	client := castai.NewClient(logger, cl, cfg.ClusterID)
 
