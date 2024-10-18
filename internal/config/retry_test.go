@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"errors"
@@ -56,7 +56,7 @@ type mockRoundTripper struct {
 	calls int32
 }
 
-func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+func (m *mockRoundTripper) RoundTrip(_ *http.Request) (*http.Response, error) {
 	atomic.AddInt32(&m.calls, 1)
 	return nil, m.err
 }

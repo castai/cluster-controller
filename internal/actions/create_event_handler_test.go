@@ -227,7 +227,7 @@ func podObjReference(p *corev1.Pod) corev1.ObjectReference {
 func TestCreateEventHandler_Handle(t *testing.T) {
 	t.Parallel()
 	type fields struct {
-		tuneMockClientSey func(m *mock_actions.MockInterface)
+		tuneMockClientSet func(m *mock_actions.MockInterface)
 	}
 	type args struct {
 		action *castai.ClusterAction
@@ -241,7 +241,7 @@ func TestCreateEventHandler_Handle(t *testing.T) {
 		{
 			name: "detect race condition: recorder and broadcaster should be called only once",
 			fields: fields{
-				tuneMockClientSey: func(m *mock_actions.MockInterface) {
+				tuneMockClientSet: func(m *mock_actions.MockInterface) {
 					fakeClientSet := fake.NewClientset()
 					m.EXPECT().CoreV1().Return(fakeClientSet.CoreV1())
 				},
@@ -263,8 +263,8 @@ func TestCreateEventHandler_Handle(t *testing.T) {
 			m := gomock.NewController(t)
 			defer m.Finish()
 			client := mock_actions.NewMockInterface(m)
-			if tt.fields.tuneMockClientSey != nil {
-				tt.fields.tuneMockClientSey(client)
+			if tt.fields.tuneMockClientSet != nil {
+				tt.fields.tuneMockClientSet(client)
 			}
 			handler := NewCreateEventHandler(logrus.New(), client)
 			// defer handler.Close()

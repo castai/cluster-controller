@@ -37,7 +37,7 @@ func (h *ApprovalManager) Start(ctx context.Context) {
 	go h.runAutoApproveForCastAINodes(ctx)
 }
 
-func (h *ApprovalManager) Stop(ctx context.Context) {
+func (h *ApprovalManager) Stop() {
 	h.stopAutoApproveForCastAINodes()
 }
 

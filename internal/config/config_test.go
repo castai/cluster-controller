@@ -32,10 +32,12 @@ func TestConfig(t *testing.T) {
 			URL: "api.cast.ai",
 		},
 		Kubeconfig: "~/.kube/config",
-		ClusterID:  "c1",
+		SelfPod: Pod{
+			Namespace: "castai-agent",
+		},
+		ClusterID: "c1",
 		LeaderElection: LeaderElection{
 			Enabled:            true,
-			Namespace:          "castai-agent",
 			LockName:           "castai-cluster-controller",
 			LeaseDuration:      time.Second * 25,
 			LeaseRenewDeadline: time.Second * 20,

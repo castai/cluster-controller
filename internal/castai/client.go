@@ -15,7 +15,6 @@ import (
 	"golang.org/x/net/http2"
 
 	"github.com/castai/cluster-controller/internal/config"
-	"github.com/castai/cluster-controller/internal/logexporter"
 )
 
 const (
@@ -29,6 +28,14 @@ type CastAIClient interface {
 	GetActions(ctx context.Context, k8sVersion string) ([]*ClusterAction, error)
 	AckAction(ctx context.Context, actionID string, req *AckClusterActionRequest) error
 	SendAKSInitData(ctx context.Context, req *AKSInitDataRequest) error
+	SendLog(ctx context.Context, e *LogEntry) error
+}
+
+type LogEntry struct {
+	Level   string        `json:"level"`
+	Time    time.Time     `json:"time"`
+	Message string        `json:"message"`
+	Fields  logrus.Fields `json:"fields"`
 }
 
 // Client talks to Cast AI. It can poll and acknowledge actions
@@ -134,7 +141,7 @@ func (c *Client) SendAKSInitData(ctx context.Context, req *AKSInitDataRequest) e
 	return nil
 }
 
-func (c *Client) SendLog(ctx context.Context, e *logexporter.LogEntry) error {
+func (c *Client) SendLog(ctx context.Context, e *LogEntry) error {
 	// Server expects fields values to be strings. If they're not it fails with BAD_REQUEST/400.
 	// Alternatively we could use "google/protobuf/any.proto" on server side but ATM it doesn't work.
 	for k, v := range e.Fields {

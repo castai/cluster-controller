@@ -1,4 +1,4 @@
-package logexporter_test
+package logexporter
 
 import (
 	"fmt"
@@ -6,11 +6,9 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/sirupsen/logrus"
-	"github.com/sirupsen/logrus/hooks/test"
 	"go.uber.org/goleak"
 
-	"github.com/castai/cluster-controller/internal/logexporter"
-	mock_logexporter "github.com/castai/cluster-controller/internal/logexporter/mock"
+	mock_castai "github.com/castai/cluster-controller/internal/castai/mock"
 )
 
 func TestMain(m *testing.M) {
@@ -20,8 +18,8 @@ func TestMain(m *testing.M) {
 func TestSetupLogExporter(t *testing.T) {
 	t.Parallel()
 	type args struct {
-		tuneMockSender func(sender *mock_logexporter.MockLogSender)
-		msg            map[uint32]string // level -> message.
+		tuneMockSender func(sender *mock_castai.MockCastAIClient)
+		msg            map[uint32]string // level -> message
 	}
 	tests := []struct {
 		name string
@@ -34,7 +32,7 @@ func TestSetupLogExporter(t *testing.T) {
 					uint32(logrus.ErrorLevel): "foo",
 					uint32(logrus.DebugLevel): "bar",
 				},
-				tuneMockSender: func(sender *mock_logexporter.MockLogSender) {
+				tuneMockSender: func(sender *mock_castai.MockCastAIClient) {
 					sender.EXPECT().SendLog(gomock.Any(), gomock.Any()).
 						Return(nil).Times(1)
 				},
@@ -47,9 +45,9 @@ func TestSetupLogExporter(t *testing.T) {
 					uint32(logrus.ErrorLevel): "foo",
 					uint32(logrus.DebugLevel): "bar",
 				},
-				tuneMockSender: func(sender *mock_logexporter.MockLogSender) {
+				tuneMockSender: func(sender *mock_castai.MockCastAIClient) {
 					sender.EXPECT().SendLog(gomock.Any(), gomock.Any()).
-						Return(fmt.Errorf("test-error")).Times(4)
+						Return(fmt.Errorf("test-error")).Times(4) // 1 for first error, 3 for retries
 				},
 			},
 		},
@@ -60,22 +58,22 @@ func TestSetupLogExporter(t *testing.T) {
 			t.Parallel()
 			m := gomock.NewController(t)
 			defer m.Finish()
-			sender := mock_logexporter.NewMockLogSender(m)
+			sender := mock_castai.NewMockCastAIClient(m)
 			if tt.args.tuneMockSender != nil {
 				tt.args.tuneMockSender(sender)
 			}
-			logger, hook := test.NewNullLogger()
-			defer hook.Reset()
+			logger := NewLogger(uint32(logrus.InfoLevel))
 
-			e := logexporter.NewLogExporter(logger, sender)
-			logger.AddHook(e)
+			logExporter := newLogExporter(logger, sender)
+			logger.AddHook(logExporter)
+			defer logExporter.Wait()
+
 			log := logger.WithFields(logrus.Fields{
 				"cluster_id": "test-cluster",
 			})
 			for level, msg := range tt.args.msg {
 				log.Log(logrus.Level(level), msg)
 			}
-			e.Wait()
 		})
 	}
 }
