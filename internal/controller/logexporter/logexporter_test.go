@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"testing"
 
-	mock_castai "github.com/castai/cluster-controller/internal/castai/mock"
 	"github.com/golang/mock/gomock"
 	"github.com/sirupsen/logrus"
 	"go.uber.org/goleak"
+
+	mock_castai "github.com/castai/cluster-controller/internal/castai/mock"
 )
 
 func TestMain(m *testing.M) {

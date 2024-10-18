@@ -183,8 +183,7 @@ func runController(
 			log.Fatalf("failed to determine if running on GKE: %v", err)
 		}
 
-		log.Debugf("auto approve csr: %v, running on GKE: %v", cfg.AutoApproveCSR, isGKE)
-		if cfg.AutoApproveCSR && isGKE {
+		if isGKE {
 			csrMgr := csr.NewApprovalManager(log, clientset)
 			csrMgr.Start(ctx)
 		}

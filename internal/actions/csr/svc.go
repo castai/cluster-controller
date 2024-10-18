@@ -37,7 +37,7 @@ func (h *ApprovalManager) Start(ctx context.Context) {
 	go h.runAutoApproveForCastAINodes(ctx)
 }
 
-func (h *ApprovalManager) Stop(ctx context.Context) {
+func (h *ApprovalManager) Stop() {
 	h.stopAutoApproveForCastAINodes()
 }
 
@@ -93,6 +93,7 @@ func (h *ApprovalManager) handle(ctx context.Context, log logrus.FieldLogger, ce
 }
 
 func (h *ApprovalManager) runAutoApproveForCastAINodes(ctx context.Context) {
+	h.log.Debug("running CSR auto-approval on GKE")
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
