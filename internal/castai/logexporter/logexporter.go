@@ -54,10 +54,12 @@ func NewLogger(logLevel uint32) *logrus.Logger {
 	return logger
 }
 
-func SetupLogExporter(logger *logrus.Logger, sender LogSender) {
+func SetupLogExporter(logger *logrus.Logger, sender LogSender) *LogExporter {
 	logExporter := newLogExporter(logger, sender)
 	logger.AddHook(logExporter)
 	logrus.RegisterExitHandler(logExporter.Wait)
+
+	return logExporter
 }
 
 // NewLogExporter returns new exporter that can be hooked into logrus

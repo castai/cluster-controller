@@ -2,13 +2,11 @@ package logexporter_test
 
 import (
 	"fmt"
-	"testing"
-	"time"
-
 	"github.com/golang/mock/gomock"
 	"github.com/sirupsen/logrus"
 	"github.com/sirupsen/logrus/hooks/test"
 	"go.uber.org/goleak"
+	"testing"
 
 	"github.com/castai/cluster-controller/internal/castai/logexporter"
 	"github.com/castai/cluster-controller/internal/castai/mock"
@@ -50,7 +48,7 @@ func TestSetupLogExporter(t *testing.T) {
 				},
 				tuneMockSender: func(sender *mock_castai.MockLogSender) {
 					sender.EXPECT().SendLog(gomock.Any(), gomock.Any()).
-						Return(fmt.Errorf("test-error")).Times(1)
+						Return(fmt.Errorf("test-error")).Times(4) // 1 for first error, 3 for retries
 				},
 			},
 		},
@@ -68,14 +66,14 @@ func TestSetupLogExporter(t *testing.T) {
 			logger, hook := test.NewNullLogger()
 			defer hook.Reset()
 
-			logexporter.SetupLogExporter(logger, sender)
+			l := logexporter.SetupLogExporter(logger, sender)
+			defer l.Wait()
 			log := logger.WithFields(logrus.Fields{
 				"cluster_id": "test-cluster",
 			})
 			for level, msg := range tt.args.msg {
 				log.Log(logrus.Level(level), msg)
 			}
-			time.Sleep(1 * time.Second)
 		})
 	}
 }
