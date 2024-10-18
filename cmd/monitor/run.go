@@ -53,14 +53,14 @@ func run(ctx context.Context) error {
 }
 
 func runMonitorMode(ctx context.Context, log *logrus.Entry, cfg *config.Config, clusterIDChanged func(clusterID string)) error {
-	restconfig, err := config.RetrieveKubeConfig(log)
+	restConfig, err := config.RetrieveKubeConfig(log)
 	if err != nil {
 		return fmt.Errorf("retrieving kubeconfig: %w", err)
 	}
-	clientset, err := kubernetes.NewForConfig(restconfig)
+	clientSet, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
 		return fmt.Errorf("obtaining kubernetes clientset: %w", err)
 	}
 
-	return monitor.Run(ctx, log, clientset, cfg.MonitorMetadata, cfg.SelfPod, clusterIDChanged)
+	return monitor.Run(ctx, log, clientSet, cfg.MonitorMetadata, cfg.SelfPod, clusterIDChanged)
 }

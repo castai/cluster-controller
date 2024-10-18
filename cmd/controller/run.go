@@ -31,6 +31,7 @@ import (
 	"github.com/castai/cluster-controller/internal/controller/logexporter"
 	"github.com/castai/cluster-controller/internal/helm"
 	"github.com/castai/cluster-controller/internal/k8sversion"
+	"github.com/castai/cluster-controller/internal/monitor"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
 
@@ -177,6 +178,10 @@ func runController(
 		}
 	}()
 
+	if err := saveMetadata(cfg.ClusterID, cfg); err != nil {
+		return err
+	}
+
 	runSvc := func(ctx context.Context) {
 		isGKE, err := runningOnGKE(clientset, cfg)
 		if err != nil {
@@ -313,4 +318,15 @@ func runningOnGKE(clientset *kubernetes.Clientset, cfg config.Config) (isGKE boo
 	})
 
 	return
+}
+
+func saveMetadata(clusterID string, cfg config.Config) error {
+	metadata := monitor.Metadata{
+		ClusterID: clusterID,
+		ProcessID: uint64(os.Getpid()),
+	}
+	if err := metadata.Save(cfg.MonitorMetadata); err != nil {
+		return fmt.Errorf("saving metadata: %w", err)
+	}
+	return nil
 }

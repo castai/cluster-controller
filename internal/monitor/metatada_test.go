@@ -60,7 +60,7 @@ func TestSaveMetadata(t *testing.T) {
 	}
 }
 
-func Test_monitor_waitForAgentMetadata(t *testing.T) {
+func Test_monitor_waitForMetadata(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 

@@ -212,7 +212,7 @@ func (s *Controller) handleAction(ctx context.Context, action *castai.ClusterAct
 	}).Info("handle action")
 	handler, ok := s.actionHandlers[actionType]
 	if !ok {
-		return fmt.Errorf("handler not found for agent action=%s", actionType)
+		return fmt.Errorf("handler not found for action=%s", actionType)
 	}
 
 	if err := handler.Handle(ctx, action); err != nil {
