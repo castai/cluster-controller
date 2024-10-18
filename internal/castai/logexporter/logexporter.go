@@ -1,4 +1,5 @@
 //go:generate mockgen -destination ./mock/sender.go . LogSender
+
 package logexporter
 
 import (
@@ -8,7 +9,10 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"fmt"
 	"github.com/castai/cluster-controller/internal/waitext"
+	"path"
+	"runtime"
 )
 
 const (
@@ -36,9 +40,29 @@ type LogExporter struct {
 // exporter must satisfy logrus.Hook.
 var _ logrus.Hook = new(LogExporter)
 
+func NewLogger(logLevel uint32) *logrus.Logger {
+	logger := logrus.New()
+	logger.SetLevel(logrus.Level(logLevel))
+	logger.SetReportCaller(true)
+	logger.Formatter = &logrus.TextFormatter{
+		CallerPrettyfier: func(f *runtime.Frame) (string, string) {
+			filename := path.Base(f.File)
+			return fmt.Sprintf("%s()", f.Function), fmt.Sprintf("%s:%d", filename, f.Line)
+		},
+	}
+
+	return logger
+}
+
+func SetupLogExporter(logger *logrus.Logger, sender LogSender) {
+	logExporter := newLogExporter(logger, sender)
+	logger.AddHook(logExporter)
+	logrus.RegisterExitHandler(logExporter.Wait)
+}
+
 // NewLogExporter returns new exporter that can be hooked into logrus
 // to inject logs into Cast AI.
-func NewLogExporter(logger *logrus.Logger, sender LogSender) *LogExporter {
+func newLogExporter(logger *logrus.Logger, sender LogSender) *LogExporter {
 	return &LogExporter{
 		logger: logger,
 		sender: sender,
@@ -91,6 +115,7 @@ func (e *LogExporter) sendLogEvent(log *logrus.Entry) {
 	}, func(err error) {
 		e.logger.Debugf("failed to send logs, will retry: %s", err)
 	})
+
 	if err != nil {
 		e.logger.Debugf("sending logs: %v", err)
 	}

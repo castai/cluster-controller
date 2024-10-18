@@ -14,8 +14,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/http2"
 
+	"github.com/castai/cluster-controller/internal/castai/logexporter"
 	"github.com/castai/cluster-controller/internal/config"
-	"github.com/castai/cluster-controller/internal/logexporter"
 )
 
 const (

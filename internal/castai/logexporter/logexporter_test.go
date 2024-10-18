@@ -1,16 +1,16 @@
 package logexporter_test
 
 import (
-	"fmt"
 	"testing"
 
+	"fmt"
+	"github.com/castai/cluster-controller/internal/castai/logexporter"
+	"github.com/castai/cluster-controller/internal/castai/mock"
 	"github.com/golang/mock/gomock"
 	"github.com/sirupsen/logrus"
 	"github.com/sirupsen/logrus/hooks/test"
 	"go.uber.org/goleak"
-
-	"github.com/castai/cluster-controller/internal/logexporter"
-	mock_logexporter "github.com/castai/cluster-controller/internal/logexporter/mock"
+	"time"
 )
 
 func TestMain(m *testing.M) {
@@ -20,8 +20,8 @@ func TestMain(m *testing.M) {
 func TestSetupLogExporter(t *testing.T) {
 	t.Parallel()
 	type args struct {
-		tuneMockSender func(sender *mock_logexporter.MockLogSender)
-		msg            map[uint32]string // level -> message.
+		tuneMockSender func(sender *mock_castai.MockLogSender)
+		msg            map[int]string // level -> message
 	}
 	tests := []struct {
 		name string
@@ -30,11 +30,11 @@ func TestSetupLogExporter(t *testing.T) {
 		{
 			name: "1 error, 1 debug",
 			args: args{
-				msg: map[uint32]string{
-					uint32(logrus.ErrorLevel): "foo",
-					uint32(logrus.DebugLevel): "bar",
+				msg: map[int]string{
+					int(logrus.ErrorLevel): "foo",
+					int(logrus.DebugLevel): "bar",
 				},
-				tuneMockSender: func(sender *mock_logexporter.MockLogSender) {
+				tuneMockSender: func(sender *mock_castai.MockLogSender) {
 					sender.EXPECT().SendLog(gomock.Any(), gomock.Any()).
 						Return(nil).Times(1)
 				},
@@ -43,13 +43,13 @@ func TestSetupLogExporter(t *testing.T) {
 		{
 			name: "sendLog error",
 			args: args{
-				msg: map[uint32]string{
-					uint32(logrus.ErrorLevel): "foo",
-					uint32(logrus.DebugLevel): "bar",
+				msg: map[int]string{
+					int(logrus.ErrorLevel): "foo",
+					int(logrus.DebugLevel): "bar",
 				},
-				tuneMockSender: func(sender *mock_logexporter.MockLogSender) {
+				tuneMockSender: func(sender *mock_castai.MockLogSender) {
 					sender.EXPECT().SendLog(gomock.Any(), gomock.Any()).
-						Return(fmt.Errorf("test-error")).Times(4)
+						Return(fmt.Errorf("test-error")).Times(1)
 				},
 			},
 		},
@@ -60,22 +60,21 @@ func TestSetupLogExporter(t *testing.T) {
 			t.Parallel()
 			m := gomock.NewController(t)
 			defer m.Finish()
-			sender := mock_logexporter.NewMockLogSender(m)
+			sender := mock_castai.NewMockLogSender(m)
 			if tt.args.tuneMockSender != nil {
 				tt.args.tuneMockSender(sender)
 			}
 			logger, hook := test.NewNullLogger()
 			defer hook.Reset()
 
-			e := logexporter.NewLogExporter(logger, sender)
-			logger.AddHook(e)
+			logexporter.SetupLogExporter(logger, sender)
 			log := logger.WithFields(logrus.Fields{
 				"cluster_id": "test-cluster",
 			})
 			for level, msg := range tt.args.msg {
 				log.Log(logrus.Level(level), msg)
 			}
-			e.Wait()
+			time.Sleep(1 * time.Second)
 		})
 	}
 }
