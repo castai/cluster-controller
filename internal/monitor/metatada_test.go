@@ -43,7 +43,7 @@ func TestSaveMetadata(t *testing.T) {
 			}
 			m := Metadata{
 				ClusterID: uuid.New().String(),
-				ProcessID: 123,
+				LastStart: 123,
 			}
 			saveTo := tt.file
 			if tt.file != "" {
@@ -75,13 +75,13 @@ func Test_monitor_waitForMetadata(t *testing.T) {
 	// create the file, expect the event to arrive at updates channel
 	meta := Metadata{
 		ClusterID: uuid.New().String(),
-		ProcessID: 123,
+		LastStart: 123,
 	}
 	require.NoError(t, meta.Save(syncFile))
 
 	metadata, ok := <-updates
 	require.True(t, ok)
-	require.Equal(t, uint64(123), metadata.ProcessID)
+	require.Equal(t, int64(123), metadata.LastStart)
 
 	cancel()
 

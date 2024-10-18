@@ -323,7 +323,7 @@ func runningOnGKE(clientset *kubernetes.Clientset, cfg config.Config) (isGKE boo
 func saveMetadata(clusterID string, cfg config.Config, log *logrus.Entry) error {
 	metadata := monitor.Metadata{
 		ClusterID: clusterID,
-		ProcessID: uint64(os.Getpid()),
+		LastStart: time.Now().UnixNano(),
 	}
 	log.Infof("saving metadata: %v to file: %v", metadata, cfg.MonitorMetadata)
 	if err := metadata.Save(cfg.MonitorMetadata); err != nil {

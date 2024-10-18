@@ -14,7 +14,7 @@ import (
 
 type Metadata struct {
 	ClusterID string `json:"clusterId"`
-	ProcessID uint64 `json:"processId"`
+	LastStart int64  `json:"lastStart"`
 }
 
 func (m *Metadata) Save(file string) error {

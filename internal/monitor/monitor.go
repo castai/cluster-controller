@@ -50,15 +50,15 @@ func (m *monitor) metadataUpdated(ctx context.Context, metadata Metadata) {
 	prevMetadata := m.metadata
 	m.metadata = metadata
 	m.log.Infof("metadata received: %+v", metadata)
-	if prevMetadata.ProcessID == 0 || prevMetadata.ProcessID == metadata.ProcessID {
+	if prevMetadata.LastStart == 0 || prevMetadata.LastStart == metadata.LastStart {
 		// if we just received first metadata or there were no changes, nothing to do
 		return
 	}
 
-	m.reportPodDiagnostics(ctx, prevMetadata.ProcessID)
+	m.reportPodDiagnostics(ctx, prevMetadata.LastStart)
 }
 
-func (m *monitor) reportPodDiagnostics(ctx context.Context, prevProcessPID uint64) {
+func (m *monitor) reportPodDiagnostics(ctx context.Context, prevLastStart int64) {
 	m.log.Errorf("unexpected controller restart detected, fetching k8s events for %s/%s", m.pod.Namespace, m.pod.Name)
 
 	// log pod-related warnings
@@ -76,8 +76,8 @@ func (m *monitor) reportPodDiagnostics(ctx context.Context, prevProcessPID uint6
 	// Instead, will use simple filtering by "cluster-controller"; combined with node-name filter, this should be sufficient enough
 	// to narrow the list down to controller-related events only.
 	m.logEvents(ctx, m.log.WithFields(logrus.Fields{
-		"events_group": fmt.Sprintf("node/%s", m.pod.Node),
-		"pid":          prevProcessPID,
+		"events_group":  fmt.Sprintf("node/%s", m.pod.Node),
+		"prevLastStart": prevLastStart,
 	}), v1.NamespaceAll, &metav1.ListOptions{
 		FieldSelector: "involvedObject.name=" + m.pod.Node,
 		TypeMeta: metav1.TypeMeta{
