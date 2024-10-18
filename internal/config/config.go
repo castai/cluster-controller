@@ -28,7 +28,6 @@ type Config struct {
 
 	MonitorMetadata string `mapstructure:"monitor_metadata"`
 	SelfPod         Pod    `mapstructure:"self_pod"`
-	AutoApproveCSR  bool
 }
 
 type Pod struct {
@@ -91,7 +90,6 @@ func Get() Config {
 	_ = viper.BindEnv("self_pod.node", "KUBERNETES_NODE_NAME")
 	_ = viper.BindEnv("self_pod.name", "KUBERNETES_POD")
 	_ = viper.BindEnv("self_pod.namespace", "LEADER_ELECTION_NAMESPACE")
-	_ = viper.BindEnv("autoapprovecsr", "AUTO_APPROVE_CSR")
 
 	cfg = &Config{}
 	if err := viper.Unmarshal(&cfg); err != nil {
