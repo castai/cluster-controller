@@ -65,7 +65,7 @@ func (h *ApprovalManager) handle(ctx context.Context, log logrus.FieldLogger, ce
 	}
 	log = log.WithField("csr_name", cert.Name)
 	// Since this new csr may be denied we need to delete it.
-	log.Debug("deleting old csr")
+	log.Info("deleting old csr")
 	if err := cert.DeleteCertificate(ctx, h.clientset); err != nil {
 		if !apierrors.IsNotFound(err) {
 			return fmt.Errorf("deleting csr: %w", err)
@@ -73,14 +73,14 @@ func (h *ApprovalManager) handle(ctx context.Context, log logrus.FieldLogger, ce
 	}
 
 	// Create a new CSR with the same request data as the original one.
-	log.Debug("requesting new csr")
+	log.Info("requesting new csr")
 	newCert, err := cert.NewCSR(ctx, h.clientset)
 	if err != nil {
 		return fmt.Errorf("requesting new csr: %w", err)
 	}
 
 	// Approve new csr.
-	log.Debug("approving new csr")
+	log.Info("approving new csr")
 	resp, err := newCert.ApproveCertificate(ctx, h.clientset)
 	if err != nil {
 		return fmt.Errorf("approving csr: %w", err)

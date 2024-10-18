@@ -300,7 +300,7 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 
 	defer w.Stop()
 
-	log.Debug("watching for new node csr")
+	log.Info("watching for new node csr")
 
 	for {
 		select {
@@ -308,7 +308,7 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 			return
 		case event, ok := <-w.ResultChan():
 			if !ok {
-				log.Debug("watcher closed")
+				log.Info("watcher closed")
 				go WatchCastAINodeCSRs(ctx, log, client, c) // start over in case of any error.
 				return
 			}
@@ -321,7 +321,7 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 				log.WithFields(logrus.Fields{
 					"csr":       name,
 					"node_name": csrResult.RequestingUser,
-				}).Debugf("skipping csr not from kubelet-bootstrap: %v", csrResult.RequestingUser)
+				}).Infof("skipping csr not from kubelet-bootstrap: %v", csrResult.RequestingUser)
 				continue
 			}
 
@@ -330,7 +330,7 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 				log.WithFields(logrus.Fields{
 					"csr":       name,
 					"node_name": cn,
-				}).Debugf("skipping csr unable to get common name: %v", err)
+				}).Infof("skipping csr unable to get common name: %v", err)
 				continue
 			}
 			if csrResult.Approved() {
@@ -341,7 +341,7 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 				log.WithFields(logrus.Fields{
 					"csr":       name,
 					"node_name": cn,
-				}).Debug("skipping csr not CAST AI node")
+				}).Infof("skipping csr not CAST AI node")
 				continue
 			}
 			csrResult.Name = cn
