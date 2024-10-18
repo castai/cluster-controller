@@ -63,7 +63,7 @@ func (h *CreateEventHandler) Handle(ctx context.Context, action *castai.ClusterA
 }
 
 func (h *CreateEventHandler) handleEventV1(_ context.Context, req *castai.ActionCreateEvent, namespace string) {
-	h.log.Debug("handling create event action: %s type: %s", req.Action, req.EventType)
+	h.log.Debugf("handling create event action: %s type: %s", req.Action, req.EventType)
 	if recorder, ok := h.getRecorder(namespace, req.Reporter); ok {
 		recorder.Event(&req.ObjectRef, v1.EventTypeNormal, req.Reason, req.Message)
 	} else {
