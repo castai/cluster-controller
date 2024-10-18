@@ -78,6 +78,7 @@ func Get() Config {
 	_ = viper.BindEnv("podname", "KUBERNETES_POD")
 	_ = viper.BindEnv("autoapprovecsr", "AUTO_APPROVE_CSR")
 
+	viper.SetDefault("autoapprovecsr", true)
 	cfg = &Config{}
 	if err := viper.Unmarshal(&cfg); err != nil {
 		panic(fmt.Errorf("parsing configuration: %w", err))
