@@ -9,9 +9,9 @@ import (
 )
 
 type HealthzCfg struct {
-	// Max time between successful poll actions to consider cluster-controller alive
+	// Max time between successful poll actions to consider cluster-controller alive.
 	HealthyPollIntervalLimit time.Duration
-	// Max wait time for application to start
+	// Max wait time for application to start.
 	StartTimeLimit time.Duration
 }
 
