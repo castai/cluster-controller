@@ -2,11 +2,12 @@ package logexporter_test
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/golang/mock/gomock"
 	"github.com/sirupsen/logrus"
 	"github.com/sirupsen/logrus/hooks/test"
 	"go.uber.org/goleak"
-	"testing"
 
 	"github.com/castai/cluster-controller/internal/castai/logexporter"
 	"github.com/castai/cluster-controller/internal/castai/mock"
