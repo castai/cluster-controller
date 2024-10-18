@@ -19,7 +19,6 @@ type Config struct {
 	LeaderElection LeaderElection
 	PodName        string
 	NodeName       string
-	AutoApproveCSR bool
 }
 
 type Log struct {
@@ -76,9 +75,7 @@ func Get() Config {
 	_ = viper.BindEnv("leaderelection.leaserenewdeadline", "LEADER_ELECTION_LEASE_RENEW_DEADLINE")
 	_ = viper.BindEnv("nodename", "KUBERNETES_NODE_NAME")
 	_ = viper.BindEnv("podname", "KUBERNETES_POD")
-	_ = viper.BindEnv("autoapprovecsr", "AUTO_APPROVE_CSR")
 
-	viper.SetDefault("autoapprovecsr", true)
 	cfg = &Config{}
 	if err := viper.Unmarshal(&cfg); err != nil {
 		panic(fmt.Errorf("parsing configuration: %w", err))

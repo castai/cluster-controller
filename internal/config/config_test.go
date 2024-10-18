@@ -44,7 +44,6 @@ func TestConfig(t *testing.T) {
 			QPS:   25,
 			Burst: 150,
 		},
-		AutoApproveCSR: true,
 	}
 
 	require.Equal(t, expected, cfg)
