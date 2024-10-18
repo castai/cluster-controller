@@ -178,7 +178,7 @@ func runController(
 		}
 	}()
 
-	if err := saveMetadata(cfg.ClusterID, cfg); err != nil {
+	if err := saveMetadata(cfg.ClusterID, cfg, log); err != nil {
 		return err
 	}
 
@@ -320,11 +320,12 @@ func runningOnGKE(clientset *kubernetes.Clientset, cfg config.Config) (isGKE boo
 	return
 }
 
-func saveMetadata(clusterID string, cfg config.Config) error {
+func saveMetadata(clusterID string, cfg config.Config, log *logrus.Entry) error {
 	metadata := monitor.Metadata{
 		ClusterID: clusterID,
 		ProcessID: uint64(os.Getpid()),
 	}
+	log.Infof("saving metadata: %v to file: %v", metadata, cfg.MonitorMetadata)
 	if err := metadata.Save(cfg.MonitorMetadata); err != nil {
 		return fmt.Errorf("saving metadata: %w", err)
 	}

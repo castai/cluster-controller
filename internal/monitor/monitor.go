@@ -49,6 +49,7 @@ type monitor struct {
 func (m *monitor) metadataUpdated(ctx context.Context, metadata Metadata) {
 	prevMetadata := m.metadata
 	m.metadata = metadata
+	m.log.Infof("metadata received: %+v", metadata)
 	if prevMetadata.ProcessID == 0 || prevMetadata.ProcessID == metadata.ProcessID {
 		// if we just received first metadata or there were no changes, nothing to do
 		return
