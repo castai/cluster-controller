@@ -75,6 +75,7 @@ func (m *monitor) reportPodDiagnostics(ctx context.Context, prevLastStart int64)
 	// and even filtering by PID id does not work (controller process PID is different inside the pod and as seen from the node).
 	// Instead, will use simple filtering by "cluster-controller"; combined with node-name filter, this should be sufficient enough
 	// to narrow the list down to controller-related events only.
+	// Example: Memory cgroup out of memory: Killed process 414273 (castai-cluster-) total-vm:5477892kB, anon-rss:14740kB
 	m.logEvents(ctx, m.log.WithFields(logrus.Fields{
 		"events_group":  fmt.Sprintf("node/%s", m.pod.Node),
 		"prevLastStart": prevLastStart,
@@ -85,7 +86,7 @@ func (m *monitor) reportPodDiagnostics(ctx context.Context, prevLastStart int64)
 		},
 	}, func(event *v1.Event) bool {
 		// OOM events are reported on the node, but the only relation to the pod is the killed process PID.
-		return strings.Contains(event.Message, "cluster-controller")
+		return strings.Contains(event.Message, "castai-cluster-")
 	})
 }
 
