@@ -11,8 +11,8 @@ import (
 
 	"github.com/castai/cluster-controller/cmd/utils"
 	"github.com/castai/cluster-controller/internal/castai"
-	"github.com/castai/cluster-controller/internal/castai/logexporter"
 	"github.com/castai/cluster-controller/internal/config"
+	"github.com/castai/cluster-controller/internal/controller/logexporter"
 	"github.com/castai/cluster-controller/internal/monitor"
 )
 
