@@ -7,7 +7,6 @@ import (
 	mock_castai "github.com/castai/cluster-controller/internal/castai/mock"
 	"github.com/golang/mock/gomock"
 	"github.com/sirupsen/logrus"
-	"github.com/sirupsen/logrus/hooks/test"
 	"go.uber.org/goleak"
 )
 
@@ -62,8 +61,7 @@ func TestSetupLogExporter(t *testing.T) {
 			if tt.args.tuneMockSender != nil {
 				tt.args.tuneMockSender(sender)
 			}
-			logger, hook := test.NewNullLogger()
-			defer hook.Reset()
+			logger := NewLogger(uint32(logrus.InfoLevel))
 
 			logExporter := newLogExporter(logger, sender)
 			logger.AddHook(logExporter)
