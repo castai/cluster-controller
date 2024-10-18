@@ -212,7 +212,7 @@ func run(
 		}
 
 		if isGKE {
-			log.Infof("auto approve csr started running on GKE: %v", isGKE)
+			log.Info("auto approve csr started as running on GKE")
 			csrMgr := csr.NewApprovalManager(log, clientset)
 			csrMgr.Start(ctx)
 		}
