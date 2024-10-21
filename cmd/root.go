@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/spf13/cobra"
+
 	"github.com/castai/cluster-controller/cmd/controller"
 	"github.com/castai/cluster-controller/cmd/monitor"
-	"github.com/spf13/cobra"
 )
 
 var rootCmd = &cobra.Command{
