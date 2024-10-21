@@ -21,7 +21,7 @@ func NewCreateEventHandler(log logrus.FieldLogger, clientset kubernetes.Interfac
 		eventBroadcaster := record.NewBroadcaster()
 		eventBroadcaster.StartRecordingToSink(&typedv1core.EventSinkImpl{Interface: clientset.CoreV1().Events(ns)})
 		eventBroadcaster.StartStructuredLogging(0)
-		log.Debug("create new broadcaster and recorder for namespace: %s", ns)
+		log.Debugf("create new broadcaster and recorder for namespace: %s", ns)
 		// Create an event recorder.
 		return eventBroadcaster, eventBroadcaster.NewRecorder(nil, v1.EventSource{
 			Component: reporter,
