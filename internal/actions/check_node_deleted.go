@@ -7,13 +7,11 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/k8sclient"
+	"github.com/castai/cluster-controller/internal/waitext"
 	"github.com/sirupsen/logrus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-
-	"github.com/castai/cluster-controller/internal/castai"
-	"github.com/castai/cluster-controller/internal/waitext"
 )
 
 var _ ActionHandler = &CheckNodeDeletedHandler{}
@@ -23,7 +21,7 @@ type checkNodeDeletedConfig struct {
 	retryWait time.Duration
 }
 
-func NewCheckNodeDeletedHandler(log logrus.FieldLogger, clientset kubernetes.Interface) *CheckNodeDeletedHandler {
+func NewCheckNodeDeletedHandler(log logrus.FieldLogger, clientset k8sclient.ClientSet) *CheckNodeDeletedHandler {
 	return &CheckNodeDeletedHandler{
 		log:       log,
 		clientset: clientset,
@@ -36,7 +34,7 @@ func NewCheckNodeDeletedHandler(log logrus.FieldLogger, clientset kubernetes.Int
 
 type CheckNodeDeletedHandler struct {
 	log       logrus.FieldLogger
-	clientset kubernetes.Interface
+	clientset k8sclient.ClientSet
 	cfg       checkNodeDeletedConfig
 }
 
@@ -61,7 +59,7 @@ func (h *CheckNodeDeletedHandler) Handle(ctx context.Context, action *castai.Clu
 		boff,
 		h.cfg.retries,
 		func(ctx context.Context) (bool, error) {
-			n, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
+			n, err := h.clientset.GetNode(req.NodeName)
 			if apierrors.IsNotFound(err) {
 				return false, nil
 			}

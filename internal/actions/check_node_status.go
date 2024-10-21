@@ -7,19 +7,17 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/k8sclient"
+	"github.com/castai/cluster-controller/internal/waitext"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-
-	"github.com/castai/cluster-controller/internal/castai"
-	"github.com/castai/cluster-controller/internal/waitext"
 )
 
 var _ ActionHandler = &CheckNodeStatusHandler{}
 
-func NewCheckNodeStatusHandler(log logrus.FieldLogger, clientset kubernetes.Interface) *CheckNodeStatusHandler {
+func NewCheckNodeStatusHandler(log logrus.FieldLogger, clientset k8sclient.ClientSet) *CheckNodeStatusHandler {
 	return &CheckNodeStatusHandler{
 		log:       log,
 		clientset: clientset,
@@ -28,7 +26,7 @@ func NewCheckNodeStatusHandler(log logrus.FieldLogger, clientset kubernetes.Inte
 
 type CheckNodeStatusHandler struct {
 	log       logrus.FieldLogger
-	clientset kubernetes.Interface
+	clientset k8sclient.ClientSet
 }
 
 func (h *CheckNodeStatusHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
@@ -72,7 +70,7 @@ func (h *CheckNodeStatusHandler) checkNodeDeleted(ctx context.Context, log *logr
 		b,
 		waitext.Forever,
 		func(ctx context.Context) (bool, error) {
-			n, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
+			n, err := h.clientset.GetNode(req.NodeName)
 			if apierrors.IsNotFound(err) {
 				return false, nil
 			}
@@ -114,28 +112,26 @@ func (h *CheckNodeStatusHandler) checkNodeDeleted(ctx context.Context, log *logr
 
 func (h *CheckNodeStatusHandler) checkNodeReady(ctx context.Context, _ *logrus.Entry, req *castai.ActionCheckNodeStatus) error {
 	timeout := 9 * time.Minute
-	watchObject := metav1.SingleObject(metav1.ObjectMeta{Name: req.NodeName})
 	if req.WaitTimeoutSeconds != nil {
 		timeout = time.Duration(*req.WaitTimeoutSeconds) * time.Second
 	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timeout waiting for node %s to become ready", req.NodeName)
+		case <-time.After(timeout):
+			return nil
+		case <-time.After(10 * time.Second):
+			node, err := h.clientset.GetNode(req.NodeName)
+			if err != nil {
+				return fmt.Errorf("get node %s: %w", req.NodeName, err)
+			}
 
-	watch, err := h.clientset.CoreV1().Nodes().Watch(ctx, watchObject)
-	if err != nil {
-		return fmt.Errorf("creating node watch: %w", err)
-	}
-
-	defer watch.Stop()
-	for r := range watch.ResultChan() {
-		if node, ok := r.Object.(*corev1.Node); ok {
 			if isNodeReady(node, req.NodeID) {
 				return nil
 			}
 		}
 	}
-
-	return fmt.Errorf("timeout waiting for node %s to become ready", req.NodeName)
 }
 
 func isNodeReady(node *corev1.Node, castNodeID string) bool {

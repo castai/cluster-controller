@@ -8,20 +8,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/k8sclient"
+	"github.com/castai/cluster-controller/internal/waitext"
 	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
-	policyv1 "k8s.io/api/policy/v1"
-	"k8s.io/api/policy/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/kubectl/pkg/drain"
-
-	"github.com/castai/cluster-controller/internal/castai"
-	"github.com/castai/cluster-controller/internal/waitext"
 )
 
 var _ ActionHandler = &DrainNodeHandler{}
@@ -40,7 +36,7 @@ type drainNodeConfig struct {
 	skipDeletedTimeoutSeconds     int
 }
 
-func NewDrainNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface, castNamespace string) *DrainNodeHandler {
+func NewDrainNodeHandler(log logrus.FieldLogger, clientset k8sclient.ClientSet, castNamespace string) *DrainNodeHandler {
 	return &DrainNodeHandler{
 		log:       log,
 		clientset: clientset,
@@ -69,7 +65,7 @@ func (h *DrainNodeHandler) getDrainTimeout(action *castai.ClusterAction) time.Du
 
 type DrainNodeHandler struct {
 	log       logrus.FieldLogger
-	clientset kubernetes.Interface
+	clientset k8sclient.ClientSet
 	cfg       drainNodeConfig
 }
 
@@ -87,7 +83,7 @@ func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 		ActionIDLogField: action.ID,
 	})
 
-	node, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
+	node, err := h.clientset.GetNode(req.NodeName)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Info("node not found, skipping draining")
@@ -200,7 +196,7 @@ func (h *DrainNodeHandler) evictNodePods(ctx context.Context, log logrus.FieldLo
 		return nil
 	}
 	log.Infof("evicting %d pods", len(pods))
-	groupVersion, err := drain.CheckEvictionSupport(h.clientset)
+	groupVersion, err := h.clientset.CheckEvictionSupport()
 	if err != nil {
 		return err
 	}
@@ -302,7 +298,7 @@ func (h *DrainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.F
 		defaultBackoff(),
 		defaultMaxRetriesK8SOperation,
 		func(ctx context.Context) (bool, error) {
-			p, err := h.clientset.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
+			p, err := h.clientset.ListPods(ctx, metav1.NamespaceAll, metav1.ListOptions{
 				FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": node.Name}).String(),
 			})
 			if err != nil {
@@ -407,26 +403,7 @@ func (h *DrainNodeHandler) evictPod(ctx context.Context, pod v1.Pod, groupVersio
 		var err error
 
 		h.log.Debugf("requesting eviction for pod %s/%s", pod.Namespace, pod.Name)
-		if groupVersion == policyv1.SchemeGroupVersion {
-			err = h.clientset.PolicyV1().Evictions(pod.Namespace).Evict(ctx, &policyv1.Eviction{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      pod.Name,
-					Namespace: pod.Namespace,
-				},
-			})
-		} else {
-			err = h.clientset.CoreV1().Pods(pod.Namespace).EvictV1beta1(ctx, &v1beta1.Eviction{
-				TypeMeta: metav1.TypeMeta{
-					APIVersion: "policy/v1beta1",
-					Kind:       "Eviction",
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      pod.Name,
-					Namespace: pod.Namespace,
-				},
-			})
-		}
-
+		err = h.clientset.EvictPod(ctx, pod.Namespace, pod.Name)
 		if err != nil {
 			// Pod is not found - ignore.
 			if apierrors.IsNotFound(err) {
@@ -458,7 +435,7 @@ func (h *DrainNodeHandler) evictPod(ctx context.Context, pod v1.Pod, groupVersio
 func (h *DrainNodeHandler) deletePod(ctx context.Context, options metav1.DeleteOptions, pod v1.Pod) error {
 	b := waitext.NewConstantBackoff(h.cfg.podDeleteRetryDelay)
 	action := func(ctx context.Context) (bool, error) {
-		err := h.clientset.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, options)
+		err := h.clientset.DeletePod(ctx, pod.Namespace, pod.Name, options)
 		if err != nil {
 			// Pod is not found - ignore.
 			if apierrors.IsNotFound(err) {

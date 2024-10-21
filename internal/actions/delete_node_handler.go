@@ -7,15 +7,14 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/k8sclient"
+	"github.com/castai/cluster-controller/internal/waitext"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/client-go/kubernetes"
-
-	"github.com/castai/cluster-controller/internal/castai"
-	"github.com/castai/cluster-controller/internal/waitext"
 )
 
 var _ ActionHandler = &DeleteNodeHandler{}
@@ -28,7 +27,7 @@ type deleteNodeConfig struct {
 
 var errNodeMismatch = errors.New("node id mismatch")
 
-func NewDeleteNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface) *DeleteNodeHandler {
+func NewDeleteNodeHandler(log logrus.FieldLogger, clientset k8sclient.ClientSet) *DeleteNodeHandler {
 	return &DeleteNodeHandler{
 		log:       log,
 		clientset: clientset,
@@ -47,7 +46,7 @@ func NewDeleteNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface
 type DeleteNodeHandler struct {
 	DrainNodeHandler
 	log       logrus.FieldLogger
-	clientset kubernetes.Interface
+	clientset k8sclient.ClientSet
 	cfg       deleteNodeConfig
 }
 
@@ -71,7 +70,7 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 		b,
 		h.cfg.deleteRetries,
 		func(ctx context.Context) (bool, error) {
-			current, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
+			current, err := h.clientset.GetNode(req.NodeName)
 			if err != nil {
 				if apierrors.IsNotFound(err) {
 					log.Info("node not found, skipping delete")
@@ -87,7 +86,7 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 				}
 			}
 
-			err = h.clientset.CoreV1().Nodes().Delete(ctx, current.Name, metav1.DeleteOptions{})
+			err = h.clientset.DeleteNode(ctx, current.Name)
 			if apierrors.IsNotFound(err) {
 				log.Info("node not found, skipping delete")
 				return false, nil
@@ -113,7 +112,7 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 		podsListingBackoff,
 		h.cfg.deleteRetries,
 		func(ctx context.Context) (bool, error) {
-			podList, err := h.clientset.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
+			podList, err := h.clientset.ListPods(ctx, metav1.NamespaceAll, metav1.ListOptions{
 				FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": req.NodeName}).String(),
 			})
 			if err != nil {
@@ -152,7 +151,7 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 		podsWaitBackoff,
 		h.cfg.deleteRetries,
 		func(ctx context.Context) (bool, error) {
-			pods, err := h.clientset.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
+			pods, err := h.clientset.ListPods(ctx, metav1.NamespaceAll, metav1.ListOptions{
 				FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": req.NodeName}).String(),
 			})
 			if err != nil {
@@ -162,7 +161,7 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 				return true, fmt.Errorf("waiting for %d pods to be terminated on node %v", len(pods.Items), req.NodeName)
 			}
 			// Check if there are any volume attachments left for the node, but don't block on waiting for them.
-			volumeAttachments, err := h.clientset.StorageV1().VolumeAttachments().List(ctx, metav1.ListOptions{})
+			volumeAttachments, err := h.clientset.StorageVolumeAttachmentList(ctx)
 			if err != nil && !apierrors.IsForbidden(err) {
 				log.Warnf("unable to list volume attachments for node %q err: %v", req.NodeName, err)
 			} else if volumeAttachments != nil && len(volumeAttachments.Items) > 0 {
@@ -178,7 +177,7 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 }
 
 func (h *DeleteNodeHandler) deleteNodeVolumeAttachments(ctx context.Context, nodeName string) error {
-	volumeAttachments, err := h.clientset.StorageV1().VolumeAttachments().List(ctx, metav1.ListOptions{})
+	volumeAttachments, err := h.clientset.StorageVolumeAttachmentList(ctx)
 	if err != nil {
 		return err
 	}

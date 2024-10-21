@@ -5,12 +5,11 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/sirupsen/logrus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-
-	"github.com/castai/cluster-controller/internal/castai"
 )
 
 var _ ActionHandler = &DisconnectClusterHandler{}

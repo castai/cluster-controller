@@ -8,17 +8,16 @@ import (
 	"reflect"
 	"strconv"
 
+	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/k8sclient"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/client-go/kubernetes"
-
-	"github.com/castai/cluster-controller/internal/castai"
 )
 
 var _ ActionHandler = &PatchNodeHandler{}
 
-func NewPatchNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface) *PatchNodeHandler {
+func NewPatchNodeHandler(log logrus.FieldLogger, clientset k8sclient.ClientSet) *PatchNodeHandler {
 	return &PatchNodeHandler{
 		log:       log,
 		clientset: clientset,
@@ -27,7 +26,7 @@ func NewPatchNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface)
 
 type PatchNodeHandler struct {
 	log       logrus.FieldLogger
-	clientset kubernetes.Interface
+	clientset k8sclient.ClientSet
 }
 
 func (h *PatchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
