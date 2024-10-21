@@ -13,9 +13,8 @@ import (
 )
 
 type Metadata struct {
-	ClusterID           string `json:"clusterId"`
-	LastStart           int64  `json:"lastStart"`
-	FirstGetActionCount int    `json:"firstGetActionCount"`
+	ClusterID string `json:"clusterId"`
+	LastStart int64  `json:"lastStart"`
 }
 
 func (m *Metadata) Save(file string) error {
