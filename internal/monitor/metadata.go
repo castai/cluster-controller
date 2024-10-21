@@ -38,7 +38,7 @@ func (m *Metadata) Load(file string) error {
 	}
 
 	if err := json.Unmarshal(contents, m); err != nil {
-		return fmt.Errorf("parsing json: %w", err)
+		return fmt.Errorf("file: %v content: %v parsing json: %w", file, string(contents), err)
 	}
 	return nil
 }
