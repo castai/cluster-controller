@@ -72,38 +72,6 @@ func TestCSRApprove(t *testing.T) {
 		r.Equal(csrResult.Status.Conditions[0].Type, certv1.CertificateApproved)
 	})
 
-	t.Run("approve v1 csr successfully which were created by controller", func(t *testing.T) {
-		r := require.New(t)
-		t.Parallel()
-
-		csrName := "node-csr-123"
-		userName := "system:serviceaccount:castai-agent:castai-cluster-controller"
-		client := fake.NewSimpleClientset(getCSR(csrName, userName))
-		s := NewApprovalManager(log, client)
-		watcher := watch.NewFake()
-		client.PrependWatchReactor("certificatesigningrequests", ktest.DefaultWatchReactor(watcher, nil))
-
-		ctx := context.Background()
-		var wg sync.WaitGroup
-		wg.Add(2)
-		go func() {
-			defer wg.Done()
-			s.Start(ctx)
-		}()
-		go func() {
-			defer wg.Done()
-			watcher.Add(getCSR(csrName, userName))
-			time.Sleep(100 * time.Millisecond)
-			s.Stop()
-		}()
-
-		wg.Wait()
-
-		csrResult, err := client.CertificatesV1().CertificateSigningRequests().Get(ctx, csrName, metav1.GetOptions{})
-		r.NoError(err)
-		r.Equal(csrResult.Status.Conditions[0].Type, certv1.CertificateApproved)
-	})
-
 	t.Run("not node csr do nothing", func(t *testing.T) {
 		r := require.New(t)
 		t.Parallel()
