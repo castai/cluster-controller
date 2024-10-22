@@ -26,7 +26,7 @@ type Config struct {
 	PprofPort      int
 	LeaderElection LeaderElection
 
-	MonitorMetadata string `mapstructure:"monitor_metadata"`
+	MonitorMetadataPath string `mapstructure:"monitor_metadata"`
 	SelfPod         Pod    `mapstructure:"self_pod"`
 }
 
