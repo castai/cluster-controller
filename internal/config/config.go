@@ -27,7 +27,7 @@ type Config struct {
 	LeaderElection LeaderElection
 
 	MonitorMetadataPath string `mapstructure:"monitor_metadata"`
-	SelfPod         Pod    `mapstructure:"self_pod"`
+	SelfPod             Pod    `mapstructure:"self_pod"`
 }
 
 type Pod struct {

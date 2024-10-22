@@ -325,8 +325,8 @@ func saveMetadata(clusterID string, cfg config.Config, log *logrus.Entry) error 
 		ClusterID: clusterID,
 		LastStart: time.Now().UnixNano(),
 	}
-	log.Infof("saving metadata: %v to file: %v", metadata, cfg.MonitorMetadata)
-	if err := metadata.Save(cfg.MonitorMetadata); err != nil {
+	log.Infof("saving metadata: %v to file: %v", metadata, cfg.MonitorMetadataPath)
+	if err := metadata.Save(cfg.MonitorMetadataPath); err != nil {
 		return fmt.Errorf("saving metadata: %w", err)
 	}
 	return nil
