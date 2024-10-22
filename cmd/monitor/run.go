@@ -62,5 +62,5 @@ func runMonitorMode(ctx context.Context, log *logrus.Entry, cfg *config.Config, 
 		return fmt.Errorf("obtaining kubernetes clientset: %w", err)
 	}
 
-	return monitor.Run(ctx, log, clientSet, cfg.MonitorMetadata, cfg.SelfPod, clusterIDChanged)
+	return monitor.Run(ctx, log, clientSet, cfg.MonitorMetadataPath, cfg.SelfPod, clusterIDChanged)
 }
