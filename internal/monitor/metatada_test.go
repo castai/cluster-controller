@@ -75,9 +75,8 @@ func Test_monitor_waitForMetadata(t *testing.T) {
 	// create the file, expect the event to arrive at updates channel
 	var meta Metadata
 	maxI := int64(124)
-	for i := int64(0); i <= maxI; i++ {
+	for i := int64(1); i <= maxI; i++ {
 		meta = Metadata{
-			ClusterID: uuid.New().String(),
 			LastStart: i,
 		}
 		require.NoError(t, meta.Save(syncFile))

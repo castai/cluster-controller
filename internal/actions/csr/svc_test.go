@@ -77,7 +77,7 @@ func TestCSRApprove(t *testing.T) {
 		t.Parallel()
 
 		csrName := "node-csr-123"
-		userName := "serviceaccount:castai-agent:castai-cluster-controller"
+		userName := "system:serviceaccount:castai-agent:castai-cluster-controller"
 		client := fake.NewSimpleClientset(getCSR(csrName, userName))
 		s := NewApprovalManager(log, client)
 		watcher := watch.NewFake()
@@ -94,7 +94,7 @@ func TestCSRApprove(t *testing.T) {
 			defer wg.Done()
 			watcher.Add(getCSR(csrName, userName))
 			time.Sleep(100 * time.Millisecond)
-			s.Stop(ctx)
+			s.Stop()
 		}()
 
 		wg.Wait()
