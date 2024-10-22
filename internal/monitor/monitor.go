@@ -15,7 +15,7 @@ import (
 	"github.com/castai/cluster-controller/internal/config"
 )
 
-func Run(ctx context.Context, log logrus.FieldLogger, clientset *kubernetes.Clientset, metadataFile string, pod config.Pod, clusterIDHandler func(clusterID string)) error {
+func Run(ctx context.Context, log logrus.FieldLogger, clientset *kubernetes.Clientset, metadataFile string, pod config.Pod) error {
 	m := monitor{
 		clientset: clientset,
 		log:       log,
@@ -32,7 +32,6 @@ func Run(ctx context.Context, log logrus.FieldLogger, clientset *kubernetes.Clie
 		case <-ctx.Done():
 			return nil
 		case metadata := <-metadataUpdates:
-			clusterIDHandler(metadata.ClusterID)
 			m.metadataUpdated(ctx, metadata)
 		}
 	}

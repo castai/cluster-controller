@@ -44,15 +44,10 @@ func run(ctx context.Context) error {
 
 	logexporter.SetupLogExporter(logger, client)
 
-	clusterIDHandler := func(clusterID string) {
-		log.Data["cluster_id"] = clusterID
-		log.Data["version"] = binVersion.Version
-	}
-
-	return runMonitorMode(ctx, log, &cfg, clusterIDHandler)
+	return runMonitorMode(ctx, log, &cfg)
 }
 
-func runMonitorMode(ctx context.Context, log *logrus.Entry, cfg *config.Config, clusterIDChanged func(clusterID string)) error {
+func runMonitorMode(ctx context.Context, log *logrus.Entry, cfg *config.Config) error {
 	restConfig, err := config.RetrieveKubeConfig(log)
 	if err != nil {
 		return fmt.Errorf("retrieving kubeconfig: %w", err)
@@ -62,5 +57,5 @@ func runMonitorMode(ctx context.Context, log *logrus.Entry, cfg *config.Config, 
 		return fmt.Errorf("obtaining kubernetes clientset: %w", err)
 	}
 
-	return monitor.Run(ctx, log, clientSet, cfg.MonitorMetadataPath, cfg.SelfPod, clusterIDChanged)
+	return monitor.Run(ctx, log, clientSet, cfg.MonitorMetadataPath, cfg.SelfPod)
 }
