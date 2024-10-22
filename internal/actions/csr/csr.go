@@ -317,8 +317,8 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 			if csrResult == nil {
 				continue
 			}
-			// We are only interested in kubelet-bootstrap csr and our own service account csr.
-			if csrResult.RequestingUser != "kubelet-bootstrap" && csrResult.RequestingUser != "system:serviceaccount:castai-agent:castai-cluster-controller" {
+			// We are only interested in kubelet-bootstrap csr. SKIP own CSR due to the infinite loop of deleting->creating new->deleting.
+			if csrResult.RequestingUser != "kubelet-bootstrap" {
 				log.WithFields(logrus.Fields{
 					"csr":       name,
 					"node_name": csrResult.RequestingUser,
