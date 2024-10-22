@@ -73,15 +73,20 @@ func Test_monitor_waitForMetadata(t *testing.T) {
 	time.Sleep(time.Second * 1)
 
 	// create the file, expect the event to arrive at updates channel
-	meta := Metadata{
-		ClusterID: uuid.New().String(),
-		LastStart: 123,
+	var meta Metadata
+	maxI := int64(124)
+	for i := int64(0); i <= maxI; i++ {
+		meta = Metadata{
+			ClusterID: uuid.New().String(),
+			LastStart: i,
+		}
+		require.NoError(t, meta.Save(syncFile))
 	}
-	require.NoError(t, meta.Save(syncFile))
 
 	metadata, ok := <-updates
 	require.True(t, ok)
-	require.Equal(t, int64(123), metadata.LastStart)
+	require.True(t, maxI >= metadata.LastStart, "expected last start to be %d, got %d", maxI, metadata.LastStart)
+	require.True(t, metadata.LastStart != 0, "expected last start to be non-zero, got %d", metadata.LastStart)
 
 	cancel()
 

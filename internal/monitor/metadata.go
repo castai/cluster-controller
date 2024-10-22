@@ -30,12 +30,16 @@ func (m *Metadata) Save(file string) error {
 	return os.WriteFile(file, contents, 0o600)
 }
 
+var errEmptyMetadata = fmt.Errorf("metadata file is empty")
+
 func (m *Metadata) Load(file string) error {
 	contents, err := os.ReadFile(file)
 	if err != nil {
 		return fmt.Errorf("reading file: %w", err)
 	}
-
+	if len(contents) == 0 {
+		return errEmptyMetadata
+	}
 	if err := json.Unmarshal(contents, m); err != nil {
 		return fmt.Errorf("file: %v content: %v parsing json: %w", file, string(contents), err)
 	}
@@ -48,7 +52,7 @@ func watchForMetadataChanges(ctx context.Context, log logrus.FieldLogger, metada
 	if err != nil {
 		return nil, fmt.Errorf("setting up new watcher: %w", err)
 	}
-	updates := make(chan Metadata, 10)
+	updates := make(chan Metadata, 1)
 
 	if err := watcher.Add(filepath.Dir(metadataFilePath)); err != nil {
 		return nil, fmt.Errorf("adding watch: %w", err)
@@ -61,7 +65,11 @@ func watchForMetadataChanges(ctx context.Context, log logrus.FieldLogger, metada
 				log.Warnf("loading metadata failed: %v", err)
 			}
 		} else {
-			updates <- metadata
+			select {
+			case updates <- metadata:
+			default:
+				log.Warnf("metadata update skipped, channel full")
+			}
 		}
 	}
 
