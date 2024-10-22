@@ -1,13 +1,16 @@
-//go:generate mockgen -destination ./mock/sender.go . LogSender
 package logexporter
 
 import (
 	"context"
+	"fmt"
+	"path"
+	"runtime"
 	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
 
@@ -15,30 +18,39 @@ const (
 	sendTimeout = 15 * time.Second
 )
 
-type LogEntry struct {
-	Level   string        `json:"level"`
-	Time    time.Time     `json:"time"`
-	Message string        `json:"message"`
-	Fields  logrus.Fields `json:"fields"`
-}
-
-type LogSender interface {
-	SendLog(ctx context.Context, e *LogEntry) error
-}
-
 // LogExporter hooks into logrus and sends logs to Mothership.
 type LogExporter struct {
 	logger *logrus.Logger
-	sender LogSender
+	sender castai.CastAIClient
 	wg     sync.WaitGroup
 }
 
 // exporter must satisfy logrus.Hook.
 var _ logrus.Hook = new(LogExporter)
 
+func NewLogger(logLevel uint32) *logrus.Logger {
+	logger := logrus.New()
+	logger.SetLevel(logrus.Level(logLevel))
+	logger.SetReportCaller(true)
+	logger.Formatter = &logrus.TextFormatter{
+		CallerPrettyfier: func(f *runtime.Frame) (string, string) {
+			filename := path.Base(f.File)
+			return fmt.Sprintf("%s()", f.Function), fmt.Sprintf("%s:%d", filename, f.Line)
+		},
+	}
+
+	return logger
+}
+
+func SetupLogExporter(logger *logrus.Logger, sender castai.CastAIClient) {
+	logExporter := newLogExporter(logger, sender)
+	logger.AddHook(logExporter)
+	logrus.RegisterExitHandler(logExporter.Wait)
+}
+
 // NewLogExporter returns new exporter that can be hooked into logrus
 // to inject logs into Cast AI.
-func NewLogExporter(logger *logrus.Logger, sender LogSender) *LogExporter {
+func newLogExporter(logger *logrus.Logger, sender castai.CastAIClient) *LogExporter {
 	return &LogExporter{
 		logger: logger,
 		sender: sender,
@@ -78,7 +90,7 @@ func (e *LogExporter) sendLogEvent(log *logrus.Entry) {
 	ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
 	defer cancel()
 
-	logEntry := &LogEntry{
+	logEntry := &castai.LogEntry{
 		Level:   log.Level.String(),
 		Time:    log.Time,
 		Message: log.Message,

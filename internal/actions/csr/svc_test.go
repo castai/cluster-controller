@@ -46,7 +46,7 @@ func TestCSRApprove(t *testing.T) {
 
 		csrName := "node-csr-123"
 		userName := "kubelet-bootstrap"
-		client := fake.NewSimpleClientset(getCSR(csrName, userName))
+		client := fake.NewClientset(getCSR(csrName, userName))
 		s := NewApprovalManager(log, client)
 		watcher := watch.NewFake()
 		client.PrependWatchReactor("certificatesigningrequests", ktest.DefaultWatchReactor(watcher, nil))
@@ -62,7 +62,7 @@ func TestCSRApprove(t *testing.T) {
 			defer wg.Done()
 			watcher.Add(getCSR(csrName, userName))
 			time.Sleep(100 * time.Millisecond)
-			s.Stop(ctx)
+			s.Stop()
 		}()
 
 		wg.Wait()
@@ -78,7 +78,7 @@ func TestCSRApprove(t *testing.T) {
 
 		csrName := "123"
 		userName := "kubelet-bootstrap"
-		client := fake.NewSimpleClientset(getCSR(csrName, userName))
+		client := fake.NewClientset(getCSR(csrName, userName))
 		s := NewApprovalManager(log, client)
 		watcher := watch.NewFake()
 		client.PrependWatchReactor("certificatesigningrequests", ktest.DefaultWatchReactor(watcher, nil))
@@ -94,7 +94,7 @@ func TestCSRApprove(t *testing.T) {
 			defer wg.Done()
 			watcher.Add(getCSR(csrName, userName))
 			time.Sleep(100 * time.Millisecond)
-			s.Stop(ctx)
+			s.Stop()
 		}()
 
 		wg.Wait()
