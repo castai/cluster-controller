@@ -30,7 +30,9 @@ type ApprovalManager struct {
 	log               logrus.FieldLogger
 	clientset         kubernetes.Interface
 	cancelAutoApprove context.CancelFunc
-	m                 sync.Mutex // Used to make sure there is just one watcher running.
+
+	inProgress map[string]struct{} // one handler per csr/certificate Name.
+	m          sync.Mutex          // Used to make sure there is just one watcher running.
 }
 
 func (h *ApprovalManager) Start(ctx context.Context) {
@@ -114,7 +116,13 @@ func (h *ApprovalManager) runAutoApproveForCastAINodes(ctx context.Context) {
 			if cert == nil {
 				continue
 			}
+			// prevent starting goroutine for the same node certificate
+			if !h.addInProgress(cert.Name) {
+				continue
+			}
 			go func(cert *Certificate) {
+				defer h.removeInProgress(cert.Name)
+
 				log := log.WithField("node_name", cert.Name)
 				log.Info("auto approving csr")
 				err := h.handleWithRetry(ctx, log, cert)
@@ -156,4 +164,25 @@ func newApproveCSRExponentialBackoff() wait.Backoff {
 	b := waitext.DefaultExponentialBackoff()
 	b.Factor = 2
 	return b
+}
+
+func (h *ApprovalManager) addInProgress(nodeName string) bool {
+	h.m.Lock()
+	defer h.m.Unlock()
+	if h.inProgress == nil {
+		h.inProgress = make(map[string]struct{})
+	}
+	_, ok := h.inProgress[nodeName]
+	if ok {
+		return false
+	}
+	h.inProgress[nodeName] = struct{}{}
+	return true
+}
+
+func (h *ApprovalManager) removeInProgress(nodeName string) {
+	h.m.Lock()
+	defer h.m.Unlock()
+
+	delete(h.inProgress, nodeName)
 }

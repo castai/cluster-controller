@@ -3,10 +3,15 @@ package csr
 import (
 	"context"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	certv1 "k8s.io/api/certificates/v1"
+	certv1beta1 "k8s.io/api/certificates/v1beta1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/client-go/tools/clientcmd"
@@ -92,6 +97,123 @@ func Test_isCastAINodeCsr(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := isCastAINodeCsr(tt.args.subjectCommonName)
 			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func Test_toCertificate(t *testing.T) {
+	testCSRv1 := &certv1.CertificateSigningRequest{
+		Spec: certv1.CertificateSigningRequestSpec{
+			Username: "kubelet-bootstrap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			CreationTimestamp: metav1.Time{Time: time.Now().Add(csrTTL)},
+			Name:              "test",
+		},
+	}
+	testCSRv1beta1 := &certv1beta1.CertificateSigningRequest{
+		Spec: certv1beta1.CertificateSigningRequestSpec{
+			Username: "kubelet-bootstrap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			CreationTimestamp: metav1.Time{Time: time.Now().Add(csrTTL)},
+			Name:              "test",
+		},
+	}
+	type args struct {
+		event watch.Event
+	}
+	tests := []struct {
+		name        string
+		args        args
+		wantCert    *Certificate
+		wantName    string
+		wantRequest []byte
+		wantErr     bool
+	}{
+		{
+			name: "empty event",
+			args: args{
+				event: watch.Event{},
+			},
+			wantErr: true,
+		},
+		{
+			name: "outdated event",
+			args: args{
+				event: watch.Event{
+					Object: &certv1.CertificateSigningRequest{
+						ObjectMeta: metav1.ObjectMeta{
+							CreationTimestamp: metav1.Time{Time: time.Now().Add(-csrTTL)},
+						},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "bad owner",
+			args: args{
+				event: watch.Event{
+					Object: &certv1.CertificateSigningRequest{
+						Spec: certv1.CertificateSigningRequestSpec{
+							Username: "test",
+						},
+						ObjectMeta: metav1.ObjectMeta{
+							CreationTimestamp: metav1.Time{Time: time.Now().Add(csrTTL)},
+						},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "ok v1",
+			args: args{
+				event: watch.Event{
+					Object: testCSRv1,
+				},
+			},
+			wantErr:  false,
+			wantName: "test",
+			wantCert: &Certificate{
+				Name:           "test",
+				RequestingUser: "kubelet-bootstrap",
+				v1:             testCSRv1,
+			},
+		},
+		{
+			name: "ok v1beta1",
+			args: args{
+				event: watch.Event{
+					Object: testCSRv1beta1,
+				},
+			},
+			wantErr:  false,
+			wantName: "test",
+			wantCert: &Certificate{
+				Name:           "test",
+				RequestingUser: "kubelet-bootstrap",
+				v1Beta1:        testCSRv1beta1,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotCert, gotName, gotRequest, err := toCertificate(tt.args.event)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("toCertificate() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(gotCert, tt.wantCert) {
+				t.Errorf("toCertificate() gotCert = %v, want %v", gotCert, tt.wantCert)
+			}
+			if gotName != tt.wantName {
+				t.Errorf("toCertificate() gotName = %v, want %v", gotName, tt.wantName)
+			}
+			if !reflect.DeepEqual(gotRequest, tt.wantRequest) {
+				t.Errorf("toCertificate() gotRequest = %v, want %v", gotRequest, tt.wantRequest)
+			}
 		})
 	}
 }

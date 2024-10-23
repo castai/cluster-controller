@@ -17,7 +17,10 @@ import (
 
 func getCSR(name, username string) *certv1.CertificateSigningRequest {
 	return &certv1.CertificateSigningRequest{
-		ObjectMeta: metav1.ObjectMeta{Name: name},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              name,
+			CreationTimestamp: metav1.Now(),
+		},
 		Spec: certv1.CertificateSigningRequestSpec{
 			Request: []byte(`-----BEGIN CERTIFICATE REQUEST-----
 MIIBLTCB0wIBADBPMRUwEwYDVQQKEwxzeXN0ZW06bm9kZXMxNjA0BgNVBAMTLXN5
@@ -69,6 +72,7 @@ func TestCSRApprove(t *testing.T) {
 
 		csrResult, err := client.CertificatesV1().CertificateSigningRequests().Get(ctx, csrName, metav1.GetOptions{})
 		r.NoError(err)
+
 		r.Equal(csrResult.Status.Conditions[0].Type, certv1.CertificateApproved)
 	})
 

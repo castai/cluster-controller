@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	certv1 "k8s.io/api/certificates/v1"
@@ -25,6 +26,7 @@ import (
 const (
 	ReasonApproved  = "AutoApproved"
 	approvedMessage = "This CSR was approved by CAST AI"
+	csrTTL          = time.Hour
 )
 
 var ErrNodeCertificateNotFound = errors.New("node certificate not found")
@@ -313,16 +315,13 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 				return
 			}
 
-			csrResult, name, request := toCertificate(event)
-			if csrResult == nil {
+			cert, name, request, err := toCertificate(event)
+			if err != nil {
+				log.Warnf("toCertificate: skipping csr event: %v", err)
 				continue
 			}
-			// We are only interested in kubelet-bootstrap csr. SKIP own CSR due to the infinite loop of deleting->creating new->deleting.
-			if csrResult.RequestingUser != "kubelet-bootstrap" {
-				log.WithFields(logrus.Fields{
-					"csr":       name,
-					"node_name": csrResult.RequestingUser,
-				}).Infof("skipping csr not from kubelet-bootstrap: %v", csrResult.RequestingUser)
+
+			if cert == nil {
 				continue
 			}
 
@@ -334,7 +333,7 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 				}).Infof("skipping csr unable to get common name: %v", err)
 				continue
 			}
-			if csrResult.Approved() {
+			if cert.Approved() {
 				continue
 			}
 
@@ -345,8 +344,8 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 				}).Infof("skipping csr not CAST AI node")
 				continue
 			}
-			csrResult.Name = cn
-			sendCertificate(ctx, c, csrResult)
+			cert.Name = cn
+			sendCertificate(ctx, c, cert)
 		}
 	}
 }
@@ -362,21 +361,39 @@ func getWatcher(ctx context.Context, client kubernetes.Interface) (watch.Interfa
 	return w, nil
 }
 
-func toCertificate(event watch.Event) (cert *Certificate, name string, request []byte) {
+var (
+	errUnexpectedObjectType = errors.New("unexpected object type")
+	errCSRTooOld            = errors.New("csr is too old")
+	errOwner                = errors.New("owner is not bootstrap")
+)
+
+func toCertificate(event watch.Event) (cert *Certificate, name string, request []byte, err error) {
+	isOutdated := false
 	switch e := event.Object.(type) {
 	case *certv1.CertificateSigningRequest:
 		name = e.Name
 		request = e.Spec.Request
 		cert = &Certificate{Name: name, v1: e, RequestingUser: e.Spec.Username}
+		isOutdated = e.CreationTimestamp.Add(csrTTL).Before(time.Now())
 	case *certv1beta1.CertificateSigningRequest:
 		name = e.Name
 		request = e.Spec.Request
 		cert = &Certificate{Name: name, v1Beta1: e, RequestingUser: e.Spec.Username}
+		isOutdated = e.CreationTimestamp.Add(csrTTL).Before(time.Now())
 	default:
-		return nil, "", nil
+		return nil, "", nil, errUnexpectedObjectType
 	}
 
-	return cert, name, request
+	if isOutdated {
+		return nil, "", nil, fmt.Errorf("csr with certificate Name: %v RequestingUser: %v %w", cert.Name, cert.RequestingUser, errCSRTooOld)
+	}
+
+	// We are only interested in kubelet-bootstrap csr. SKIP own CSR due to the infinite loop of deleting->creating new->deleting.
+	if cert.RequestingUser != "kubelet-bootstrap" {
+		return nil, "", nil, fmt.Errorf("csr with certificate Name: %v RequestingUser: %v %w", cert.Name, cert.RequestingUser, errOwner)
+	}
+
+	return cert, name, request, nil
 }
 
 func isCastAINodeCsr(subjectCommonName string) bool {
