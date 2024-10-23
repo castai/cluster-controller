@@ -393,7 +393,7 @@ func toCertificate(event watch.Event) (cert *Certificate, name string, request [
 	}
 
 	if isOutdated {
-		return nil, "", nil, errCSRTooOld
+		return nil, "", nil, fmt.Errorf("csr with certificate Name: %v RequestingUser: %v %w", cert.Name, cert.RequestingUser, errCSRTooOld)
 	}
 	return cert, name, request, nil
 }
