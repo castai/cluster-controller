@@ -92,6 +92,8 @@ func (h *ApproveCSRHandler) handleWithRetry(ctx context.Context, log *logrus.Ent
 func (h *ApproveCSRHandler) handle(ctx context.Context, log logrus.FieldLogger, cert *csr.Certificate) (reterr error) {
 	// Since this new csr may be denied we need to delete it.
 	log.Debug("deleting old csr")
+	//!!!CLEAN IT UP!!!
+	time.Sleep(25 * time.Second)
 	if err := cert.DeleteCertificate(ctx, h.clientset); err != nil {
 		return fmt.Errorf("deleting csr: %w", err)
 	}
