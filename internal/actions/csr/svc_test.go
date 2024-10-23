@@ -6,16 +6,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	certv1 "k8s.io/api/certificates/v1"
+	certv1beta1 "k8s.io/api/certificates/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/fake"
 	ktest "k8s.io/client-go/testing"
 )
 
-func getCSR(name, username string) *certv1.CertificateSigningRequest {
+func getCSRv1(name, username string) *certv1.CertificateSigningRequest {
 	return &certv1.CertificateSigningRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              name,
@@ -39,6 +41,30 @@ S59zc2bEaJ3y4aSMXLY3gmri14jZvvnFrxaPDT2PAiEA7C3hvZwrCJsoO61JWKqc
 	}
 }
 
+func getCSRv1betav1(name, username string) *certv1beta1.CertificateSigningRequest {
+	return &certv1beta1.CertificateSigningRequest{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              name,
+			CreationTimestamp: metav1.Now(),
+		},
+		Spec: certv1beta1.CertificateSigningRequestSpec{
+			Request: []byte(`-----BEGIN CERTIFICATE REQUEST-----
+MIIBLTCB0wIBADBPMRUwEwYDVQQKEwxzeXN0ZW06bm9kZXMxNjA0BgNVBAMTLXN5
+c3RlbTpub2RlOmdrZS1kZXYtbWFzdGVyLWNhc3QtcG9vbC1jYjUzMTc3YjBZMBMG
+ByqGSM49AgEGCCqGSM49AwEHA0IABMZKNQROiVpxfH4nHaPnE6NaY9Mr8/HBnxCl
+mPe4mrvNGRnlJV+LvYCUAVlfinzLcMJSmRjJADgzN0Pn+i+4ra6gIjAgBgkqhkiG
+9w0BCQ4xEzARMA8GA1UdEQQIMAaHBAoKADIwCgYIKoZIzj0EAwIDSQAwRgIhAOKQ
+S59zc2bEaJ3y4aSMXLY3gmri14jZvvnFrxaPDT2PAiEA7C3hvZwrCJsoO61JWKqc
+1ElMb/fzAVBcP34rfsE7qmQ=
+-----END CERTIFICATE REQUEST-----`),
+			SignerName: lo.ToPtr(certv1beta1.KubeAPIServerClientKubeletSignerName),
+			Usages:     []certv1beta1.KeyUsage{"kubelet"},
+			Username:   username,
+		},
+		// Status: certv1.CertificateSigningRequestStatus{},.
+	}
+}
+
 func TestCSRApprove(t *testing.T) {
 	log := logrus.New()
 	log.SetLevel(logrus.DebugLevel)
@@ -49,7 +75,7 @@ func TestCSRApprove(t *testing.T) {
 
 		csrName := "node-csr-123"
 		userName := "kubelet-bootstrap"
-		client := fake.NewClientset(getCSR(csrName, userName))
+		client := fake.NewClientset(getCSRv1(csrName, userName))
 		s := NewApprovalManager(log, client)
 		watcher := watch.NewFake()
 		client.PrependWatchReactor("certificatesigningrequests", ktest.DefaultWatchReactor(watcher, nil))
@@ -63,7 +89,7 @@ func TestCSRApprove(t *testing.T) {
 		}()
 		go func() {
 			defer wg.Done()
-			watcher.Add(getCSR(csrName, userName))
+			watcher.Add(getCSRv1(csrName, userName))
 			time.Sleep(100 * time.Millisecond)
 			s.Stop()
 		}()
@@ -82,7 +108,7 @@ func TestCSRApprove(t *testing.T) {
 
 		csrName := "123"
 		userName := "kubelet-bootstrap"
-		client := fake.NewClientset(getCSR(csrName, userName))
+		client := fake.NewClientset(getCSRv1(csrName, userName))
 		s := NewApprovalManager(log, client)
 		watcher := watch.NewFake()
 		client.PrependWatchReactor("certificatesigningrequests", ktest.DefaultWatchReactor(watcher, nil))
@@ -96,7 +122,7 @@ func TestCSRApprove(t *testing.T) {
 		}()
 		go func() {
 			defer wg.Done()
-			watcher.Add(getCSR(csrName, userName))
+			watcher.Add(getCSRv1(csrName, userName))
 			time.Sleep(100 * time.Millisecond)
 			s.Stop()
 		}()

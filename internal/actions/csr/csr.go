@@ -315,7 +315,7 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 				return
 			}
 
-			cert, name, request, err := toCertificate(event)
+			cert, err := toCertificate(event)
 			if err != nil {
 				log.Warnf("toCertificate: skipping csr event: %v", err)
 				continue
@@ -325,26 +325,10 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 				continue
 			}
 
-			cn, err := getSubjectCommonName(name, request)
-			if err != nil {
-				log.WithFields(logrus.Fields{
-					"csr":       name,
-					"node_name": cn,
-				}).Infof("skipping csr unable to get common name: %v", err)
-				continue
-			}
 			if cert.Approved() {
 				continue
 			}
 
-			if !isCastAINodeCsr(cn) {
-				log.WithFields(logrus.Fields{
-					"csr":       name,
-					"node_name": cn,
-				}).Infof("skipping csr not CAST AI node")
-				continue
-			}
-			cert.Name = cn
 			sendCertificate(ctx, c, cert)
 		}
 	}
@@ -365,9 +349,13 @@ var (
 	errUnexpectedObjectType = errors.New("unexpected object type")
 	errCSRTooOld            = errors.New("csr is too old")
 	errOwner                = errors.New("owner is not bootstrap")
+	errNonCastAINode        = errors.New("not a castai node")
 )
 
-func toCertificate(event watch.Event) (cert *Certificate, name string, request []byte, err error) {
+func toCertificate(event watch.Event) (cert *Certificate, err error) {
+	var name string
+	var request []byte
+
 	isOutdated := false
 	switch e := event.Object.(type) {
 	case *certv1.CertificateSigningRequest:
@@ -381,19 +369,31 @@ func toCertificate(event watch.Event) (cert *Certificate, name string, request [
 		cert = &Certificate{Name: name, v1Beta1: e, RequestingUser: e.Spec.Username}
 		isOutdated = e.CreationTimestamp.Add(csrTTL).Before(time.Now())
 	default:
-		return nil, "", nil, errUnexpectedObjectType
+		return nil, errUnexpectedObjectType
 	}
 
 	if isOutdated {
-		return nil, "", nil, fmt.Errorf("csr with certificate Name: %v RequestingUser: %v %w", cert.Name, cert.RequestingUser, errCSRTooOld)
+		return nil, fmt.Errorf("csr with certificate Name: %v RequestingUser: %v %w", cert.Name, cert.RequestingUser, errCSRTooOld)
 	}
 
-	// We are only interested in kubelet-bootstrap csr. SKIP own CSR due to the infinite loop of deleting->creating new->deleting.
-	if cert.RequestingUser != "kubelet-bootstrap" {
-		return nil, "", nil, fmt.Errorf("csr with certificate Name: %v RequestingUser: %v %w", cert.Name, cert.RequestingUser, errOwner)
+	// Since we only have one handler per CSR/certificate name,
+	// which is the node name, we can process the controller's certificates and kubelet-bootstrap`s.
+	// This covers the case when the controller restarts but the bootstrap certificate was deleted without our own certificate being approved.
+	if cert.RequestingUser != "kubelet-bootstrap" && cert.RequestingUser != "system:serviceaccount:castai-agent:castai-cluster-controller" {
+		return nil, fmt.Errorf("csr with certificate Name: %v RequestingUser: %v %w", cert.Name, cert.RequestingUser, errOwner)
 	}
 
-	return cert, name, request, nil
+	cn, err := getSubjectCommonName(name, request)
+	if err != nil {
+		return nil, fmt.Errorf("getSubjectCommonName: Name: %v RequestingUser: %v  request: %v %w", cert.Name, cert.RequestingUser, string(request), err)
+	}
+
+	if !isCastAINodeCsr(cn) {
+		return nil, fmt.Errorf("csr with certificate Name: %v RequestingUser: %v cn: %v %w", cert.Name, cert.RequestingUser, cn, errNonCastAINode)
+	}
+	cert.Name = cn
+
+	return cert, nil
 }
 
 func isCastAINodeCsr(subjectCommonName string) bool {
