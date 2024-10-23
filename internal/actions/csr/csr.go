@@ -325,15 +325,6 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 				continue
 			}
 
-			// We are only interested in kubelet-bootstrap csr. SKIP own CSR due to the infinite loop of deleting->creating new->deleting.
-			if cert.RequestingUser != "kubelet-bootstrap" {
-				log.WithFields(logrus.Fields{
-					"csr":             name,
-					"requesting_user": cert.RequestingUser,
-				}).Infof("skipping csr with certificate not from kubelet-bootstrap: %v", cert.RequestingUser)
-				continue
-			}
-
 			cn, err := getSubjectCommonName(name, request)
 			if err != nil {
 				log.WithFields(logrus.Fields{
@@ -373,6 +364,7 @@ func getWatcher(ctx context.Context, client kubernetes.Interface) (watch.Interfa
 var (
 	errUnexpectedObjectType = errors.New("unexpected object type")
 	errCSRTooOld            = errors.New("csr is too old")
+	errOwner                = errors.New("owner is not bootstrap")
 )
 
 func toCertificate(event watch.Event) (cert *Certificate, name string, request []byte, err error) {
@@ -395,6 +387,12 @@ func toCertificate(event watch.Event) (cert *Certificate, name string, request [
 	if isOutdated {
 		return nil, "", nil, fmt.Errorf("csr with certificate Name: %v RequestingUser: %v %w", cert.Name, cert.RequestingUser, errCSRTooOld)
 	}
+
+	// We are only interested in kubelet-bootstrap csr. SKIP own CSR due to the infinite loop of deleting->creating new->deleting.
+	if cert.RequestingUser != "kubelet-bootstrap" {
+		return nil, "", nil, fmt.Errorf("csr with certificate Name: %v RequestingUser: %v %w", cert.Name, cert.RequestingUser, errOwner)
+	}
+
 	return cert, name, request, nil
 }
 

@@ -31,7 +31,7 @@ type ApprovalManager struct {
 	clientset         kubernetes.Interface
 	cancelAutoApprove context.CancelFunc
 
-	inProgress map[string]struct{} // one csr handler per node.
+	inProgress map[string]struct{} // one handler per csr/certificate Name.
 	m          sync.Mutex          // Used to make sure there is just one watcher running.
 }
 

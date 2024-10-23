@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	certv1 "k8s.io/api/certificates/v1"
+	certv1beta1 "k8s.io/api/certificates/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
@@ -101,6 +102,24 @@ func Test_isCastAINodeCsr(t *testing.T) {
 }
 
 func Test_toCertificate(t *testing.T) {
+	testCSRv1 := &certv1.CertificateSigningRequest{
+		Spec: certv1.CertificateSigningRequestSpec{
+			Username: "kubelet-bootstrap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			CreationTimestamp: metav1.Time{Time: time.Now().Add(csrTTL)},
+			Name:              "test",
+		},
+	}
+	testCSRv1beta1 := &certv1beta1.CertificateSigningRequest{
+		Spec: certv1beta1.CertificateSigningRequestSpec{
+			Username: "kubelet-bootstrap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			CreationTimestamp: metav1.Time{Time: time.Now().Add(csrTTL)},
+			Name:              "test",
+		},
+	}
 	type args struct {
 		event watch.Event
 	}
@@ -131,6 +150,52 @@ func Test_toCertificate(t *testing.T) {
 				},
 			},
 			wantErr: true,
+		},
+		{
+			name: "bad owner",
+			args: args{
+				event: watch.Event{
+					Object: &certv1.CertificateSigningRequest{
+						Spec: certv1.CertificateSigningRequestSpec{
+							Username: "test",
+						},
+						ObjectMeta: metav1.ObjectMeta{
+							CreationTimestamp: metav1.Time{Time: time.Now().Add(csrTTL)},
+						},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "ok v1",
+			args: args{
+				event: watch.Event{
+					Object: testCSRv1,
+				},
+			},
+			wantErr:  false,
+			wantName: "test",
+			wantCert: &Certificate{
+				Name:           "test",
+				RequestingUser: "kubelet-bootstrap",
+				v1:             testCSRv1,
+			},
+		},
+		{
+			name: "ok v1beta1",
+			args: args{
+				event: watch.Event{
+					Object: testCSRv1beta1,
+				},
+			},
+			wantErr:  false,
+			wantName: "test",
+			wantCert: &Certificate{
+				Name:           "test",
+				RequestingUser: "kubelet-bootstrap",
+				v1Beta1:        testCSRv1beta1,
+			},
 		},
 	}
 	for _, tt := range tests {
