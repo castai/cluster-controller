@@ -20,11 +20,13 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/internal/waitext"
+	"time"
 )
 
 const (
 	ReasonApproved  = "AutoApproved"
 	approvedMessage = "This CSR was approved by CAST AI"
+	csrTTL          = time.Hour
 )
 
 var ErrNodeCertificateNotFound = errors.New("node certificate not found")
@@ -313,10 +315,16 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 				return
 			}
 
-			cert, name, request := toCertificate(event)
+			cert, name, request, err := toCertificate(event)
+			if err != nil {
+				log.Warnf("toCertificate: skipping csr event: %v", err)
+				continue
+			}
+
 			if cert == nil {
 				continue
 			}
+
 			// We are only interested in kubelet-bootstrap csr. SKIP own CSR due to the infinite loop of deleting->creating new->deleting.
 			if cert.RequestingUser != "kubelet-bootstrap" {
 				log.WithFields(logrus.Fields{
@@ -362,21 +370,32 @@ func getWatcher(ctx context.Context, client kubernetes.Interface) (watch.Interfa
 	return w, nil
 }
 
-func toCertificate(event watch.Event) (cert *Certificate, name string, request []byte) {
+var (
+	errUnexpectedObjectType = errors.New("unexpected object type")
+	errCSRTooOld            = errors.New("csr is too old")
+)
+
+func toCertificate(event watch.Event) (cert *Certificate, name string, request []byte, err error) {
+	isOutdated := false
 	switch e := event.Object.(type) {
 	case *certv1.CertificateSigningRequest:
 		name = e.Name
 		request = e.Spec.Request
 		cert = &Certificate{Name: name, v1: e, RequestingUser: e.Spec.Username}
+		isOutdated = e.CreationTimestamp.Add(csrTTL).Before(time.Now())
 	case *certv1beta1.CertificateSigningRequest:
 		name = e.Name
 		request = e.Spec.Request
 		cert = &Certificate{Name: name, v1Beta1: e, RequestingUser: e.Spec.Username}
+		isOutdated = e.CreationTimestamp.Add(csrTTL).Before(time.Now())
 	default:
-		return nil, "", nil
+		return nil, "", nil, errUnexpectedObjectType
 	}
 
-	return cert, name, request
+	if isOutdated {
+		return nil, "", nil, errCSRTooOld
+	}
+	return cert, name, request, nil
 }
 
 func isCastAINodeCsr(subjectCommonName string) bool {

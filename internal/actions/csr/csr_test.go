@@ -7,10 +7,14 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	certv1 "k8s.io/api/certificates/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
+	"reflect"
 )
 
 func TestApproveCSR(t *testing.T) {
@@ -92,6 +96,59 @@ func Test_isCastAINodeCsr(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := isCastAINodeCsr(tt.args.subjectCommonName)
 			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func Test_toCertificate(t *testing.T) {
+	type args struct {
+		event watch.Event
+	}
+	tests := []struct {
+		name        string
+		args        args
+		wantCert    *Certificate
+		wantName    string
+		wantRequest []byte
+		wantErr     bool
+	}{
+		{
+			name: "empty event",
+			args: args{
+				event: watch.Event{},
+			},
+			wantErr: true,
+		},
+		{
+			name: "outdated event",
+			args: args{
+				event: watch.Event{
+					Object: &certv1.CertificateSigningRequest{
+						ObjectMeta: metav1.ObjectMeta{
+							CreationTimestamp: metav1.Time{Time: time.Now().Add(-csrTTL)},
+						},
+					},
+				},
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotCert, gotName, gotRequest, err := toCertificate(tt.args.event)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("toCertificate() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(gotCert, tt.wantCert) {
+				t.Errorf("toCertificate() gotCert = %v, want %v", gotCert, tt.wantCert)
+			}
+			if gotName != tt.wantName {
+				t.Errorf("toCertificate() gotName = %v, want %v", gotName, tt.wantName)
+			}
+			if !reflect.DeepEqual(gotRequest, tt.wantRequest) {
+				t.Errorf("toCertificate() gotRequest = %v, want %v", gotRequest, tt.wantRequest)
+			}
 		})
 	}
 }
