@@ -61,7 +61,7 @@ func TestCSRApprove(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			watcher.Add(getCSR(csrName, userName))
-			watcher.Add(getCSR(csrName, userName)) //should skip start handler
+			watcher.Add(getCSR(csrName, userName)) // should skip start handler
 			time.Sleep(100 * time.Millisecond)
 			s.Stop()
 		}()

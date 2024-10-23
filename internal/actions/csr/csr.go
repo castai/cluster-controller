@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	certv1 "k8s.io/api/certificates/v1"
@@ -20,7 +21,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/internal/waitext"
-	"time"
 )
 
 const (
