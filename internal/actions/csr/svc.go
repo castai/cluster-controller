@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/internal/waitext"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 const (
