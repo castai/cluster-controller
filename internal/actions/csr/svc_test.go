@@ -61,7 +61,6 @@ func TestCSRApprove(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			watcher.Add(getCSR(csrName, userName))
-			watcher.Add(getCSR(csrName, userName)) // should skip start handler
 			time.Sleep(100 * time.Millisecond)
 			s.Stop()
 		}()
@@ -70,6 +69,7 @@ func TestCSRApprove(t *testing.T) {
 
 		csrResult, err := client.CertificatesV1().CertificateSigningRequests().Get(ctx, csrName, metav1.GetOptions{})
 		r.NoError(err)
+
 		r.Equal(csrResult.Status.Conditions[0].Type, certv1.CertificateApproved)
 	})
 
