@@ -17,7 +17,10 @@ import (
 
 func getCSR(name, username string) *certv1.CertificateSigningRequest {
 	return &certv1.CertificateSigningRequest{
-		ObjectMeta: metav1.ObjectMeta{Name: name},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              name,
+			CreationTimestamp: metav1.Now(),
+		},
 		Spec: certv1.CertificateSigningRequestSpec{
 			Request: []byte(`-----BEGIN CERTIFICATE REQUEST-----
 MIIBLTCB0wIBADBPMRUwEwYDVQQKEwxzeXN0ZW06bm9kZXMxNjA0BgNVBAMTLXN5
