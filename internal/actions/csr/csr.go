@@ -313,16 +313,16 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 				return
 			}
 
-			csrResult, name, request := toCertificate(event)
-			if csrResult == nil {
+			cert, name, request := toCertificate(event)
+			if cert == nil {
 				continue
 			}
 			// We are only interested in kubelet-bootstrap csr. SKIP own CSR due to the infinite loop of deleting->creating new->deleting.
-			if csrResult.RequestingUser != "kubelet-bootstrap" {
+			if cert.RequestingUser != "kubelet-bootstrap" {
 				log.WithFields(logrus.Fields{
-					"csr":       name,
-					"node_name": csrResult.RequestingUser,
-				}).Infof("skipping csr not from kubelet-bootstrap: %v", csrResult.RequestingUser)
+					"csr":             name,
+					"requesting_user": cert.RequestingUser,
+				}).Infof("skipping csr with certificate not from kubelet-bootstrap: %v", cert.RequestingUser)
 				continue
 			}
 
@@ -334,7 +334,7 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 				}).Infof("skipping csr unable to get common name: %v", err)
 				continue
 			}
-			if csrResult.Approved() {
+			if cert.Approved() {
 				continue
 			}
 
@@ -345,8 +345,8 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 				}).Infof("skipping csr not CAST AI node")
 				continue
 			}
-			csrResult.Name = cn
-			sendCertificate(ctx, c, csrResult)
+			cert.Name = cn
+			sendCertificate(ctx, c, cert)
 		}
 	}
 }
