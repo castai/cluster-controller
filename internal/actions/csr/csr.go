@@ -71,8 +71,8 @@ func isAlreadyApproved(err error) bool {
 	return strings.Contains(err.Error(), "Duplicate value: \"Approved\"")
 }
 
-// ApproveCertificate approves csr.
-func (c *Certificate) ApproveCertificate(ctx context.Context, client kubernetes.Interface) (*Certificate, error) {
+// ApproveCSRCertificate approves csr.
+func (c *Certificate) ApproveCSRCertificate(ctx context.Context, client kubernetes.Interface) (*Certificate, error) {
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
@@ -105,8 +105,8 @@ func (c *Certificate) ApproveCertificate(ctx context.Context, client kubernetes.
 	return &Certificate{v1: resp}, nil
 }
 
-// DeleteCertificate deletes csr.
-func (c *Certificate) DeleteCertificate(ctx context.Context, client kubernetes.Interface) error {
+// DeleteCSR deletes csr.
+func (c *Certificate) DeleteCSR(ctx context.Context, client kubernetes.Interface) error {
 	if err := c.Validate(); err != nil {
 		return err
 	}

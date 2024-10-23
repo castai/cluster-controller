@@ -32,13 +32,13 @@ func TestApproveCSR(t *testing.T) {
 	cert, err := GetCertificateByNodeName(ctx, client, "gke-csr-cast-pool-ab259afb")
 	r.NoError(err)
 
-	err = cert.DeleteCertificate(ctx, client)
+	err = cert.DeleteCSR(ctx, client)
 	r.NoError(err)
 
 	cert, err = cert.NewCSR(ctx, client)
 	r.NoError(err)
 
-	_, err = cert.ApproveCertificate(ctx, client)
+	_, err = cert.ApproveCSRCertificate(ctx, client)
 	r.NoError(err)
 }
 

@@ -90,15 +90,8 @@ func (h *ApproveCSRHandler) handleWithRetry(ctx context.Context, log *logrus.Ent
 }
 
 func (h *ApproveCSRHandler) handle(ctx context.Context, log logrus.FieldLogger, cert *csr.Certificate) (reterr error) {
-	// Since this new csr may be denied we need to delete it.
-	log.Debug("deleting old csr")
-	//!!!CLEAN IT UP!!!
-	time.Sleep(25 * time.Second)
-	if err := cert.DeleteCertificate(ctx, h.clientset); err != nil {
-		return fmt.Errorf("deleting csr: %w", err)
-	}
-
-	// Create a new CSR with the same request data as the original one.
+	// Create a new CSR with the same request data as the original one,
+	// since old csr may be denied.
 	log.Debug("requesting new csr")
 	newCert, err := cert.NewCSR(ctx, h.clientset)
 	if err != nil {
@@ -107,12 +100,19 @@ func (h *ApproveCSRHandler) handle(ctx context.Context, log logrus.FieldLogger, 
 
 	// Approve new csr.
 	log.Debug("approving new csr")
-	resp, err := newCert.ApproveCertificate(ctx, h.clientset)
+	resp, err := newCert.ApproveCSRCertificate(ctx, h.clientset)
 	if err != nil {
 		return fmt.Errorf("approving csr: %w", err)
 	}
 	if resp.Approved() {
 		return nil
+	}
+
+	log.Debug("deleting old csr")
+	//!!!CLEAN IT UP!!!
+	time.Sleep(25 * time.Second)
+	if err := cert.DeleteCSR(ctx, h.clientset); err != nil {
+		return fmt.Errorf("deleting csr: %w", err)
 	}
 
 	return errors.New("certificate signing request was not approved")
