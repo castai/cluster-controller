@@ -24,48 +24,48 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.22.7'
-      
+
       - name: Cache Go modules
         uses: actions/cache@v3
         with:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-build-${{ hashFiles('**/go.sum') }}
           restore-keys: ${{ runner.os }}-build-
-      
+
       - name: Get release tag
         if: github.event_name == 'release'
         run: echo "RELEASE_TAG=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
-      
+
       - name: Build Go binary amd64
         run: go build -ldflags "-s -w -X main.GitCommit=$GITHUB_SHA -X main.GitRef=$GITHUB_REF -X main.Version=${RELEASE_TAG:-commit-$GITHUB_SHA}" -o bin/castai-cluster-controller-amd64 .
         env:
           GOOS: linux
           GOARCH: amd64
           CGO_ENABLED: 0
-      
+
       - name: Build Go binary arm64
         run: go build -ldflags "-s -w -X main.GitCommit=$GITHUB_SHA -X main.GitRef=$GITHUB_REF -X main.Version=${RELEASE_TAG:-commit-$GITHUB_SHA}" -o bin/castai-cluster-controller-arm64 .
         env:
           GOOS: linux
           GOARCH: arm64
           CGO_ENABLED: 0
-      
+
       - name: Test
         run: go test -short -race ./...
-      
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
-      
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
-      
+
       - name: Login to Google Artifact Registry
         uses: docker/login-action@v2
         with:
           registry: us-docker.pkg.dev
           username: _json_key
           password: ${{ secrets.ARTIFACT_BUILDER_JSON_KEY }}
-      
+
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v2
         if: ${{ github.event_name == 'pull_request' }}
@@ -73,7 +73,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Build and push pr
         if: ${{ github.event_name == 'pull_request' }}
         uses: docker/build-push-action@v2
@@ -82,7 +82,7 @@ jobs:
           platforms: linux/arm64,linux/amd64
           push: ${{ github.event_name == 'pull_request' }}
           tags: ghcr.io/castai/cluster-controller:${{ github.sha }}
-      
+
       - name: Build and push main
         if: github.ref_name == 'main' && github.event_name == 'push'
         uses: docker/build-push-action@v4
@@ -91,7 +91,7 @@ jobs:
           platforms: linux/arm64,linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: us-docker.pkg.dev/castai-hub/library/cluster-controller:${{ github.sha }}
-      
+
       - name: Trigger e2e tests
         if: github.ref_name == 'main' && github.event_name == 'push'
         run: |
@@ -105,7 +105,7 @@ jobs:
 
           git add .
           git commit -m 'cluster-controller-tests: trigger tests for ${{ github.sha }}'
-          git push origin main # TODO: change to master
+          git push origin master
 
       - name: Build and push release
         if: github.event_name == 'release'
