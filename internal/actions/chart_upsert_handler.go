@@ -30,7 +30,7 @@ type ChartUpsertHandler struct {
 func (c *ChartUpsertHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
 	req, ok := action.Data().(*castai.ActionChartUpsert)
 	if !ok {
-		return fmt.Errorf("unexpected type %T for upsert chart handler", action.Data())
+		return newUnexpectedTypeErr(action.Data(), req)
 	}
 
 	if err := c.validateRequest(req); err != nil {

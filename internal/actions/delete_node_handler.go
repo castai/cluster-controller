@@ -54,7 +54,7 @@ type DeleteNodeHandler struct {
 func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
 	req, ok := action.Data().(*castai.ActionDeleteNode)
 	if !ok {
-		return fmt.Errorf("unexpected type %T for delete node handler", action.Data())
+		return newUnexpectedTypeErr(action.Data(), req)
 	}
 
 	log := h.log.WithFields(logrus.Fields{

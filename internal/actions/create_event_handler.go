@@ -49,7 +49,7 @@ type CreateEventHandler struct {
 func (h *CreateEventHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
 	req, ok := action.Data().(*castai.ActionCreateEvent)
 	if !ok {
-		return fmt.Errorf("unexpected type %T for create event handler", action.Data())
+		return newUnexpectedTypeErr(action.Data(), req)
 	}
 	namespace := req.ObjectRef.Namespace
 	if namespace == "" {

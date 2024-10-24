@@ -29,7 +29,7 @@ type ChartRollbackHandler struct {
 func (c *ChartRollbackHandler) Handle(_ context.Context, action *castai.ClusterAction) error {
 	req, ok := action.Data().(*castai.ActionChartRollback)
 	if !ok {
-		return fmt.Errorf("unexpected type %T for chart rollback handler", action.Data())
+		return newUnexpectedTypeErr(action.Data(), req)
 	}
 
 	if err := c.validateRequest(req); err != nil {

@@ -35,7 +35,7 @@ var errAction = errors.New("not valid action")
 func (h *PatchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
 	req, ok := action.Data().(*castai.ActionPatchNode)
 	if !ok {
-		return fmt.Errorf("unexpected type %T for delete patch handler %w", action.Data(), errAction)
+		return newUnexpectedTypeErr(action.Data(), req)
 	}
 	for k := range req.Labels {
 		if k == "" {

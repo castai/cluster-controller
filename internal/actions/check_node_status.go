@@ -33,7 +33,7 @@ type CheckNodeStatusHandler struct {
 func (h *CheckNodeStatusHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
 	req, ok := action.Data().(*castai.ActionCheckNodeStatus)
 	if !ok {
-		return fmt.Errorf("unexpected type %T for check node status handler", action.Data())
+		return newUnexpectedTypeErr(action.Data(), req)
 	}
 
 	log := h.log.WithFields(logrus.Fields{
@@ -95,7 +95,7 @@ func (h *CheckNodeStatusHandler) checkNodeDeleted(ctx context.Context, log *logr
 					return false, nil
 				}
 				if currentNodeID == req.NodeID {
-					return false, fmt.Errorf("current node id %s is equal to requested node id %s %w", currentNodeID, req.NodeID, errNodeNotDeleted)
+					return false, fmt.Errorf("current node id is equal to requested node id: %v %w", req.NodeID, errNodeNotDeleted)
 				}
 			}
 

@@ -45,7 +45,7 @@ var errNodeNotDeleted = errors.New("node is not deleted")
 func (h *CheckNodeDeletedHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
 	req, ok := action.Data().(*castai.ActionCheckNodeDeleted)
 	if !ok {
-		return fmt.Errorf("unexpected type %T for check node deleted handler %w", action.Data(), errAction)
+		return newUnexpectedTypeErr(action.Data(), req)
 	}
 
 	log := h.log.WithFields(logrus.Fields{

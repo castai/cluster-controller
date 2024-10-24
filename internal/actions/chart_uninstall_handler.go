@@ -27,7 +27,7 @@ type ChartUninstallHandler struct {
 func (c *ChartUninstallHandler) Handle(_ context.Context, action *castai.ClusterAction) error {
 	req, ok := action.Data().(*castai.ActionChartUninstall)
 	if !ok {
-		return fmt.Errorf("unexpected type %T for upsert uninstall handler", action.Data())
+		return newUnexpectedTypeErr(action.Data(), req)
 	}
 
 	if err := c.validateRequest(req); err != nil {
