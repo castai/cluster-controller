@@ -140,7 +140,7 @@ func executeBatchPodActions(
 	}
 
 	var (
-		parallelTasks      = int(lo.Clamp(float64(len(pods)), 30, 100))
+		parallelTasks      = lo.Clamp(len(pods), 1, 50)
 		taskChan           = make(chan v1.Pod, len(pods))
 		successfulPodsChan = make(chan *v1.Pod, len(pods))
 		failedPodsChan     = make(chan podActionFailure, len(pods))

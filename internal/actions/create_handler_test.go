@@ -36,7 +36,7 @@ func Test_newCreateHandler(t *testing.T) {
 			action: &castai.ClusterAction{
 				ActionDeleteNode: &castai.ActionDeleteNode{},
 			},
-			err: newUnexpectedTypeErr(&castai.ActionDeleteNode{}, &castai.ActionCreate{}),
+			err: errAction,
 		},
 		"should return error when object is not provided": {
 			action: &castai.ClusterAction{
@@ -44,7 +44,7 @@ func Test_newCreateHandler(t *testing.T) {
 					GroupVersionResource: castai.GroupVersionResource{},
 				},
 			},
-			err: errors.New("no object provided"),
+			err: errAction,
 		},
 		"should create new deployment": {
 			action: &castai.ClusterAction{
@@ -129,7 +129,7 @@ func Test_newCreateHandler(t *testing.T) {
 			err := handler.Handle(ctx, test.action)
 			if test.err != nil {
 				r.Error(err)
-				r.Equal(test.err, err)
+				r.True(errors.Is(err, test.err), "expected error %v, got %v", test.err, err)
 				return
 			}
 

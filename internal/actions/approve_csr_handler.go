@@ -41,7 +41,7 @@ type ApproveCSRHandler struct {
 func (h *ApproveCSRHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
 	req, ok := action.Data().(*castai.ActionApproveCSR)
 	if !ok {
-		return fmt.Errorf("unexpected type %T for approve csr handler", action.Data())
+		return newUnexpectedTypeErr(action.Data(), req)
 	}
 	log := h.log.WithFields(logrus.Fields{
 		"node_name":      req.NodeName,

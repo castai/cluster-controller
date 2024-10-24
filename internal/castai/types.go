@@ -227,15 +227,17 @@ type ChartSource struct {
 	Version string `json:"version"`
 }
 
+var errFieldNotSet = errors.New("chart field is not set")
+
 func (c *ChartSource) Validate() error {
 	if c.Name == "" {
-		return errors.New("chart name is not set")
+		return fmt.Errorf("name: %w", errFieldNotSet)
 	}
 	if c.RepoURL == "" {
-		return errors.New("chart repoURL is not set")
+		return fmt.Errorf("repoUrl: %w", errFieldNotSet)
 	}
 	if c.Version == "" {
-		return errors.New("chart version is not set")
+		return fmt.Errorf("version: %w", errFieldNotSet)
 	}
 	return nil
 }

@@ -76,7 +76,7 @@ type DrainNodeHandler struct {
 func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
 	req, ok := action.Data().(*castai.ActionDrainNode)
 	if !ok {
-		return fmt.Errorf("unexpected type %T for drain handler", action.Data())
+		return newUnexpectedTypeErr(action.Data(), req)
 	}
 	drainTimeout := h.getDrainTimeout(action)
 

@@ -64,7 +64,10 @@ func (s *SendAKSInitDataHandler) Handle(ctx context.Context, _ *castai.ClusterAc
 	})
 }
 
-var customDataRegex = regexp.MustCompile(`<ns1:CustomData>(.*?)<\/ns1:CustomData>`)
+var (
+	customDataRegex = regexp.MustCompile(`<ns1:CustomData>(.*?)<\/ns1:CustomData>`)
+	errNoXML        = errors.New("no custom data xml tag found")
+)
 
 // readCloudConfigBase64 extracts base64 encoded cloud config content from XML file.
 func (s *SendAKSInitDataHandler) readCloudConfigBase64(cloudConfigPath string) ([]byte, error) {
@@ -74,7 +77,7 @@ func (s *SendAKSInitDataHandler) readCloudConfigBase64(cloudConfigPath string) (
 	}
 	matches := customDataRegex.FindSubmatch(xmlContent)
 	if len(matches) < 2 {
-		return nil, errors.New("no custom data xml tag found")
+		return nil, errNoXML
 	}
 	return matches[1], nil
 }

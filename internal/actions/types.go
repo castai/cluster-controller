@@ -17,7 +17,7 @@ const (
 )
 
 func newUnexpectedTypeErr(value, expectedType interface{}) error {
-	return fmt.Errorf("unexpected type %T, expected %T", value, expectedType)
+	return fmt.Errorf("unexpected type %T, expected %T %w", value, expectedType, errAction)
 }
 
 type ActionHandler interface {

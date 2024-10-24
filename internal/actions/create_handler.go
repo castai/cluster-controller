@@ -2,7 +2,6 @@ package actions
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"reflect"
 
@@ -39,12 +38,12 @@ func (h *CreateHandler) Handle(ctx context.Context, action *castai.ClusterAction
 	}
 
 	if req.Object == nil {
-		return errors.New("no object provided")
+		return fmt.Errorf("object not provided %w", errAction)
 	}
 
 	newObj := &unstructured.Unstructured{Object: req.Object}
 	if newObj.GetNamespace() == "" {
-		return errors.New("object namespace is missing")
+		return fmt.Errorf("namespace not provided %w", errAction)
 	}
 
 	log := h.log.WithFields(logrus.Fields{
@@ -87,12 +86,12 @@ func (h *CreateHandler) Handle(ctx context.Context, action *castai.ClusterAction
 
 		original, err := obj.MarshalJSON()
 		if err != nil {
-			return err
+			return fmt.Errorf("marshaling original resource: %w", err)
 		}
 
 		modified, err := newObj.MarshalJSON()
 		if err != nil {
-			return err
+			return fmt.Errorf("marshaling modified resource: %w", err)
 		}
 
 		patch, err := jsonpatch.CreateMergePatch(original, modified)
