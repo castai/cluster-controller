@@ -66,15 +66,9 @@ func (h *ApprovalManager) handle(ctx context.Context, log logrus.FieldLogger, ce
 		return nil
 	}
 	log = log.WithField("csr_name", cert.Name)
-	// Since this new csr may be denied we need to delete it.
-	log.Info("deleting old csr")
-	if err := cert.DeleteCertificate(ctx, h.clientset); err != nil {
-		if !apierrors.IsNotFound(err) {
-			return fmt.Errorf("deleting csr: %w", err)
-		}
-	}
 
-	// Create a new CSR with the same request data as the original one.
+	// Create a new CSR with the same request data as the original one,
+	// since the old csr maybe denied.
 	log.Info("requesting new csr")
 	newCert, err := cert.NewCSR(ctx, h.clientset)
 	if err != nil {
@@ -83,12 +77,21 @@ func (h *ApprovalManager) handle(ctx context.Context, log logrus.FieldLogger, ce
 
 	// Approve new csr.
 	log.Info("approving new csr")
-	resp, err := newCert.ApproveCertificate(ctx, h.clientset)
+	resp, err := newCert.ApproveCSRCertificate(ctx, h.clientset)
 	if err != nil {
 		return fmt.Errorf("approving csr: %w", err)
 	}
 	if resp.Approved() {
 		return nil
+	}
+
+	// clean original csr. should be the last step for having the possibility.
+	// continue approving csr: old deleted-> restart-> node never join.
+	log.Info("deleting old csr")
+	if err := cert.DeleteCSR(ctx, h.clientset); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("deleting csr: %w", err)
+		}
 	}
 
 	return errors.New("certificate signing request was not approved")
