@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - KUBE-632/trigger-e2e-tests
   release:
     types:
       - published
