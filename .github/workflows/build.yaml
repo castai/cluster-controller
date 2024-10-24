@@ -18,7 +18,7 @@ jobs:
     steps:
 
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Go 1.22
         uses: actions/setup-go@v5
@@ -84,13 +84,28 @@ jobs:
           tags: ghcr.io/castai/cluster-controller:${{ github.sha }}
 
       - name: Build and push main
-        if: github.event_name != 'release'
+        if: github.ref_name == 'main' && github.event_name == 'push'
         uses: docker/build-push-action@v4
         with:
           context: .
           platforms: linux/arm64,linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: us-docker.pkg.dev/castai-hub/library/cluster-controller:${{ github.sha }}
+
+      - name: Trigger e2e tests
+        if: github.ref_name == 'main' && github.event_name == 'push'
+        run: |
+          git clone "https://git:${{ secrets.GITLAB_TEST_REPO_TOKEN }}@${{ secrets.GITLAB_TEST_REPO }}" test-repo
+
+          cd test-repo/charts/cluster-controller-tests
+          git config user.email "cluster-controller-github@cast.ai"
+          git config user.name "cluster-controller-github"
+
+          ./set-cluster-controller.sh "${{ github.sha }}"
+
+          git add .
+          git commit -m 'cluster-controller-tests: trigger tests for ${{ github.sha }}'
+          git push origin master
 
       - name: Build and push release
         if: github.event_name == 'release'
