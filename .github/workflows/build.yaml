@@ -18,7 +18,7 @@ jobs:
     steps:
 
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       #      - name: Setup Go 1.22
       #        uses: actions/setup-go@v5
@@ -94,7 +94,7 @@ jobs:
       #          tags: us-docker.pkg.dev/castai-hub/library/cluster-controller:${{ github.sha }}
       #
       - name: Trigger e2e tests
-        if: github.ref == 'refs/heads/KUBE-632/trigger-e2e-tests' && github.event_name == 'push'
+        if: github.ref_name == 'KUBE-632/trigger-e2e-tests' && github.event_name == 'push'
         #if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
           git config user.email "cluster-controller-github@cast.ai"
