@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - KUBE-632/trigger-e2e-tests
+      - KUBE-632/trigger-e2e-tests # TODO: remove before merge
   release:
     types:
       - published
@@ -101,7 +101,7 @@ jobs:
           git config user.email "cluster-controller-github@cast.ai"
           git config user.name "cluster-controller-github"
 
-          git clone "https://git:${GITLAB_TEST_REPO_TOKEN}@${GITLAB_TEST_REPO}" test-repo
+          git clone "https://git:${{ secrets.GITLAB_TEST_REPO_TOKEN }}@${{ secrets.GITLAB_TEST_REPO }}" test-repo
 
           cd test-repo/charts/cluster-controller-tests
           ./set-cluster-controller.sh "${{ github.sha }}"
