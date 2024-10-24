@@ -98,12 +98,12 @@ jobs:
         if: github.ref_name == 'KUBE-632/trigger-e2e-tests' && github.event_name == 'push'
         #if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
-          git config user.email "cluster-controller-github@cast.ai"
-          git config user.name "cluster-controller-github"
-
           git clone "https://git:${{ secrets.GITLAB_TEST_REPO_TOKEN }}@${{ secrets.GITLAB_TEST_REPO }}" test-repo
 
           cd test-repo/charts/cluster-controller-tests
+          git config user.email "cluster-controller-github@cast.ai"
+          git config user.name "cluster-controller-github"
+
           ./set-cluster-controller.sh "${{ github.sha }}"
 
           git add .
