@@ -2,7 +2,6 @@ package actions
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/sirupsen/logrus"
@@ -50,13 +49,13 @@ func (c *ChartRollbackHandler) Handle(_ context.Context, action *castai.ClusterA
 
 func (c *ChartRollbackHandler) validateRequest(req *castai.ActionChartRollback) error {
 	if req.ReleaseName == "" {
-		return errors.New("bad request: releaseName not provided")
+		return fmt.Errorf("release name not provided %w", errAction)
 	}
 	if req.Namespace == "" {
-		return errors.New("bad request: namespace not provided")
+		return fmt.Errorf("namespace not provided %w", errAction)
 	}
 	if req.Version == "" {
-		return errors.New("bad request: version not provided")
+		return fmt.Errorf("version not provided %w", errAction)
 	}
 	return nil
 }

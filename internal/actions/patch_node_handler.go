@@ -30,24 +30,26 @@ type PatchNodeHandler struct {
 	clientset kubernetes.Interface
 }
 
+var errAction = errors.New("not valid action")
+
 func (h *PatchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
 	req, ok := action.Data().(*castai.ActionPatchNode)
 	if !ok {
-		return fmt.Errorf("unexpected type %T for delete patch handler", action.Data())
+		return fmt.Errorf("unexpected type %T for delete patch handler %w", action.Data(), errAction)
 	}
 	for k := range req.Labels {
 		if k == "" {
-			return errors.New("labels contain entry with empty key")
+			return fmt.Errorf("labels contain entry with empty key %w", errAction)
 		}
 	}
 	for k := range req.Annotations {
 		if k == "" {
-			return errors.New("annotations contain entry with empty key")
+			return fmt.Errorf("annotations contain entry with empty key %w", errAction)
 		}
 	}
 	for _, t := range req.Taints {
 		if t.Key == "" {
-			return errors.New("taint contain entry with empty key")
+			return fmt.Errorf("taints contain entry with empty key %w", errAction)
 		}
 	}
 

@@ -2,7 +2,6 @@ package actions
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"reflect"
 	"time"
@@ -96,12 +95,12 @@ func (h *CheckNodeStatusHandler) checkNodeDeleted(ctx context.Context, log *logr
 					return false, nil
 				}
 				if currentNodeID == req.NodeID {
-					return false, errors.New("node is not deleted")
+					return false, fmt.Errorf("current node id %s is equal to requested node id %s %w", currentNodeID, req.NodeID, errNodeNotDeleted)
 				}
 			}
 
 			if n != nil {
-				return false, errors.New("node is not deleted")
+				return false, errNodeNotDeleted
 			}
 
 			return true, err

@@ -40,10 +40,12 @@ type CheckNodeDeletedHandler struct {
 	cfg       checkNodeDeletedConfig
 }
 
+var errNodeNotDeleted = errors.New("node is not deleted")
+
 func (h *CheckNodeDeletedHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
 	req, ok := action.Data().(*castai.ActionCheckNodeDeleted)
 	if !ok {
-		return fmt.Errorf("unexpected type %T for check node deleted handler", action.Data())
+		return fmt.Errorf("unexpected type %T for check node deleted handler %w", action.Data(), errAction)
 	}
 
 	log := h.log.WithFields(logrus.Fields{
@@ -80,12 +82,12 @@ func (h *CheckNodeDeletedHandler) Handle(ctx context.Context, action *castai.Clu
 					return false, nil
 				}
 				if currentNodeID == req.NodeID {
-					return false, errors.New("node is not deleted")
+					return false, fmt.Errorf("current node id = request node ID %w", errNodeNotDeleted)
 				}
 			}
 
 			if n != nil {
-				return false, errors.New("node is not deleted")
+				return false, errNodeNotDeleted
 			}
 
 			return true, err

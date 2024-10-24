@@ -39,9 +39,11 @@ type Certificate struct {
 	RequestingUser string
 }
 
+var errCSRNotFound = errors.New("v1 or v1beta csr should be set")
+
 func (c *Certificate) Validate() error {
 	if c.v1 == nil && c.v1Beta1 == nil {
-		return errors.New("v1 or v1beta csr should be set")
+		return errCSRNotFound
 	}
 	return nil
 }
