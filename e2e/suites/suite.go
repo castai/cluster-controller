@@ -269,8 +269,7 @@ func (suite *baseSuite) cleanupCluster(ctx context.Context) error {
 		return fmt.Errorf("missing cleanup script in response")
 	}
 
-	script := fmt.Sprintf("export CASTAI_IMPERSONATE=true\n%s", *cleanupResp.JSON200.Script)
-	if err := ExecPretty(script); err != nil {
+	if err := ExecPretty(*cleanupResp.JSON200.Script); err != nil {
 		return fmt.Errorf("executing cleanup script: %w", err)
 	}
 
