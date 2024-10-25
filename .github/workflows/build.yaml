@@ -44,15 +44,18 @@ jobs:
         if: github.event_name == 'release'
         run: echo "RELEASE_TAG=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
 
+      - name: Get version
+        run: echo "VERSION_TAG=$(git describe --tags)" >> $GITHUB_ENV
+
       - name: Build Go binary amd64
-        run: go build -ldflags "-s -w -X main.GitCommit=$GITHUB_SHA -X main.GitRef=$GITHUB_REF -X main.Version=${RELEASE_TAG:-commit-$GITHUB_SHA}" -o bin/castai-cluster-controller-amd64 .
+        run: go build -ldflags "-s -w -X main.GitCommit=$GITHUB_SHA -X main.GitRef=$GITHUB_REF -X main.Version=${RELEASE_TAG:-$VERSION_TAG}" -o bin/castai-cluster-controller-amd64 .
         env:
           GOOS: linux
           GOARCH: amd64
           CGO_ENABLED: 0
 
       - name: Build Go binary arm64
-        run: go build -ldflags "-s -w -X main.GitCommit=$GITHUB_SHA -X main.GitRef=$GITHUB_REF -X main.Version=${RELEASE_TAG:-commit-$GITHUB_SHA}" -o bin/castai-cluster-controller-arm64 .
+        run: go build -ldflags "-s -w -X main.GitCommit=$GITHUB_SHA -X main.GitRef=$GITHUB_REF -X main.Version=${RELEASE_TAG:-$VERSION_TAG}" -o bin/castai-cluster-controller-arm64 .
         env:
           GOOS: linux
           GOARCH: arm64
@@ -89,7 +92,7 @@ jobs:
           context: .
           platforms: linux/arm64,linux/amd64
           push: ${{ github.event_name == 'pull_request' }}
-          tags: ghcr.io/castai/cluster-controller:${{ github.sha }}
+          tags: ghcr.io/castai/cluster-controller:${{ env.VERSION_TAG }}
 
       - name: Build and push main
         if: github.ref_name == 'main' && github.event_name == 'push'
@@ -98,7 +101,7 @@ jobs:
           context: .
           platforms: linux/arm64,linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: us-docker.pkg.dev/castai-hub/library/cluster-controller:${{ github.sha }}
+          tags: us-docker.pkg.dev/castai-hub/library/cluster-controller:${{ env.VERSION_TAG }}
 
       - name: Run e2e tests
         if: ${{ github.event_name == 'pull_request' }}
@@ -106,7 +109,7 @@ jobs:
         env:
           #CLUSTER_CONTROLLER_IMAGE_REPOSITORY: us-docker.pkg.dev/castai-hub/library/cluster-controller
           CLUSTER_CONTROLLER_IMAGE_REPOSITORY: ghcr.io/castai/cluster-controller
-          CLUSTER_CONTROLLER_IMAGE_TAG: ${{ github.sha }}
+          CLUSTER_CONTROLLER_IMAGE_TAG: ${{ env.VERSION_TAG }}
           CLUSTER_NAME: e2e-cluster-controller
           CLUSTER_REGION: us-central1
           CASTAI_API_TOKEN: ${{ secrets.CASTAI_API_TOKEN }}
