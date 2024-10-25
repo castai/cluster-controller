@@ -187,6 +187,7 @@ func gkeInitShell(cfg *Config) error {
 	for _, cmd := range []string{
 		fmt.Sprintf("gcloud auth activate-service-account --key-file %s", fp.Name()),
 		fmt.Sprintf("gcloud config set project %s", creds.ProjectID),
+		"gcloud components install gke-gcloud-auth-plugin",
 		fmt.Sprintf("gcloud container clusters get-credentials %s --zone %s", cfg.ClusterName, cfg.ClusterRegion),
 	} {
 		if err := ExecPretty(cmd); err != nil {
