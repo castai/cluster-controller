@@ -224,7 +224,9 @@ func (suite *baseSuite) onboardCluster(ctx context.Context, t *testing.T) *clien
 	r.NoError(err)
 	r.Equal(http.StatusOK, credsScriptResp.HTTPResponse.StatusCode)
 
-	r.NoError(ExecPretty(*credsScriptResp.JSON200.Script))
+	// Do not print, because it contains credentials.
+	_, err = Exec(*credsScriptResp.JSON200.Script)
+	r.NoError(err)
 
 	r.NoError(ExecPretty("kubectl scale deployment -n castai-agent castai-agent --replicas=1")) //nolint:dupword
 	r.NoError(ExecPretty("kubectl scale deployment -n castai-agent castai-cluster-controller --replicas=1"))
