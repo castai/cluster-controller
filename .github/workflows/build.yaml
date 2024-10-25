@@ -3,7 +3,8 @@ name: Build
 on:
   push:
     branches:
-      - main
+      #- main
+      - KUBE-632/trigger-e2e-tests
   release:
     types:
       - published
