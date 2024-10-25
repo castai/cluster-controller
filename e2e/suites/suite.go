@@ -224,9 +224,8 @@ func (suite *baseSuite) onboardCluster(ctx context.Context, t *testing.T) *clien
 	r.NoError(err)
 	r.Equal(http.StatusOK, credsScriptResp.HTTPResponse.StatusCode)
 
-	// Do not print, because it contains credentials.
-	_, err = Exec(*credsScriptResp.JSON200.Script)
-	r.NoError(err)
+	script := fmt.Sprintf("export CASTAI_IMPERSONATE=true\n%s", *credsScriptResp.JSON200.Script)
+	r.NoError(ExecPretty(script))
 
 	r.NoError(ExecPretty("kubectl scale deployment -n castai-agent castai-agent --replicas=1")) //nolint:dupword
 	r.NoError(ExecPretty("kubectl scale deployment -n castai-agent castai-cluster-controller --replicas=1"))
