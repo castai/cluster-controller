@@ -260,18 +260,19 @@ func (suite *baseSuite) cleanupCluster(ctx context.Context) error {
 		}
 	}
 
-	//cleanupResp, err := suite.client.ExternalClusterAPI(ctx, *cluster.Id)
-	//if err != nil {
-	//	return fmt.Errorf("get cleanup script: %w", err)
-	//}
+	cleanupResp, err := suite.castClient.ExternalClusterAPIGetCleanupScriptWithResponse(ctx, *cluster.Id)
+	if err != nil {
+		return fmt.Errorf("get cleanup script: %w", err)
+	}
 
-	//if cleanupResp == nil || cleanupResp.JSON200 == nil || cleanupResp.JSON200.Script == nil {
-	//	return fmt.Errorf("missing cleanup script in response")
-	//}
+	if cleanupResp == nil || cleanupResp.JSON200 == nil || cleanupResp.JSON200.Script == nil {
+		return fmt.Errorf("missing cleanup script in response")
+	}
 
-	//if err := ExecPretty(*cleanupResp.JSON200.Script); err != nil {
-	//	return fmt.Errorf("executing cleanup script: %w", err)
-	//}
+	script := fmt.Sprintf("export CASTAI_IMPERSONATE=true\n%s", *cleanupResp.JSON200.Script)
+	if err := ExecPretty(script); err != nil {
+		return fmt.Errorf("executing cleanup script: %w", err)
+	}
 
 	if _, err := suite.castClient.ExternalClusterAPIDeleteClusterWithResponse(ctx, *cluster.Id); err != nil {
 		return fmt.Errorf("deleting cluster: %w", err)
