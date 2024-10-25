@@ -2,7 +2,6 @@ package actions
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/sirupsen/logrus"
@@ -28,7 +27,7 @@ type ChartUninstallHandler struct {
 func (c *ChartUninstallHandler) Handle(_ context.Context, action *castai.ClusterAction) error {
 	req, ok := action.Data().(*castai.ActionChartUninstall)
 	if !ok {
-		return fmt.Errorf("unexpected type %T for upsert uninstall handler", action.Data())
+		return newUnexpectedTypeErr(action.Data(), req)
 	}
 
 	if err := c.validateRequest(req); err != nil {
@@ -43,10 +42,10 @@ func (c *ChartUninstallHandler) Handle(_ context.Context, action *castai.Cluster
 
 func (c *ChartUninstallHandler) validateRequest(req *castai.ActionChartUninstall) error {
 	if req.ReleaseName == "" {
-		return errors.New("bad request: releaseName not provided")
+		return fmt.Errorf("release name not provided %w", errAction)
 	}
 	if req.Namespace == "" {
-		return errors.New("bad request: namespace not provided")
+		return fmt.Errorf("namespace not provided %w", errAction)
 	}
 	return nil
 }

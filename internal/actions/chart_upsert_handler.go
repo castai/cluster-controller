@@ -30,7 +30,7 @@ type ChartUpsertHandler struct {
 func (c *ChartUpsertHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
 	req, ok := action.Data().(*castai.ActionChartUpsert)
 	if !ok {
-		return fmt.Errorf("unexpected type %T for upsert chart handler", action.Data())
+		return newUnexpectedTypeErr(action.Data(), req)
 	}
 
 	if err := c.validateRequest(req); err != nil {
@@ -79,10 +79,10 @@ func (c *ChartUpsertHandler) Handle(ctx context.Context, action *castai.ClusterA
 
 func (c *ChartUpsertHandler) validateRequest(req *castai.ActionChartUpsert) error {
 	if req.ReleaseName == "" {
-		return errors.New("bad request: releaseName not provided")
+		return fmt.Errorf("release name not provided %w", errAction)
 	}
 	if req.Namespace == "" {
-		return errors.New("bad request: namespace not provided")
+		return fmt.Errorf("namespace not provided %w", errAction)
 	}
 	if err := req.ChartSource.Validate(); err != nil {
 		return fmt.Errorf("validating chart source: %w", err)

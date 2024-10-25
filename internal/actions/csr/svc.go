@@ -61,6 +61,8 @@ func (h *ApprovalManager) handleWithRetry(ctx context.Context, log *logrus.Entry
 	)
 }
 
+var errCSRNotApproved = errors.New("certificate signing request was not approved")
+
 func (h *ApprovalManager) handle(ctx context.Context, log logrus.FieldLogger, cert *Certificate) (reterr error) {
 	if cert.Approved() {
 		return nil
@@ -94,7 +96,7 @@ func (h *ApprovalManager) handle(ctx context.Context, log logrus.FieldLogger, ce
 		}
 	}
 
-	return errors.New("certificate signing request was not approved")
+	return errCSRNotApproved
 }
 
 func (h *ApprovalManager) runAutoApproveForCastAINodes(ctx context.Context) {

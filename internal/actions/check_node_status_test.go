@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -33,7 +34,7 @@ func TestCheckStatus_Deleted(t *testing.T) {
 				},
 			},
 		}
-		clientset := fake.NewSimpleClientset(node)
+		clientset := fake.NewClientset(node)
 
 		h := CheckNodeStatusHandler{
 			log:       log,
@@ -50,7 +51,7 @@ func TestCheckStatus_Deleted(t *testing.T) {
 		}
 
 		err := h.Handle(context.Background(), action)
-		r.EqualError(err, "node is not deleted")
+		r.True(errors.Is(err, errNodeNotDeleted))
 	})
 
 	t.Run("return error when node is not deleted with no label (backwards compatibility)", func(t *testing.T) {
@@ -61,7 +62,7 @@ func TestCheckStatus_Deleted(t *testing.T) {
 				Name: nodeName,
 			},
 		}
-		clientset := fake.NewSimpleClientset(node)
+		clientset := fake.NewClientset(node)
 
 		h := CheckNodeStatusHandler{
 			log:       log,
@@ -83,7 +84,7 @@ func TestCheckStatus_Deleted(t *testing.T) {
 
 	t.Run("handle check successfully when node is not found", func(t *testing.T) {
 		r := require.New(t)
-		clientset := fake.NewSimpleClientset()
+		clientset := fake.NewClientset()
 
 		h := CheckNodeStatusHandler{
 			log:       log,
@@ -113,7 +114,7 @@ func TestCheckStatus_Deleted(t *testing.T) {
 				},
 			},
 		}
-		clientset := fake.NewSimpleClientset(node)
+		clientset := fake.NewClientset(node)
 
 		h := CheckNodeStatusHandler{
 			log:       log,
@@ -140,7 +141,7 @@ func TestCheckStatus_Ready(t *testing.T) {
 
 	t.Run("return error when node is not found", func(t *testing.T) {
 		r := require.New(t)
-		clientset := fake.NewSimpleClientset()
+		clientset := fake.NewClientset()
 
 		h := CheckNodeStatusHandler{
 			log:       log,
@@ -185,7 +186,7 @@ func TestCheckStatus_Ready(t *testing.T) {
 				},
 			},
 		}
-		clientset := fake.NewSimpleClientset(node)
+		clientset := fake.NewClientset(node)
 
 		h := CheckNodeStatusHandler{
 			log:       log,
@@ -240,7 +241,7 @@ func TestCheckStatus_Ready(t *testing.T) {
 				Taints: []v1.Taint{taintCloudProviderUninitialized},
 			},
 		}
-		clientset := fake.NewSimpleClientset(node)
+		clientset := fake.NewClientset(node)
 
 		h := CheckNodeStatusHandler{
 			log:       log,
@@ -287,7 +288,7 @@ func TestCheckStatus_Ready(t *testing.T) {
 				Conditions: []v1.NodeCondition{},
 			},
 		}
-		clientset := fake.NewSimpleClientset(node)
+		clientset := fake.NewClientset(node)
 		watcher := watch.NewFake()
 
 		clientset.PrependWatchReactor("nodes", k8stest.DefaultWatchReactor(watcher, nil))
@@ -333,7 +334,7 @@ func TestCheckStatus_Ready(t *testing.T) {
 				},
 			},
 		}
-		clientset := fake.NewSimpleClientset(node)
+		clientset := fake.NewClientset(node)
 
 		h := CheckNodeStatusHandler{
 			log:       log,
