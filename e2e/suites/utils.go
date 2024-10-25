@@ -25,3 +25,9 @@ func ExecPretty(cmd string) error {
 	_, _ = fmt.Fprintf(os.Stdout, "[shell]: %s\n-------------- output:\n%s-------------- [end of shell]\n", cmd, out)
 	return err
 }
+
+func ExecPrettyWithoutCmd(cmd string) error {
+	out, err := Exec(cmd)
+	_, _ = fmt.Fprintf(os.Stdout, "-------------- [shell output]\n%s-------------- [end of shell]\n", out)
+	return err
+}

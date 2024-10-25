@@ -197,7 +197,7 @@ func (suite *baseSuite) onboardCluster(ctx context.Context, t *testing.T) *clien
 
 	agentScript, err := io.ReadAll(agentScriptResp.Body)
 	r.NoError(err)
-	r.NoError(ExecPretty(string(agentScript)))
+	r.NoError(ExecPrettyWithoutCmd(string(agentScript)))
 
 	var extCluster *client.ExternalclusterV1Cluster
 
@@ -269,7 +269,7 @@ func (suite *baseSuite) cleanupCluster(ctx context.Context) error {
 		return fmt.Errorf("missing cleanup script in response")
 	}
 
-	if err := ExecPretty(*cleanupResp.JSON200.Script); err != nil {
+	if err := ExecPrettyWithoutCmd(*cleanupResp.JSON200.Script); err != nil {
 		return fmt.Errorf("executing cleanup script: %w", err)
 	}
 
