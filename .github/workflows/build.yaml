@@ -84,7 +84,8 @@ jobs:
           tags: ghcr.io/castai/cluster-controller:${{ github.sha }}
 
       - name: Build and push main
-        if: github.ref_name == 'main' && github.event_name == 'push'
+        #if: github.ref_name == 'main' && github.event_name == 'push'
+        if: github.ref_name == 'KUBE-632/trigger-e2e-tests' && github.event_name == 'push'
         uses: docker/build-push-action@v4
         with:
           context: .
@@ -92,20 +93,20 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: us-docker.pkg.dev/castai-hub/library/cluster-controller:${{ github.sha }}
 
-      - name: Trigger e2e tests
-        if: github.ref_name == 'main' && github.event_name == 'push'
+      - name: Run e2e tests
+        #if: github.ref_name == 'main' && github.event_name == 'push'
+        if: github.ref_name == 'KUBE-632/trigger-e2e-tests' && github.event_name == 'push'
+        env:
+        CLUSTER_CONTROLLER_IMAGE_REPOSITORY: us-docker.pkg.dev/castai-hub/library/cluster-controller
+        CLUSTER_CONTROLLER_IMAGE_TAG: ${{ github.sha }}
+        CLUSTER_NAME: e2e-cluster-controller
+        CLUSTER_REGION: us-central1
+        CASTAI_API_TOKEN: ${{ secrets.CASTAI_API_TOKEN }}
+        GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
         run: |
-          git clone "https://git:${{ secrets.GITLAB_TEST_REPO_TOKEN }}@${{ secrets.GITLAB_TEST_REPO }}" test-repo
+          go test ./e2e
 
-          cd test-repo/charts/cluster-controller-tests
-          git config user.email "cluster-controller-github@cast.ai"
-          git config user.name "cluster-controller-github"
-
-          ./set-cluster-controller.sh "${{ github.sha }}"
-
-          git add .
-          git commit -m 'cluster-controller-tests: trigger tests for ${{ github.sha }}'
-          git push origin master
+      # TODO: Create Github release after e2e tests on main
 
       - name: Build and push release
         if: github.event_name == 'release'
