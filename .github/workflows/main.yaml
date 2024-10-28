@@ -101,8 +101,11 @@ jobs:
           container: us-docker.pkg.dev/castai-hub/library/cluster-controller:${{ env.RELEASE_TAG }}
 
   e2e-tests:
-    needs: build
+    needs: [build]
     uses: ./.github/workflows/e2e.yaml
     with:
       image-repository: us-docker.pkg.dev/castai-hub/library/cluster-controller
       image-tag: ${{ needs.build.outputs.image-tag }}
+    secrets:
+      CASTAI_API_TOKEN: ${{ secrets.CASTAI_API_TOKEN }}
+      GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}

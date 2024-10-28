@@ -81,6 +81,10 @@ jobs:
 
   e2e-tests:
     uses: ./.github/workflows/e2e.yaml
+    needs: [build]
     with:
       image-repository: ghcr.io/castai/cluster-controller
       image-tag: ${{ needs.build.outputs.image-tag }}
+    secrets:
+      CASTAI_API_TOKEN: ${{ secrets.CASTAI_API_TOKEN }}
+      GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
