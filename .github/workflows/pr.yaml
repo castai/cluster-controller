@@ -1,0 +1,86 @@
+name: Pull request build
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build
+    outputs:
+      image-tag: ${{ env.VERSION_TAG }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go 1.22
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.7'
+
+      - uses: azure/setup-kubectl@v4
+      - uses: azure/setup-helm@v4.2.0
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+        with:
+          version: '>= 363.0.0'
+          install_components: 'gke-gcloud-auth-plugin'
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-build-${{ hashFiles('**/go.sum') }}
+          restore-keys: ${{ runner.os }}-build-
+
+      - name: Get version
+        run: echo "VERSION_TAG=$(git describe --tags)" >> $GITHUB_ENV
+
+      - name: Build Go binary amd64
+        run: go build -ldflags "-s -w -X main.GitCommit=$GITHUB_SHA -X main.GitRef=$GITHUB_REF -X main.Version=${VERSION_TAG}" -o bin/castai-cluster-controller-amd64 .
+        env:
+          GOOS: linux
+          GOARCH: amd64
+          CGO_ENABLED: 0
+
+      - name: Build Go binary arm64
+        run: go build -ldflags "-s -w -X main.GitCommit=$GITHUB_SHA -X main.GitRef=$GITHUB_REF -X main.Version=${VERSION_TAG}" -o bin/castai-cluster-controller-arm64 .
+        env:
+          GOOS: linux
+          GOARCH: arm64
+          CGO_ENABLED: 0
+
+      - name: Test
+        run: go test -short -race ./...
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push pr
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          platforms: linux/arm64,linux/amd64
+          push: true
+          tags: ghcr.io/castai/cluster-controller:${{ env.VERSION_TAG }}
+
+  e2e-tests:
+    uses: ./.github/workflows/e2e.yaml
+    with:
+      image-repository: ghcr.io/castai/cluster-controller
+      image-tag: ${{ needs.build.outputs.image-tag }}

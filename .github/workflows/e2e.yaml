@@ -1,0 +1,54 @@
+name: E2E tests
+
+concurrency:
+  group: e2e-tests
+  cancel-in-progress: true
+
+on:
+  workflow_call:
+    inputs:
+      image-repository:
+        required: true
+        type: string
+      image-tag:
+        required: true
+        type: string
+
+jobs:
+  e2e-tests:
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go 1.22
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.7'
+
+      - uses: azure/setup-kubectl@v4
+      - uses: azure/setup-helm@v4.2.0
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+        with:
+          version: '>= 363.0.0'
+          install_components: 'gke-gcloud-auth-plugin'
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-build-${{ hashFiles('**/go.sum') }}
+          restore-keys: ${{ runner.os }}-build-
+
+      - name: Run e2e tests
+        env:
+          CLUSTER_CONTROLLER_IMAGE_REPOSITORY: ${{ inputs.image-repository }}
+          CLUSTER_CONTROLLER_IMAGE_TAG: ${{ inputs.image-tag }}
+          CLUSTER_NAME: e2e-cluster-controller
+          CLUSTER_REGION: us-central1
+          CASTAI_API_TOKEN: ${{ secrets.CASTAI_API_TOKEN }}
+          GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
+        run: |
+          go test ./e2e
+
