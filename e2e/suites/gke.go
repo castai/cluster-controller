@@ -90,13 +90,11 @@ func (ts *gkeTestSuite) Run(ctx context.Context, t *testing.T) {
 
 	ts.t.Logf("upgraded cluster controller")
 
-	testDeployment := getTestDeployment()
-	_, err := ts.k8sClient.AppsV1().Deployments(testDeployment.Namespace).Create(ctx, testDeployment, metav1.CreateOptions{})
+	cleanupTestDeployment, err := ts.setupTestDeployment(ctx)
 	r.NoError(err)
-
 	t.Cleanup(func() {
-		if err := ts.k8sClient.AppsV1().Deployments(testDeployment.Namespace).Delete(ctx, testDeployment.Name, *metav1.NewDeleteOptions(0)); err != nil {
-			ts.t.Logf("failed to delete test deployment: %v", err)
+		if err := cleanupTestDeployment(); err != nil {
+			ts.t.Logf("failed to cleanup test deployment: %v", err)
 		}
 	})
 

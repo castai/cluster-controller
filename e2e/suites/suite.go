@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
@@ -293,6 +294,28 @@ func (suite *baseSuite) findCluster(ctx context.Context) (*client.Externalcluste
 	}
 
 	return nil, fmt.Errorf("cluster not found")
+}
+
+func (suite *baseSuite) setupTestDeployment(ctx context.Context) (func() error, error) {
+	testDeployment := getTestDeployment()
+
+	cleanupFunc := func() error {
+		return suite.k8sClient.AppsV1().Deployments(testDeployment.Namespace).Delete(ctx, testDeployment.Name, *metav1.NewDeleteOptions(0))
+	}
+
+	_, err := suite.k8sClient.AppsV1().Deployments(testDeployment.Namespace).Create(ctx, testDeployment, metav1.CreateOptions{})
+	if err != nil {
+		if errors.IsAlreadyExists(err) {
+			if _, err := suite.k8sClient.AppsV1().Deployments(testDeployment.Namespace).Update(ctx, testDeployment, metav1.UpdateOptions{}); err != nil {
+				return nil, fmt.Errorf("update deployment: %w", err)
+			}
+			return cleanupFunc, nil
+		}
+
+		return nil, fmt.Errorf("create deployment: %w", err)
+	}
+
+	return cleanupFunc, nil
 }
 
 func getTestDeployment() *appsv1.Deployment {
