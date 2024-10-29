@@ -276,13 +276,17 @@ func getNodeCSRV1Beta1(ctx context.Context, client kubernetes.Interface, nodeNam
 }
 
 func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kubernetes.Interface, c chan<- *Certificate) error {
-	factory := informers.NewSharedInformerFactoryWithOptions(client, csrInformerResyncPeriod,
+	v1Factory := informers.NewSharedInformerFactoryWithOptions(client, csrInformerResyncPeriod,
 		informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
 			opts.FieldSelector = getOptions(certv1.KubeAPIServerClientKubeletSignerName).FieldSelector
 		}))
+	v1Informer := v1Factory.Certificates().V1().CertificateSigningRequests().Informer()
 
-	csrInformer := factory.Certificates().V1().CertificateSigningRequests().Informer()
-	csrv1BetaInformer := factory.Certificates().V1beta1().CertificateSigningRequests().Informer()
+	v1beta1Factory := informers.NewSharedInformerFactoryWithOptions(client, csrInformerResyncPeriod,
+		informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
+			opts.FieldSelector = getOptions(certv1beta1.KubeAPIServerClientKubeletSignerName).FieldSelector
+		}))
+	v1betaInformer := v1beta1Factory.Certificates().V1beta1().CertificateSigningRequests().Informer()
 
 	handlerFuncs := cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
@@ -298,20 +302,19 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 		DeleteFunc: func(obj interface{}) {},
 	}
 
-	if _, err := csrInformer.AddEventHandler(handlerFuncs); err != nil {
+	if _, err := v1Informer.AddEventHandler(handlerFuncs); err != nil {
 		return fmt.Errorf("adding v1/csr informer event handlers: %w", err)
 	}
 
-	if _, err := csrv1BetaInformer.AddEventHandler(handlerFuncs); err != nil {
+	if _, err := v1betaInformer.AddEventHandler(handlerFuncs); err != nil {
 		return fmt.Errorf("adding v1beta1/csr informer event handlers: %w", err)
 	}
 
-	v1StopCh := make(chan struct{})
-	v1BetaStopCh := make(chan struct{})
-	defer close(v1StopCh)
-	defer close(v1BetaStopCh)
-	go factory.Start(v1StopCh)
-	go factory.Start(v1BetaStopCh)
+	stopCh := make(chan struct{})
+	defer close(stopCh)
+
+	go v1Factory.Start(stopCh)
+	go v1beta1Factory.Start(stopCh)
 
 	log.Info("watching for new node csr")
 
@@ -432,6 +435,8 @@ func parseCSR(pemData []byte) (*x509.CertificateRequest, error) {
 
 //nolint:unparam
 func getOptions(signer string) metav1.ListOptions {
+	fields.SelectorFromSet(fields.Set{})
+
 	return metav1.ListOptions{
 		FieldSelector: fields.SelectorFromSet(fields.Set{
 			"spec.signerName": signer,
