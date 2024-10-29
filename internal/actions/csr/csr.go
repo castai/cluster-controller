@@ -17,16 +17,16 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
-
-	"github.com/castai/cluster-controller/internal/waitext"
+	"k8s.io/client-go/tools/cache"
 )
 
 const (
-	ReasonApproved  = "AutoApproved"
-	approvedMessage = "This CSR was approved by CAST AI"
-	csrTTL          = time.Hour
+	ReasonApproved          = "AutoApproved"
+	approvedMessage         = "This CSR was approved by CAST AI"
+	csrTTL                  = time.Hour
+	csrInformerResyncPeriod = time.Hour
 )
 
 var ErrNodeCertificateNotFound = errors.New("node certificate not found")
@@ -273,78 +273,49 @@ func getNodeCSRV1Beta1(ctx context.Context, client kubernetes.Interface, nodeNam
 	return nil, ErrNodeCertificateNotFound
 }
 
-func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kubernetes.Interface, c chan *Certificate) {
-	var w watch.Interface
-	var err error
-	b := waitext.DefaultExponentialBackoff()
-	err = waitext.Retry(
-		ctx,
-		b,
-		waitext.Forever,
-		func(ctx context.Context) (bool, error) {
-			w, err = getWatcher(ctx, client)
-			// Context canceled is when the cluster-controller is stopped.
-			// In that case context.Canceled is not an error.
-			if errors.Is(err, context.Canceled) {
-				return false, err
+func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kubernetes.Interface, c chan<- *Certificate) error {
+	factory := informers.NewSharedInformerFactoryWithOptions(client, csrInformerResyncPeriod,
+		informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
+			opts.FieldSelector = getOptions(certv1.KubeAPIServerClientKubeletSignerName).FieldSelector
+		}))
+
+	csrInformer := factory.Certificates().V1().CertificateSigningRequests().Informer()
+	csrv1BetaInformer := factory.Certificates().V1beta1().CertificateSigningRequests().Informer()
+
+	handlerFuncs := cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			if err := processCSREvent(ctx, c, obj); err != nil {
+				log.WithError(err).Warn("failed to process csr add event")
 			}
-			if err != nil {
-				return true, fmt.Errorf("getWatcher: %w", err)
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			if err := processCSREvent(ctx, c, newObj); err != nil {
+				log.WithError(err).Warn("failed to process csr update event")
 			}
-			return false, nil
 		},
-		func(err error) {
-			log.Warnf("retrying: %v", err)
-		},
-	)
-	if err != nil {
-		log.Warnf("finished: %v", err)
-		return
+		DeleteFunc: func(obj interface{}) {},
 	}
 
-	defer w.Stop()
+	if _, err := csrInformer.AddEventHandler(handlerFuncs); err != nil {
+		return fmt.Errorf("adding v1/csr informer event handlers: %w", err)
+	}
+
+	if _, err := csrv1BetaInformer.AddEventHandler(handlerFuncs); err != nil {
+		return fmt.Errorf("adding v1beta1/csr informer event handlers: %w", err)
+	}
+
+	v1StopCh := make(chan struct{})
+	v1BetaStopCh := make(chan struct{})
+	defer close(v1StopCh)
+	defer close(v1BetaStopCh)
+	go factory.Start(v1StopCh)
+	go factory.Start(v1BetaStopCh)
 
 	log.Info("watching for new node csr")
 
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case event, ok := <-w.ResultChan():
-			if !ok {
-				log.Info("watcher closed")
-				go WatchCastAINodeCSRs(ctx, log, client, c) // start over in case of any error.
-				return
-			}
-
-			cert, err := toCertificate(event)
-			if err != nil {
-				log.Warnf("toCertificate: skipping csr event: %v", err)
-				continue
-			}
-
-			if cert == nil {
-				continue
-			}
-
-			if cert.Approved() {
-				continue
-			}
-
-			sendCertificate(ctx, c, cert)
-		}
-	}
-}
-
-func getWatcher(ctx context.Context, client kubernetes.Interface) (watch.Interface, error) {
-	w, err := client.CertificatesV1().CertificateSigningRequests().Watch(ctx, getOptions(certv1.KubeAPIServerClientKubeletSignerName))
-	if err != nil {
-		w, err = client.CertificatesV1beta1().CertificateSigningRequests().Watch(ctx, getOptions(certv1beta1.KubeAPIServerClientKubeletSignerName))
-		if err != nil {
-			return nil, fmt.Errorf("fail to open v1 and v1beta watching client: %w", err)
-		}
-	}
-	return w, nil
+	<-ctx.Done()
+	log.WithField("context", ctx.Err()).Info("finished watching for new node csr")
+	return nil
 }
 
 var (
@@ -354,12 +325,30 @@ var (
 	errNonCastAINode        = errors.New("not a castai node")
 )
 
-func toCertificate(event watch.Event) (cert *Certificate, err error) {
+func processCSREvent(ctx context.Context, c chan<- *Certificate, csrObj interface{}) error {
+	cert, err := toCertificate(csrObj)
+	if err != nil {
+		return err
+	}
+
+	if cert == nil {
+		return nil
+	}
+
+	if cert.Approved() {
+		return nil
+	}
+
+	sendCertificate(ctx, c, cert)
+	return nil
+}
+
+func toCertificate(obj interface{}) (cert *Certificate, err error) {
 	var name string
 	var request []byte
 
 	isOutdated := false
-	switch e := event.Object.(type) {
+	switch e := obj.(type) {
 	case *certv1.CertificateSigningRequest:
 		name = e.Name
 		request = e.Spec.Request
@@ -410,7 +399,7 @@ func isCastAINodeCsr(subjectCommonName string) bool {
 	return false
 }
 
-func sendCertificate(ctx context.Context, c chan *Certificate, cert *Certificate) {
+func sendCertificate(ctx context.Context, c chan<- *Certificate, cert *Certificate) {
 	select {
 	case c <- cert:
 	case <-ctx.Done():

@@ -110,7 +110,16 @@ func (h *ApprovalManager) runAutoApproveForCastAINodes(ctx context.Context) {
 
 	log := h.log.WithField("RunAutoApprove", "auto-approve-csr")
 	c := make(chan *Certificate, 1)
-	go WatchCastAINodeCSRs(ctx, log, h.clientset, c)
+	go func() {
+		for {
+			if err := WatchCastAINodeCSRs(ctx, log, h.clientset, c); err != nil {
+				log.WithError(err).Warn("failed to watch csr")
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			return
+		}
+	}()
 
 	for {
 		select {

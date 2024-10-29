@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 	certv1 "k8s.io/api/certificates/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/client-go/tools/clientcmd"
@@ -104,7 +103,7 @@ func Test_toCertificate(t *testing.T) {
 	testCSRv1 := getCSRv1("node-csr", "kubelet-bootstrap")
 	testCSRv1beta1 := getCSRv1betav1("node-csr", "kubelet-bootstrap")
 	type args struct {
-		event watch.Event
+		obj interface{}
 	}
 	tests := []struct {
 		name     string
@@ -115,18 +114,16 @@ func Test_toCertificate(t *testing.T) {
 		{
 			name: "empty event",
 			args: args{
-				event: watch.Event{},
+				obj: nil,
 			},
 			wantErr: true,
 		},
 		{
 			name: "outdated event",
 			args: args{
-				event: watch.Event{
-					Object: &certv1.CertificateSigningRequest{
-						ObjectMeta: metav1.ObjectMeta{
-							CreationTimestamp: metav1.Time{Time: time.Now().Add(-csrTTL)},
-						},
+				obj: &certv1.CertificateSigningRequest{
+					ObjectMeta: metav1.ObjectMeta{
+						CreationTimestamp: metav1.Time{Time: time.Now().Add(-csrTTL)},
 					},
 				},
 			},
@@ -135,14 +132,12 @@ func Test_toCertificate(t *testing.T) {
 		{
 			name: "bad owner",
 			args: args{
-				event: watch.Event{
-					Object: &certv1.CertificateSigningRequest{
-						Spec: certv1.CertificateSigningRequestSpec{
-							Username: "test",
-						},
-						ObjectMeta: metav1.ObjectMeta{
-							CreationTimestamp: metav1.Time{Time: time.Now().Add(csrTTL)},
-						},
+				obj: &certv1.CertificateSigningRequest{
+					Spec: certv1.CertificateSigningRequestSpec{
+						Username: "test",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						CreationTimestamp: metav1.Time{Time: time.Now().Add(csrTTL)},
 					},
 				},
 			},
@@ -151,9 +146,7 @@ func Test_toCertificate(t *testing.T) {
 		{
 			name: "ok v1",
 			args: args{
-				event: watch.Event{
-					Object: testCSRv1,
-				},
+				obj: testCSRv1,
 			},
 			wantErr: false,
 			wantCert: &Certificate{
@@ -165,9 +158,7 @@ func Test_toCertificate(t *testing.T) {
 		{
 			name: "ok v1beta1",
 			args: args{
-				event: watch.Event{
-					Object: testCSRv1beta1,
-				},
+				obj: testCSRv1beta1,
 			},
 			wantErr: false,
 			wantCert: &Certificate{
@@ -179,7 +170,7 @@ func Test_toCertificate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotCert, err := toCertificate(tt.args.event)
+			gotCert, err := toCertificate(tt.args.obj)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("toCertificate() error = %v, wantErr %v", err, tt.wantErr)
 				return
