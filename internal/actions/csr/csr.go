@@ -23,10 +23,12 @@ import (
 )
 
 const (
-	ReasonApproved          = "AutoApproved"
-	approvedMessage         = "This CSR was approved by CAST AI"
-	csrTTL                  = time.Hour
-	csrInformerResyncPeriod = time.Hour
+	ReasonApproved  = "AutoApproved"
+	approvedMessage = "This CSR was approved by CAST AI"
+	csrTTL          = time.Hour
+
+	// We should approve CSRs, when they are created, so resync can be high.
+	csrInformerResyncPeriod = 12 * time.Hour
 )
 
 var ErrNodeCertificateNotFound = errors.New("node certificate not found")
