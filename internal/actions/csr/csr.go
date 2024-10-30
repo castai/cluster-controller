@@ -68,6 +68,32 @@ func (c *Certificate) Approved() bool {
 	return false
 }
 
+func (c *Certificate) Outdated() bool {
+	if c.v1Beta1 != nil {
+		return c.v1Beta1.CreationTimestamp.Add(csrTTL).Before(time.Now())
+	}
+	return c.v1.CreationTimestamp.Add(csrTTL).Before(time.Now())
+}
+
+func (c *Certificate) ForCASTAINode() bool {
+	if c.Name == "" {
+		return false
+	}
+
+	if strings.HasPrefix(c.Name, "system:node") && strings.Contains(c.Name, "cast-pool") {
+		return true
+	}
+
+	return false
+}
+
+func (c *Certificate) NodeBootstrap() bool {
+	// Since we only have one handler per CSR/certificate name,
+	// which is the node name, we can process the controller's certificates and kubelet-bootstrap`s.
+	// This covers the case when the controller restarts but the bootstrap certificate was deleted without our own certificate being approved.
+	return c.RequestingUser == "kubelet-bootstrap" || c.RequestingUser == "system:serviceaccount:castai-agent:castai-cluster-controller"
+}
+
 func isAlreadyApproved(err error) bool {
 	if err == nil {
 		return false
@@ -338,12 +364,7 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 	return nil
 }
 
-var (
-	errUnexpectedObjectType = errors.New("unexpected object type")
-	errCSRTooOld            = errors.New("csr is too old")
-	errOwner                = errors.New("owner is not bootstrap")
-	errNonCastAINode        = errors.New("not a castai node")
-)
+var errUnexpectedObjectType = errors.New("unexpected object type")
 
 func processCSREvent(ctx context.Context, c chan<- *Certificate, csrObj interface{}) error {
 	cert, err := toCertificate(csrObj)
@@ -355,7 +376,7 @@ func processCSREvent(ctx context.Context, c chan<- *Certificate, csrObj interfac
 		return nil
 	}
 
-	if cert.Approved() {
+	if cert.Approved() || !cert.ForCASTAINode() || !cert.NodeBootstrap() || cert.Outdated() {
 		return nil
 	}
 
@@ -367,31 +388,17 @@ func toCertificate(obj interface{}) (cert *Certificate, err error) {
 	var name string
 	var request []byte
 
-	isOutdated := false
 	switch e := obj.(type) {
 	case *certv1.CertificateSigningRequest:
 		name = e.Name
 		request = e.Spec.Request
 		cert = &Certificate{Name: name, v1: e, RequestingUser: e.Spec.Username}
-		isOutdated = e.CreationTimestamp.Add(csrTTL).Before(time.Now())
 	case *certv1beta1.CertificateSigningRequest:
 		name = e.Name
 		request = e.Spec.Request
 		cert = &Certificate{Name: name, v1Beta1: e, RequestingUser: e.Spec.Username}
-		isOutdated = e.CreationTimestamp.Add(csrTTL).Before(time.Now())
 	default:
 		return nil, errUnexpectedObjectType
-	}
-
-	if isOutdated {
-		return nil, fmt.Errorf("csr with certificate Name: %v RequestingUser: %v %w", cert.Name, cert.RequestingUser, errCSRTooOld)
-	}
-
-	// Since we only have one handler per CSR/certificate name,
-	// which is the node name, we can process the controller's certificates and kubelet-bootstrap`s.
-	// This covers the case when the controller restarts but the bootstrap certificate was deleted without our own certificate being approved.
-	if cert.RequestingUser != "kubelet-bootstrap" && cert.RequestingUser != "system:serviceaccount:castai-agent:castai-cluster-controller" {
-		return nil, fmt.Errorf("csr with certificate Name: %v RequestingUser: %v %w", cert.Name, cert.RequestingUser, errOwner)
 	}
 
 	cn, err := getSubjectCommonName(name, request)
@@ -399,24 +406,9 @@ func toCertificate(obj interface{}) (cert *Certificate, err error) {
 		return nil, fmt.Errorf("getSubjectCommonName: Name: %v RequestingUser: %v  request: %v %w", cert.Name, cert.RequestingUser, string(request), err)
 	}
 
-	if !isCastAINodeCsr(cn) {
-		return nil, fmt.Errorf("csr with certificate Name: %v RequestingUser: %v cn: %v %w", cert.Name, cert.RequestingUser, cn, errNonCastAINode)
-	}
 	cert.Name = cn
 
 	return cert, nil
-}
-
-func isCastAINodeCsr(subjectCommonName string) bool {
-	if subjectCommonName == "" {
-		return false
-	}
-
-	if strings.HasPrefix(subjectCommonName, "system:node") && strings.Contains(subjectCommonName, "cast-pool") {
-		return true
-	}
-
-	return false
 }
 
 func sendCertificate(ctx context.Context, c chan<- *Certificate, cert *Certificate) {
@@ -450,8 +442,6 @@ func parseCSR(pemData []byte) (*x509.CertificateRequest, error) {
 
 //nolint:unparam
 func getOptions(signer string) metav1.ListOptions {
-	fields.SelectorFromSet(fields.Set{})
-
 	return metav1.ListOptions{
 		FieldSelector: fields.SelectorFromSet(fields.Set{
 			"spec.signerName": signer,
