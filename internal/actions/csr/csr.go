@@ -275,18 +275,38 @@ func getNodeCSRV1Beta1(ctx context.Context, client kubernetes.Interface, nodeNam
 	return nil, ErrNodeCertificateNotFound
 }
 
-func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kubernetes.Interface, c chan<- *Certificate) error {
-	v1Factory := informers.NewSharedInformerFactoryWithOptions(client, csrInformerResyncPeriod,
-		informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
-			opts.FieldSelector = getOptions(certv1.KubeAPIServerClientKubeletSignerName).FieldSelector
-		}))
-	v1Informer := v1Factory.Certificates().V1().CertificateSigningRequests().Informer()
+func createInformer(ctx context.Context, client kubernetes.Interface) (informers.SharedInformerFactory, cache.SharedIndexInformer, error) {
+	var (
+		errv1      error
+		errv1beta1 error
+	)
 
-	v1beta1Factory := informers.NewSharedInformerFactoryWithOptions(client, csrInformerResyncPeriod,
-		informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
-			opts.FieldSelector = getOptions(certv1beta1.KubeAPIServerClientKubeletSignerName).FieldSelector
-		}))
-	v1betaInformer := v1beta1Factory.Certificates().V1beta1().CertificateSigningRequests().Informer()
+	if _, errv1 = client.CertificatesV1().CertificateSigningRequests().List(ctx, metav1.ListOptions{}); errv1 == nil {
+		v1Factory := informers.NewSharedInformerFactoryWithOptions(client, csrInformerResyncPeriod,
+			informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
+				opts.FieldSelector = getOptions(certv1.KubeAPIServerClientKubeletSignerName).FieldSelector
+			}))
+		v1Informer := v1Factory.Certificates().V1().CertificateSigningRequests().Informer()
+		return v1Factory, v1Informer, nil
+	}
+
+	if _, errv1beta1 = client.CertificatesV1beta1().CertificateSigningRequests().List(ctx, metav1.ListOptions{}); errv1beta1 == nil {
+		v1Factory := informers.NewSharedInformerFactoryWithOptions(client, csrInformerResyncPeriod,
+			informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
+				opts.FieldSelector = getOptions(certv1beta1.KubeAPIServerClientKubeletSignerName).FieldSelector
+			}))
+		v1Informer := v1Factory.Certificates().V1beta1().CertificateSigningRequests().Informer()
+		return v1Factory, v1Informer, nil
+	}
+
+	return nil, nil, fmt.Errorf("failed to create informer: v1: %w, v1beta1: %w", errv1, errv1beta1)
+}
+
+func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kubernetes.Interface, c chan<- *Certificate) error {
+	factory, informer, err := createInformer(ctx, client)
+	if err != nil {
+		return fmt.Errorf("create informer: %w", err)
+	}
 
 	handlerFuncs := cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
@@ -302,19 +322,14 @@ func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kub
 		DeleteFunc: func(obj interface{}) {},
 	}
 
-	if _, err := v1Informer.AddEventHandler(handlerFuncs); err != nil {
+	if _, err := informer.AddEventHandler(handlerFuncs); err != nil {
 		return fmt.Errorf("adding v1/csr informer event handlers: %w", err)
-	}
-
-	if _, err := v1betaInformer.AddEventHandler(handlerFuncs); err != nil {
-		return fmt.Errorf("adding v1beta1/csr informer event handlers: %w", err)
 	}
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)
 
-	go v1Factory.Start(stopCh)
-	go v1beta1Factory.Start(stopCh)
+	go factory.Start(stopCh)
 
 	log.Info("watching for new node csr")
 
