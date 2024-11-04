@@ -28,6 +28,8 @@ const (
 	csrTTL          = time.Hour
 
 	// We should approve CSRs, when they are created, so resync can be high.
+	// Resync plays back all events (create, update, delete), which are in informer cache.
+	// This does not involve talking to API server, it is not relist.
 	csrInformerResyncPeriod = 12 * time.Hour
 )
 
@@ -68,6 +70,8 @@ func (c *Certificate) Approved() bool {
 	return false
 }
 
+// Outdated returns, whether the certificate request is old and should not be processed by cluster-controller.
+// It has nothing to do with certificate expiration.
 func (c *Certificate) Outdated() bool {
 	if c.v1Beta1 != nil {
 		return c.v1Beta1.CreationTimestamp.Add(csrTTL).Before(time.Now())
@@ -173,6 +177,17 @@ func (c *Certificate) NewCSR(ctx context.Context, client kubernetes.Interface) (
 	}
 
 	return &Certificate{v1: resp}, nil
+}
+
+func startInformer(ctx context.Context, log logrus.FieldLogger, factory informers.SharedInformerFactory) {
+	stopCh := make(chan struct{})
+	defer close(stopCh)
+
+	factory.Start(stopCh)
+	log.Info("watching for new node csr")
+
+	<-ctx.Done()
+	log.WithField("context", ctx.Err()).Info("finished watching for new node csr")
 }
 
 func get(ctx context.Context, client kubernetes.Interface, cert *Certificate) (*Certificate, error) {
@@ -326,42 +341,6 @@ func createInformer(ctx context.Context, client kubernetes.Interface) (informers
 	}
 
 	return nil, nil, fmt.Errorf("failed to create informer: v1: %w, v1beta1: %w", errv1, errv1beta1)
-}
-
-func WatchCastAINodeCSRs(ctx context.Context, log logrus.FieldLogger, client kubernetes.Interface, c chan<- *Certificate) error {
-	factory, informer, err := createInformer(ctx, client)
-	if err != nil {
-		return fmt.Errorf("create informer: %w", err)
-	}
-
-	handlerFuncs := cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			if err := processCSREvent(ctx, c, obj); err != nil {
-				log.WithError(err).Warn("failed to process csr add event")
-			}
-		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
-			if err := processCSREvent(ctx, c, newObj); err != nil {
-				log.WithError(err).Warn("failed to process csr update event")
-			}
-		},
-		DeleteFunc: func(obj interface{}) {},
-	}
-
-	if _, err := informer.AddEventHandler(handlerFuncs); err != nil {
-		return fmt.Errorf("adding v1/csr informer event handlers: %w", err)
-	}
-
-	stopCh := make(chan struct{})
-	defer close(stopCh)
-
-	go factory.Start(stopCh)
-
-	log.Info("watching for new node csr")
-
-	<-ctx.Done()
-	log.WithField("context", ctx.Err()).Info("finished watching for new node csr")
-	return nil
 }
 
 var errUnexpectedObjectType = errors.New("unexpected object type")
