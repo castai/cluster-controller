@@ -11,6 +11,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/castai/cluster-controller/internal/waitext"
 )
@@ -35,8 +36,35 @@ type ApprovalManager struct {
 	m          sync.Mutex          // Used to make sure there is just one watcher running.
 }
 
-func (h *ApprovalManager) Start(ctx context.Context) {
-	go h.runAutoApproveForCastAINodes(ctx)
+func (h *ApprovalManager) Start(ctx context.Context) error {
+	informerFactory, csrInformer, err := createInformer(ctx, h.clientset)
+	if err != nil {
+		return fmt.Errorf("while creating informer: %w", err)
+	}
+
+	c := make(chan *Certificate, 1)
+
+	handlerFuncs := cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			if err := processCSREvent(ctx, c, obj); err != nil {
+				h.log.WithError(err).Warn("failed to process csr add event")
+			}
+		},
+	}
+
+	if _, err := csrInformer.AddEventHandler(handlerFuncs); err != nil {
+		return fmt.Errorf("adding csr informer event handlers: %w", err)
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	if !h.startAutoApprove(cancel) {
+		return nil
+	}
+
+	go startInformer(ctx, h.log, informerFactory)
+	go h.runAutoApproveForCastAINodes(ctx, c)
+
+	return nil
 }
 
 func (h *ApprovalManager) Stop() {
@@ -99,18 +127,10 @@ func (h *ApprovalManager) handle(ctx context.Context, log logrus.FieldLogger, ce
 	return errCSRNotApproved
 }
 
-func (h *ApprovalManager) runAutoApproveForCastAINodes(ctx context.Context) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	if !h.startAutoApprove(cancel) {
-		return // already running.
-	}
+func (h *ApprovalManager) runAutoApproveForCastAINodes(ctx context.Context, c <-chan *Certificate) {
 	defer h.stopAutoApproveForCastAINodes()
 
 	log := h.log.WithField("RunAutoApprove", "auto-approve-csr")
-	c := make(chan *Certificate, 1)
-	go WatchCastAINodeCSRs(ctx, log, h.clientset, c)
 
 	for {
 		select {

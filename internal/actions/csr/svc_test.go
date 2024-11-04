@@ -85,7 +85,9 @@ func TestCSRApprove(t *testing.T) {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			s.Start(ctx)
+			if err := s.Start(ctx); err != nil {
+				t.Logf("failed to start approval manager: %s", err.Error())
+			}
 		}()
 		go func() {
 			defer wg.Done()
@@ -118,7 +120,9 @@ func TestCSRApprove(t *testing.T) {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			s.Start(ctx)
+			if err := s.Start(ctx); err != nil {
+				t.Logf("failed to start approval manager: %s", err.Error())
+			}
 		}()
 		go func() {
 			defer wg.Done()

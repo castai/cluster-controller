@@ -189,9 +189,12 @@ func runController(
 		}
 
 		if isGKE {
-			log.Info("auto approve csr started as running on GKE")
 			csrMgr := csr.NewApprovalManager(log, clientset)
-			csrMgr.Start(ctx)
+			if err := csrMgr.Start(ctx); err != nil {
+				log.WithError(err).Fatal("failed to start approval manager")
+			}
+
+			log.Info("auto approve csr started as running on GKE")
 		}
 
 		svc.Run(ctx)

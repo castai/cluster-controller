@@ -3,14 +3,13 @@ package csr
 import (
 	"context"
 	"path/filepath"
-	"reflect"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	certv1 "k8s.io/api/certificates/v1"
+	certv1beta1 "k8s.io/api/certificates/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/client-go/tools/clientcmd"
@@ -94,8 +93,82 @@ func Test_isCastAINodeCsr(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isCastAINodeCsr(tt.args.subjectCommonName)
-			require.Equal(t, tt.want, got)
+			cert := &Certificate{
+				Name: tt.args.subjectCommonName,
+			}
+
+			require.Equal(t, tt.want, cert.ForCASTAINode())
+		})
+	}
+}
+
+func Test_outdatedCertificate(t *testing.T) {
+	tt := map[string]struct {
+		createTimestamp time.Time
+		want            bool
+	}{
+		"Outdated": {
+			createTimestamp: time.Now().Add(-csrTTL).Add(-time.Second),
+			want:            true,
+		},
+		"Not outdated": {
+			createTimestamp: time.Now(),
+			want:            false,
+		},
+		"Outdated, right before": {
+			createTimestamp: time.Now().Add(-csrTTL).Add(2 * time.Second),
+			want:            false,
+		},
+	}
+
+	for name, tc := range tt {
+		t.Run(name, func(t *testing.T) {
+			cert := &Certificate{
+				v1: &certv1.CertificateSigningRequest{
+					ObjectMeta: metav1.ObjectMeta{
+						CreationTimestamp: metav1.NewTime(tc.createTimestamp),
+					},
+				},
+			}
+			require.Equal(t, tc.want, cert.Outdated())
+
+			certBeta := &Certificate{
+				v1Beta1: &certv1beta1.CertificateSigningRequest{
+					ObjectMeta: metav1.ObjectMeta{
+						CreationTimestamp: metav1.NewTime(tc.createTimestamp),
+					},
+				},
+			}
+			require.Equal(t, tc.want, certBeta.Outdated())
+		})
+	}
+}
+
+func Test_nodeBootstrap(t *testing.T) {
+	tt := map[string]struct {
+		reqUser string
+		want    bool
+	}{
+		"other one": {
+			reqUser: "dummy-user",
+			want:    false,
+		},
+		"kubelet-bootstrap": {
+			reqUser: "kubelet-bootstrap",
+			want:    true,
+		},
+		"castai-cluster-controller": {
+			reqUser: "system:serviceaccount:castai-agent:castai-cluster-controller",
+			want:    true,
+		},
+	}
+
+	for name, tc := range tt {
+		t.Run(name, func(t *testing.T) {
+			cert := &Certificate{
+				RequestingUser: tc.reqUser,
+			}
+			require.Equal(t, tc.want, cert.NodeBootstrap())
 		})
 	}
 }
@@ -104,88 +177,88 @@ func Test_toCertificate(t *testing.T) {
 	testCSRv1 := getCSRv1("node-csr", "kubelet-bootstrap")
 	testCSRv1beta1 := getCSRv1betav1("node-csr", "kubelet-bootstrap")
 	type args struct {
-		event watch.Event
+		obj interface{}
 	}
 	tests := []struct {
-		name     string
-		args     args
-		wantCert *Certificate
-		wantErr  bool
+		name      string
+		args      args
+		checkFunc func(t *testing.T, cert *Certificate)
+		wantErr   bool
 	}{
 		{
 			name: "empty event",
 			args: args{
-				event: watch.Event{},
+				obj: nil,
 			},
 			wantErr: true,
 		},
 		{
 			name: "outdated event",
 			args: args{
-				event: watch.Event{
-					Object: &certv1.CertificateSigningRequest{
-						ObjectMeta: metav1.ObjectMeta{
-							CreationTimestamp: metav1.Time{Time: time.Now().Add(-csrTTL)},
-						},
+				obj: &certv1.CertificateSigningRequest{
+					ObjectMeta: metav1.ObjectMeta{
+						CreationTimestamp: metav1.Time{Time: time.Now().Add(-csrTTL)},
 					},
+					Spec: testCSRv1.Spec,
 				},
 			},
-			wantErr: true,
+			checkFunc: func(t *testing.T, cert *Certificate) {
+				require.True(t, cert.Outdated())
+			},
+			wantErr: false,
 		},
 		{
 			name: "bad owner",
 			args: args{
-				event: watch.Event{
-					Object: &certv1.CertificateSigningRequest{
-						Spec: certv1.CertificateSigningRequestSpec{
-							Username: "test",
-						},
-						ObjectMeta: metav1.ObjectMeta{
-							CreationTimestamp: metav1.Time{Time: time.Now().Add(csrTTL)},
-						},
+				obj: &certv1.CertificateSigningRequest{
+					Spec: certv1.CertificateSigningRequestSpec{
+						Username: "test",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						CreationTimestamp: metav1.Time{Time: time.Now().Add(csrTTL)},
 					},
 				},
 			},
-			wantErr: true,
+			checkFunc: func(t *testing.T, cert *Certificate) {
+				require.False(t, cert.NodeBootstrap())
+			},
+			wantErr: false,
 		},
 		{
 			name: "ok v1",
 			args: args{
-				event: watch.Event{
-					Object: testCSRv1,
-				},
+				obj: testCSRv1,
+			},
+			checkFunc: func(t *testing.T, cert *Certificate) {
+				require.Equal(t, "system:node:gke-dev-master-cast-pool-cb53177b", cert.Name)
+				require.Equal(t, "kubelet-bootstrap", cert.RequestingUser)
+				require.Equal(t, testCSRv1, cert.v1)
 			},
 			wantErr: false,
-			wantCert: &Certificate{
-				Name:           "system:node:gke-dev-master-cast-pool-cb53177b",
-				RequestingUser: "kubelet-bootstrap",
-				v1:             testCSRv1,
-			},
 		},
 		{
 			name: "ok v1beta1",
 			args: args{
-				event: watch.Event{
-					Object: testCSRv1beta1,
-				},
+				obj: testCSRv1beta1,
 			},
 			wantErr: false,
-			wantCert: &Certificate{
-				Name:           "system:node:gke-dev-master-cast-pool-cb53177b",
-				RequestingUser: "kubelet-bootstrap",
-				v1Beta1:        testCSRv1beta1,
+			checkFunc: func(t *testing.T, cert *Certificate) {
+				require.Equal(t, "system:node:gke-dev-master-cast-pool-cb53177b", cert.Name)
+				require.Equal(t, "kubelet-bootstrap", cert.RequestingUser)
+				require.Equal(t, testCSRv1beta1, cert.v1Beta1)
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotCert, err := toCertificate(tt.args.event)
+			gotCert, err := toCertificate(tt.args.obj)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("toCertificate() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(gotCert, tt.wantCert) {
-				t.Errorf("toCertificate() gotCert = %v, want %v", gotCert, tt.wantCert)
+
+			if tt.checkFunc != nil {
+				tt.checkFunc(t, gotCert)
 			}
 		})
 	}
