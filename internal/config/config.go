@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -28,6 +29,7 @@ type Config struct {
 
 	MonitorMetadataPath string `mapstructure:"monitor_metadata"`
 	SelfPod             Pod    `mapstructure:"self_pod"`
+	ServiceAccount      string `mapstructure:"service_account_name"`
 }
 
 type Pod struct {
@@ -90,6 +92,8 @@ func Get() Config {
 	_ = viper.BindEnv("self_pod.node", "KUBERNETES_NODE_NAME")
 	_ = viper.BindEnv("self_pod.name", "KUBERNETES_POD")
 	_ = viper.BindEnv("self_pod.namespace", "LEADER_ELECTION_NAMESPACE")
+	// TODO(furkhat@cast.ai): update helm charts
+	_ = viper.BindEnv("service_account_name", "SERVICE_ACCOUNT")
 
 	cfg = &Config{}
 	if err := viper.Unmarshal(&cfg); err != nil {
@@ -113,6 +117,12 @@ func Get() Config {
 	}
 	if cfg.SelfPod.Namespace == "" {
 		required("LEADER_ELECTION_NAMESPACE")
+	}
+
+	if !strings.HasPrefix(cfg.ServiceAccount, "system:serviceaccount:") {
+		cfg.ServiceAccount = "system:serviceaccount:" + cfg.SelfPod.Namespace + ":" + cfg.ServiceAccount
+	} else if cfg.ServiceAccount == "" {
+		cfg.ServiceAccount = "system:serviceaccount:castai-agent:castai-cluster-controller"
 	}
 
 	if cfg.LeaderElection.Enabled {

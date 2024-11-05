@@ -12,9 +12,9 @@ import (
 
 // These should be set via `go build` during a release.
 var (
-	GitCommit = "undefined"
+	GitCommit = "4a3f219"
 	GitRef    = "no-ref"
-	Version   = "local"
+	Version   = "v0.54.6"
 )
 
 func main() {

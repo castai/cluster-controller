@@ -35,7 +35,8 @@ func TestConfig(t *testing.T) {
 		SelfPod: Pod{
 			Namespace: "castai-agent",
 		},
-		ClusterID: "c1",
+		ServiceAccount: "system:serviceaccount:castai-agent:castai-cluster-controller",
+		ClusterID:      "c1",
 		LeaderElection: LeaderElection{
 			Enabled:            true,
 			LockName:           "castai-cluster-controller",

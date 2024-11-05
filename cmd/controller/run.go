@@ -189,7 +189,7 @@ func runController(
 		}
 
 		if isGKE {
-			csrMgr := csr.NewApprovalManager(log, clientset)
+			csrMgr := csr.NewApprovalManager(log, clientset, cfg.ServiceAccount)
 			if err := csrMgr.Start(ctx); err != nil {
 				log.WithError(err).Fatal("failed to start approval manager")
 			}
