@@ -4,6 +4,11 @@ on:
   pull_request:
     branches:
       - main
+    types: 
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
 
 jobs:
   build:
@@ -72,6 +77,7 @@ jobs:
 
   e2e-tests:
     uses: ./.github/workflows/e2e.yaml
+    if: github.event.pull_request.draft == false
     needs: [build]
     with:
       image-repository: ghcr.io/castai/cluster-controller
