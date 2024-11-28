@@ -76,7 +76,7 @@ func TestCSRApprove(t *testing.T) {
 		csrName := "node-csr-123"
 		userName := "kubelet-bootstrap"
 		client := fake.NewClientset(getCSRv1(csrName, userName))
-		s := NewApprovalManager(log, client)
+		s := NewApprovalManager(log, client, "system:serviceaccount:castai-agent:castai-cluster-controller")
 		watcher := watch.NewFake()
 		client.PrependWatchReactor("certificatesigningrequests", ktest.DefaultWatchReactor(watcher, nil))
 
@@ -111,7 +111,7 @@ func TestCSRApprove(t *testing.T) {
 		csrName := "123"
 		userName := "kubelet-bootstrap"
 		client := fake.NewClientset(getCSRv1(csrName, userName))
-		s := NewApprovalManager(log, client)
+		s := NewApprovalManager(log, client, "system:serviceaccount:castai-agent:castai-cluster-controller")
 		watcher := watch.NewFake()
 		client.PrependWatchReactor("certificatesigningrequests", ktest.DefaultWatchReactor(watcher, nil))
 

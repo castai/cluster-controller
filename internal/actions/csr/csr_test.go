@@ -168,7 +168,7 @@ func Test_nodeBootstrap(t *testing.T) {
 			cert := &Certificate{
 				RequestingUser: tc.reqUser,
 			}
-			require.Equal(t, tc.want, cert.NodeBootstrap())
+			require.Equal(t, tc.want, cert.NodeBootstrap("system:serviceaccount:castai-agent:castai-cluster-controller"))
 		})
 	}
 }
@@ -220,7 +220,7 @@ func Test_toCertificate(t *testing.T) {
 				},
 			},
 			checkFunc: func(t *testing.T, cert *Certificate) {
-				require.False(t, cert.NodeBootstrap())
+				require.False(t, cert.NodeBootstrap("system:serviceaccount:castai-agent:castai-cluster-controller"))
 			},
 			wantErr: false,
 		},

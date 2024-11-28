@@ -20,10 +20,11 @@ const (
 	approveCSRTimeout = 4 * time.Minute
 )
 
-func NewApprovalManager(log logrus.FieldLogger, clientset kubernetes.Interface) *ApprovalManager {
+func NewApprovalManager(log logrus.FieldLogger, clientset kubernetes.Interface, clusterControllerServiceAccount string) *ApprovalManager {
 	return &ApprovalManager{
-		log:       log,
-		clientset: clientset,
+		log:                             log,
+		clientset:                       clientset,
+		clusterControllerServiceAccount: clusterControllerServiceAccount,
 	}
 }
 
@@ -31,6 +32,8 @@ type ApprovalManager struct {
 	log               logrus.FieldLogger
 	clientset         kubernetes.Interface
 	cancelAutoApprove context.CancelFunc
+
+	clusterControllerServiceAccount string
 
 	inProgress map[string]struct{} // one handler per csr/certificate Name.
 	m          sync.Mutex          // Used to make sure there is just one watcher running.
@@ -46,7 +49,7 @@ func (h *ApprovalManager) Start(ctx context.Context) error {
 
 	handlerFuncs := cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			if err := processCSREvent(ctx, c, obj); err != nil {
+			if err := processCSREvent(ctx, c, obj, h.clusterControllerServiceAccount); err != nil {
 				h.log.WithError(err).Warn("failed to process csr add event")
 			}
 		},

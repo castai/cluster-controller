@@ -6,6 +6,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -91,11 +92,11 @@ func (c *Certificate) ForCASTAINode() bool {
 	return false
 }
 
-func (c *Certificate) NodeBootstrap() bool {
+func (c *Certificate) NodeBootstrap(serviceAccount string) bool {
 	// Since we only have one handler per CSR/certificate name,
 	// which is the node name, we can process the controller's certificates and kubelet-bootstrap`s.
 	// This covers the case when the controller restarts but the bootstrap certificate was deleted without our own certificate being approved.
-	return c.RequestingUser == "kubelet-bootstrap" || c.RequestingUser == "system:serviceaccount:castai-agent:castai-cluster-controller"
+	return c.RequestingUser == "kubelet-bootstrap" || c.RequestingUser == serviceAccount
 }
 
 func isAlreadyApproved(err error) bool {
@@ -345,7 +346,7 @@ func createInformer(ctx context.Context, client kubernetes.Interface) (informers
 
 var errUnexpectedObjectType = errors.New("unexpected object type")
 
-func processCSREvent(ctx context.Context, c chan<- *Certificate, csrObj interface{}) error {
+func processCSREvent(ctx context.Context, c chan<- *Certificate, csrObj interface{}, serviceAccount string) error {
 	cert, err := toCertificate(csrObj)
 	if err != nil {
 		return err
@@ -355,7 +356,7 @@ func processCSREvent(ctx context.Context, c chan<- *Certificate, csrObj interfac
 		return nil
 	}
 
-	if cert.Approved() || !cert.ForCASTAINode() || !cert.NodeBootstrap() || cert.Outdated() {
+	if cert.Approved() || !cert.ForCASTAINode() || !cert.NodeBootstrap(serviceAccount) || cert.Outdated() {
 		return nil
 	}
 
@@ -369,10 +370,12 @@ func toCertificate(obj interface{}) (cert *Certificate, err error) {
 
 	switch e := obj.(type) {
 	case *certv1.CertificateSigningRequest:
+		log.Printf("certv1.CertificateSigningRequest: %s", e.Name)
 		name = e.Name
 		request = e.Spec.Request
 		cert = &Certificate{Name: name, v1: e, RequestingUser: e.Spec.Username}
 	case *certv1beta1.CertificateSigningRequest:
+		log.Printf("certv1.CertificateSigningRequest: %s", e.Name)
 		name = e.Name
 		request = e.Spec.Request
 		cert = &Certificate{Name: name, v1Beta1: e, RequestingUser: e.Spec.Username}
