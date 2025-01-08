@@ -8,6 +8,8 @@ Check our official helm charts repo https://github.com/castai/castai-helm-charts
 
 ## Testing
 
+test
+
 ### Pull requests
 
 Each pull request builds and publishes docker image for easier code review and testing. Check relevant GitHub actions.
