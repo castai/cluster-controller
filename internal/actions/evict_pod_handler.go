@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/castai/cluster-controller/internal/castai"
-	"github.com/castai/cluster-controller/internal/waitext"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -17,6 +15,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/kubectl/pkg/drain"
+
+	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/waitext"
 )
 
 func NewEvictPodHandler(log logrus.FieldLogger, clientset kubernetes.Interface) ActionHandler {
