@@ -514,9 +514,8 @@ func prependEvictionReaction(t testing.TB, c *fake.Clientset, success, retryable
 			if retryableFailure {
 				// Simulate failure that should be retried by client.
 				return &apierrors.StatusError{ErrStatus: metav1.Status{Reason: metav1.StatusReasonTooManyRequests}}
-			} else {
-				return &apierrors.StatusError{ErrStatus: metav1.Status{Reason: metav1.StatusReasonInternalError, Message: "internal"}}
 			}
+			return &apierrors.StatusError{ErrStatus: metav1.Status{Reason: metav1.StatusReasonInternalError, Message: "internal"}}
 		}
 		go func() {
 			err := c.CoreV1().Pods(namespace).Delete(context.Background(), name, metav1.DeleteOptions{})
