@@ -37,6 +37,7 @@ type ClusterAction struct {
 	ActionSendAKSInitData   *ActionSendAKSInitData   `json:"actionSendAksInitData,omitempty"`
 	ActionCheckNodeDeleted  *ActionCheckNodeDeleted  `json:"actionCheckNodeDeleted,omitempty"`
 	ActionCheckNodeStatus   *ActionCheckNodeStatus   `json:"actionCheckNodeStatus,omitempty"`
+	ActionEvictPod          *ActionEvictPod          `json:"actionEvictPod,omitempty"`
 	ActionPatch             *ActionPatch             `json:"actionPatch,omitempty"`
 	ActionCreate            *ActionCreate            `json:"actionCreate,omitempty"`
 	ActionDelete            *ActionDelete            `json:"actionDelete,omitempty"`
@@ -81,6 +82,9 @@ func (c *ClusterAction) Data() interface{} {
 	}
 	if c.ActionCheckNodeStatus != nil {
 		return c.ActionCheckNodeStatus
+	}
+	if c.ActionEvictPod != nil {
+		return c.ActionEvictPod
 	}
 	if c.ActionPatch != nil {
 		return c.ActionPatch
@@ -142,6 +146,11 @@ type ActionDrainNode struct {
 	NodeID              string `json:"nodeId"`
 	DrainTimeoutSeconds int    `json:"drainTimeoutSeconds"`
 	Force               bool   `json:"force"`
+}
+
+type ActionEvictPod struct {
+	Namespace string `json:"namespace"`
+	Pod       string `json:"pod"`
 }
 
 type ActionApproveCSR struct {

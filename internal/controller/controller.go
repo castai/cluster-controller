@@ -61,6 +61,7 @@ func NewService(
 			reflect.TypeOf(&castai.ActionSendAKSInitData{}):   actions.NewSendAKSInitDataHandler(log, castaiClient),
 			reflect.TypeOf(&castai.ActionCheckNodeDeleted{}):  actions.NewCheckNodeDeletedHandler(log, clientset),
 			reflect.TypeOf(&castai.ActionCheckNodeStatus{}):   actions.NewCheckNodeStatusHandler(log, clientset),
+			reflect.TypeOf(&castai.ActionEvictPod{}):          actions.NewEvictPodHandler(log, clientset),
 			reflect.TypeOf(&castai.ActionPatch{}):             actions.NewPatchHandler(log, dynamicClient),
 			reflect.TypeOf(&castai.ActionCreate{}):            actions.NewCreateHandler(log, dynamicClient),
 			reflect.TypeOf(&castai.ActionDelete{}):            actions.NewDeleteHandler(log, dynamicClient),
