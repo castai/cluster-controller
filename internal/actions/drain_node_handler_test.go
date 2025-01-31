@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
-	"k8s.io/api/policy/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -509,29 +508,20 @@ func TestLogCastPodsToEvict(t *testing.T) {
 	})
 }
 
-func prependEvictionReaction(t *testing.T, c *fake.Clientset, success, retryableFailure bool) {
-	c.PrependReactor("create", "pods", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
-		if action.GetSubresource() != "eviction" {
-			return false, nil, nil
+func prependEvictionReaction(t testing.TB, c *fake.Clientset, success, retryableFailure bool) {
+	prependPodEvictionReaction(c, func(namespace, name string) error {
+		if !success {
+			if retryableFailure {
+				// Simulate failure that should be retried by client.
+				return &apierrors.StatusError{ErrStatus: metav1.Status{Reason: metav1.StatusReasonTooManyRequests}}
+			}
+			return &apierrors.StatusError{ErrStatus: metav1.Status{Reason: metav1.StatusReasonInternalError, Message: "internal"}}
 		}
-
-		if success {
-			eviction := action.(ktest.CreateAction).GetObject().(*v1beta1.Eviction)
-
-			go func() {
-				err := c.CoreV1().Pods(eviction.Namespace).Delete(context.Background(), eviction.Name, metav1.DeleteOptions{})
-				require.NoError(t, err)
-			}()
-
-			return true, nil, nil
-		}
-
-		// Simulate failure that should be retried by client.
-		if retryableFailure {
-			return true, nil, &apierrors.StatusError{ErrStatus: metav1.Status{Reason: metav1.StatusReasonTooManyRequests}}
-		}
-
-		return true, nil, &apierrors.StatusError{ErrStatus: metav1.Status{Reason: metav1.StatusReasonInternalError, Message: "internal"}}
+		go func() {
+			err := c.CoreV1().Pods(namespace).Delete(context.Background(), name, metav1.DeleteOptions{})
+			require.NoError(t, err)
+		}()
+		return nil
 	})
 }
 
@@ -628,7 +618,7 @@ func addEvictionSupport(c *fake.Clientset) {
 	podsEviction := metav1.APIResource{
 		Name:    "pods/eviction",
 		Kind:    "Eviction",
-		Group:   "",
+		Group:   "policy",
 		Version: "v1",
 	}
 	coreResources := &metav1.APIResourceList{
