@@ -48,7 +48,7 @@ func (h *DeleteHandler) Handle(ctx context.Context, action *castai.ClusterAction
 	})
 
 	var res dynamic.ResourceInterface = r
-	if req.ID.Namespace != nil {
+	if req.ID.Namespace != nil && *req.ID.Namespace != "" {
 		res = r.Namespace(*req.ID.Namespace)
 	}
 
