@@ -18,15 +18,15 @@ import (
 )
 
 type Config struct {
-	Log                  Log
-	API                  API
-	TLS                  TLS
-	Kubeconfig           string
-	KubeClient           KubeClient
-	ClusterID            string
-	PprofPort            int
-	LeaderElection       LeaderElection
-        // MaxActinsInProgress serves as a safeguard to limit the number of Goroutines in progress.
+	Log            Log
+	API            API
+	TLS            TLS
+	Kubeconfig     string
+	KubeClient     KubeClient
+	ClusterID      string
+	PprofPort      int
+	LeaderElection LeaderElection
+	// MaxActionsInProgress serves as a safeguard to limit the number of Goroutines in progress.
 	MaxActionsInProgress int
 
 	MonitorMetadataPath string `mapstructure:"monitor_metadata"`
