@@ -5,15 +5,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
 func TestConfig(t *testing.T) {
+	clusterId := uuid.New().String()
 	require.NoError(t, os.Setenv("API_KEY", "abc"))
 	require.NoError(t, os.Setenv("API_URL", "api.cast.ai"))
 	require.NoError(t, os.Setenv("KUBECONFIG", "~/.kube/config"))
-	require.NoError(t, os.Setenv("CLUSTER_ID", "c1"))
+	require.NoError(t, os.Setenv("CLUSTER_ID", clusterId))
 	require.NoError(t, os.Setenv("LEADER_ELECTION_ENABLED", "true"))
 	require.NoError(t, os.Setenv("LEADER_ELECTION_NAMESPACE", "castai-agent"))
 	require.NoError(t, os.Setenv("LEADER_ELECTION_LOCK_NAME", "castai-cluster-controller"))
@@ -35,7 +37,7 @@ func TestConfig(t *testing.T) {
 		SelfPod: Pod{
 			Namespace: "castai-agent",
 		},
-		ClusterID: "c1",
+		ClusterID: clusterId,
 		LeaderElection: LeaderElection{
 			Enabled:            true,
 			LockName:           "castai-cluster-controller",
@@ -46,6 +48,7 @@ func TestConfig(t *testing.T) {
 			QPS:   25,
 			Burst: 150,
 		},
+		MaxActionsInProgress: 1000,
 	}
 
 	require.Equal(t, expected, cfg)

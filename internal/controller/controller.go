@@ -22,14 +22,15 @@ import (
 )
 
 type Config struct {
-	PollWaitInterval time.Duration // How long to wait unit next long polling request.
-	PollTimeout      time.Duration // hard timeout. Normally server should return empty result before this timeout.
-	AckTimeout       time.Duration // How long to wait for ack request to complete.
-	AckRetriesCount  int           // Ack retry count.
-	AckRetryWait     time.Duration // How long to wait before next ack retry request.
-	ClusterID        string
-	Version          string
-	Namespace        string
+	PollWaitInterval     time.Duration // How long to wait unit next long polling request.
+	PollTimeout          time.Duration // hard timeout. Normally server should return empty result before this timeout.
+	AckTimeout           time.Duration // How long to wait for ack request to complete.
+	AckRetriesCount      int           // Ack retry count.
+	AckRetryWait         time.Duration // How long to wait before next ack retry request.
+	ClusterID            string
+	Version              string
+	Namespace            string
+	MaxActionsInProgress int
 }
 
 func NewService(
@@ -190,6 +191,11 @@ func (s *Controller) startProcessing(actionID string) bool {
 	defer s.startedActionsMu.Unlock()
 
 	if _, ok := s.startedActions[actionID]; ok {
+		return false
+	}
+
+	if len(s.startedActions) >= s.cfg.MaxActionsInProgress {
+		s.log.Warn("too many actions in progress")
 		return false
 	}
 

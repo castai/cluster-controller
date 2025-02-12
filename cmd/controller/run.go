@@ -128,14 +128,15 @@ func runController(
 	log.Infof("running castai-cluster-controller version %v, log-level: %v", binVersion, logger.Level)
 
 	actionsConfig := controller.Config{
-		PollWaitInterval: 5 * time.Second,
-		PollTimeout:      maxRequestTimeout,
-		AckTimeout:       30 * time.Second,
-		AckRetriesCount:  3,
-		AckRetryWait:     1 * time.Second,
-		ClusterID:        cfg.ClusterID,
-		Version:          binVersion.Version,
-		Namespace:        cfg.SelfPod.Namespace,
+		PollWaitInterval:     5 * time.Second,
+		PollTimeout:          maxRequestTimeout,
+		AckTimeout:           30 * time.Second,
+		AckRetriesCount:      3,
+		AckRetryWait:         1 * time.Second,
+		ClusterID:            cfg.ClusterID,
+		Version:              binVersion.Version,
+		Namespace:            cfg.SelfPod.Namespace,
+		MaxActionsInProgress: cfg.MaxActionsInProgress,
 	}
 	healthzAction := health.NewHealthzProvider(health.HealthzCfg{HealthyPollIntervalLimit: (actionsConfig.PollWaitInterval + actionsConfig.PollTimeout) * 2, StartTimeLimit: 2 * time.Minute}, log)
 
