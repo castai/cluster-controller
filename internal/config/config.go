@@ -26,6 +26,7 @@ type Config struct {
 	ClusterID            string
 	PprofPort            int
 	LeaderElection       LeaderElection
+        // MaxActinsInProgress serves as a safeguard to limit the number of Goroutines in progress.
 	MaxActionsInProgress int
 
 	MonitorMetadataPath string `mapstructure:"monitor_metadata"`
