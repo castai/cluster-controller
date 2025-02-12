@@ -194,8 +194,8 @@ func (s *Controller) startProcessing(actionID string) bool {
 		return false
 	}
 
-	if len(s.startedActions) >= s.cfg.MaxActionsInProgress {
-		s.log.Warn("too many actions in progress")
+	if inProgress := len(s.startedActions); inProgress >= s.cfg.MaxActionsInProgress {
+		s.log.Warnf("too many actions in progress %d/%d", inProgress, s.cfg.MaxActionsInProgress)
 		return false
 	}
 
