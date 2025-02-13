@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"k8s.io/apimachinery/pkg/util/net"
@@ -25,6 +26,8 @@ type Config struct {
 	ClusterID      string
 	PprofPort      int
 	LeaderElection LeaderElection
+	// MaxActionsInProgress serves as a safeguard to limit the number of Goroutines in progress.
+	MaxActionsInProgress int
 
 	MonitorMetadataPath string `mapstructure:"monitor_metadata"`
 	SelfPod             Pod    `mapstructure:"self_pod"`
@@ -90,6 +93,7 @@ func Get() Config {
 	_ = viper.BindEnv("self_pod.node", "KUBERNETES_NODE_NAME")
 	_ = viper.BindEnv("self_pod.name", "KUBERNETES_POD")
 	_ = viper.BindEnv("self_pod.namespace", "LEADER_ELECTION_NAMESPACE")
+	_ = viper.BindEnv("max_action_in_progress", "MAX_ACTIONS_IN_PROGRESS")
 
 	cfg = &Config{}
 	if err := viper.Unmarshal(&cfg); err != nil {
@@ -111,6 +115,11 @@ func Get() Config {
 	if cfg.ClusterID == "" {
 		required("CLUSTER_ID")
 	}
+
+	if _, err := uuid.Parse(cfg.ClusterID); err != nil {
+		panic(fmt.Errorf("parsing cluster id: %w", err))
+	}
+
 	if cfg.SelfPod.Namespace == "" {
 		required("LEADER_ELECTION_NAMESPACE")
 	}
@@ -131,6 +140,10 @@ func Get() Config {
 	}
 	if cfg.KubeClient.Burst == 0 {
 		cfg.KubeClient.Burst = 150
+	}
+
+	if cfg.MaxActionsInProgress == 0 {
+		cfg.MaxActionsInProgress = 1000
 	}
 
 	return *cfg

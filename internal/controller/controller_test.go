@@ -24,12 +24,13 @@ func TestController_Run(t *testing.T) {
 	t.Parallel()
 	pollTimeout := 100 * time.Millisecond
 	cfg := Config{
-		PollWaitInterval: 10 * time.Millisecond,
-		PollTimeout:      pollTimeout,
-		AckTimeout:       1 * time.Second,
-		AckRetriesCount:  3,
-		AckRetryWait:     1 * time.Millisecond,
-		ClusterID:        uuid.New().String(),
+		PollWaitInterval:     10 * time.Millisecond,
+		PollTimeout:          pollTimeout,
+		AckTimeout:           1 * time.Second,
+		AckRetriesCount:      3,
+		AckRetryWait:         1 * time.Millisecond,
+		ClusterID:            uuid.New().String(),
+		MaxActionsInProgress: 100,
 	}
 	type fields struct {
 		cfg                  Config
