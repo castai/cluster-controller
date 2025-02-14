@@ -41,19 +41,19 @@ func (h *EvictPodHandler) Handle(ctx context.Context, action *castai.ClusterActi
 		ActionIDLogField: action.ID,
 		"action":         reflect.TypeOf(req).String(),
 		"namespace":      req.Namespace,
-		"pod":            req.Pod,
+		"pod":            req.PodName,
 	})
 	return h.handle(ctx, log, req)
 }
 
 func (h *EvictPodHandler) handle(ctx context.Context, log logrus.FieldLogger, req *castai.ActionEvictPod) error {
 	log.Infof("evicting pod")
-	err := h.evictPod(ctx, log, req.Namespace, req.Pod)
+	err := h.evictPod(ctx, log, req.Namespace, req.PodName)
 	if err != nil {
 		return fmt.Errorf("evict pod: %w", err)
 	}
 	log.Infof("waiting for pod terminatation")
-	err = h.waitForPodToBeDeleted(ctx, log, req.Namespace, req.Pod)
+	err = h.waitForPodToBeDeleted(ctx, log, req.Namespace, req.PodName)
 	if err != nil {
 		return fmt.Errorf("wait for pod to be terminated: %w", err)
 	}
