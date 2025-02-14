@@ -43,7 +43,7 @@ func TestEvictPodHandler(t *testing.T) {
 
 		action := newEvictPodAction(&castai.ActionEvictPod{
 			Namespace: pod.Namespace,
-			Pod:       pod.Name,
+			PodName:   pod.Name,
 		})
 		err := h.Handle(ctx, action)
 		require.NoError(t, err)
@@ -67,7 +67,7 @@ func TestEvictPodHandler(t *testing.T) {
 
 		action := newEvictPodAction(&castai.ActionEvictPod{
 			Namespace: pod.Namespace,
-			Pod:       pod.Name,
+			PodName:   pod.Name,
 		})
 		err := h.Handle(ctx, action)
 		require.NoError(t, err)
@@ -91,7 +91,7 @@ func TestEvictPodHandler(t *testing.T) {
 
 		action := newEvictPodAction(&castai.ActionEvictPod{
 			Namespace: pod.Namespace,
-			Pod:       pod.Name,
+			PodName:   pod.Name,
 		})
 		err := h.Handle(ctx, action)
 		require.Error(t, err)
@@ -110,7 +110,7 @@ func TestEvictPodHandler(t *testing.T) {
 
 		action := newEvictPodAction(&castai.ActionEvictPod{
 			Namespace: pod.Namespace,
-			Pod:       pod.Name,
+			PodName:   pod.Name,
 		})
 		err := h.Handle(ctx, action)
 		require.NoError(t, err)
@@ -131,7 +131,7 @@ func TestEvictPodHandler(t *testing.T) {
 
 		action := newEvictPodAction(&castai.ActionEvictPod{
 			Namespace: pod.Namespace,
-			Pod:       pod.Name,
+			PodName:   pod.Name,
 		})
 		err := h.Handle(ctx, action)
 		require.NoError(t, err)
