@@ -150,7 +150,7 @@ type ActionDrainNode struct {
 
 type ActionEvictPod struct {
 	Namespace string `json:"namespace"`
-	Pod       string `json:"pod"`
+	PodName   string `json:"podName"`
 }
 
 type ActionApproveCSR struct {
