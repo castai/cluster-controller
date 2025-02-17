@@ -42,9 +42,6 @@ func (h *CreateHandler) Handle(ctx context.Context, action *castai.ClusterAction
 	}
 
 	newObj := &unstructured.Unstructured{Object: req.Object}
-	if newObj.GetNamespace() == "" {
-		return fmt.Errorf("namespace not provided %w", errAction)
-	}
 
 	log := h.log.WithFields(logrus.Fields{
 		ActionIDLogField: action.ID,
@@ -53,21 +50,26 @@ func (h *CreateHandler) Handle(ctx context.Context, action *castai.ClusterAction
 		"name":           newObj.GetName(),
 	})
 
-	r := h.client.Resource(schema.GroupVersionResource{
+	gvkResource := h.client.Resource(schema.GroupVersionResource{
 		Group:    req.Group,
 		Version:  req.Version,
 		Resource: req.Resource,
-	}).Namespace(newObj.GetNamespace())
+	})
+
+	var resource dynamic.ResourceInterface = gvkResource
+	if newObj.GetNamespace() != "" {
+		resource = gvkResource.Namespace(newObj.GetNamespace())
+	}
 
 	log.Info("creating new resource")
-	_, err := r.Create(ctx, newObj, metav1.CreateOptions{})
+	_, err := resource.Create(ctx, newObj, metav1.CreateOptions{})
 	if err != nil && !apierrors.IsAlreadyExists(err) {
 		return fmt.Errorf("creating resource %v: %w", req.Resource, err)
 	}
 
 	if apierrors.IsAlreadyExists(err) {
 		log.Info("resource already exists, patching")
-		obj, err := r.Get(ctx, newObj.GetName(), metav1.GetOptions{})
+		obj, err := resource.Get(ctx, newObj.GetName(), metav1.GetOptions{})
 		if err != nil {
 			return fmt.Errorf("getting old resource: %w", err)
 		}
@@ -106,7 +108,7 @@ func (h *CreateHandler) Handle(ctx context.Context, action *castai.ClusterAction
 		}
 
 		log.Infof("patching resource: %s", patch)
-		_, err = r.Patch(ctx, obj.GetName(), k8s_types.MergePatchType, patch, metav1.PatchOptions{})
+		_, err = resource.Patch(ctx, obj.GetName(), k8s_types.MergePatchType, patch, metav1.PatchOptions{})
 		if err != nil {
 			return fmt.Errorf("patching resource %v: %w", obj.GetName(), err)
 		}
