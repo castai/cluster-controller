@@ -50,7 +50,9 @@ func Test_newDeleteHandler(t *testing.T) {
 				},
 			},
 			objs: []runtime.Object{
-				newDeployment(func(d *appsv1.Deployment) { d.SetName("nginx-1") }),
+				newDeployment(func(d runtime.Object) {
+					d.(*appsv1.Deployment).SetName("nginx-1")
+				}),
 			},
 			want: 1,
 		},
@@ -70,8 +72,12 @@ func Test_newDeleteHandler(t *testing.T) {
 			},
 			objs: []runtime.Object{
 				newDeployment(),
-				newDeployment(func(d *appsv1.Deployment) { d.SetName("nginx-1") }),
-				newDeployment(func(d *appsv1.Deployment) { d.SetName("nginx-2") }),
+				newDeployment(func(d runtime.Object) {
+					d.(*appsv1.Deployment).SetName("nginx-1")
+				}),
+				newDeployment(func(d runtime.Object) {
+					d.(*appsv1.Deployment).SetName("nginx-2")
+				}),
 			},
 			want: 2,
 		},

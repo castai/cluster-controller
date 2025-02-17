@@ -22,6 +22,7 @@ import (
 func Test_newCreateHandler(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = appsv1.AddToScheme(scheme)
+	_ = v1.AddToScheme(scheme)
 	ctx := context.Background()
 
 	now := metav1.Time{Time: time.Date(2024, time.September, 1, 0, 0, 0, 0, time.Local)}
@@ -30,7 +31,7 @@ func Test_newCreateHandler(t *testing.T) {
 		action    *castai.ClusterAction
 		convertFn func(i map[string]interface{}) client.Object
 		err       error
-		want      *appsv1.Deployment
+		want      runtime.Object
 	}{
 		"should return error when action is of a different type": {
 			action: &castai.ClusterAction{
@@ -72,17 +73,17 @@ func Test_newCreateHandler(t *testing.T) {
 						Version:  appsv1.SchemeGroupVersion.Version,
 						Resource: "deployments",
 					},
-					Object: getObj(t, newDeployment(func(d *appsv1.Deployment) {
-						d.Labels = map[string]string{"changed": "true"}
+					Object: getObj(t, newDeployment(func(d runtime.Object) {
+						d.(*appsv1.Deployment).Labels = map[string]string{"changed": "true"}
 					})),
 				},
 			},
-			objs: []runtime.Object{newDeployment(func(d *appsv1.Deployment) {
-				d.CreationTimestamp = now
+			objs: []runtime.Object{newDeployment(func(d runtime.Object) {
+				d.(*appsv1.Deployment).CreationTimestamp = now
 			})},
-			want: newDeployment(func(d *appsv1.Deployment) {
-				d.CreationTimestamp = now
-				d.Labels = map[string]string{"changed": "true"}
+			want: newDeployment(func(d runtime.Object) {
+				d.(*appsv1.Deployment).CreationTimestamp = now
+				d.(*appsv1.Deployment).Labels = map[string]string{"changed": "true"}
 			}),
 			convertFn: func(i map[string]interface{}) client.Object {
 				out := &appsv1.Deployment{}
@@ -98,20 +99,38 @@ func Test_newCreateHandler(t *testing.T) {
 						Version:  appsv1.SchemeGroupVersion.Version,
 						Resource: "deployments",
 					},
-					Object: getObj(t, newDeployment(func(d *appsv1.Deployment) {
+					Object: getObj(t, newDeployment(func(d runtime.Object) {
 					})),
 				},
 			},
-			objs: []runtime.Object{newDeployment(func(d *appsv1.Deployment) {
-				d.CreationTimestamp = now
-				d.Finalizers = []string{"autoscaling.cast.ai/recommendation"}
+			objs: []runtime.Object{newDeployment(func(d runtime.Object) {
+				d.(*appsv1.Deployment).CreationTimestamp = now
+				d.(*appsv1.Deployment).Finalizers = []string{"autoscaling.cast.ai/recommendation"}
 			})},
-			want: newDeployment(func(d *appsv1.Deployment) {
-				d.CreationTimestamp = now
-				d.Finalizers = []string{"autoscaling.cast.ai/recommendation"}
+			want: newDeployment(func(d runtime.Object) {
+				d.(*appsv1.Deployment).CreationTimestamp = now
+				d.(*appsv1.Deployment).Finalizers = []string{"autoscaling.cast.ai/recommendation"}
 			}),
 			convertFn: func(i map[string]interface{}) client.Object {
 				out := &appsv1.Deployment{}
+				_ = runtime.DefaultUnstructuredConverter.FromUnstructured(i, out)
+				return out
+			},
+		},
+		"should create new namespace": {
+			action: &castai.ClusterAction{
+				ActionCreate: &castai.ActionCreate{
+					GroupVersionResource: castai.GroupVersionResource{
+						Group:    v1.SchemeGroupVersion.Group,
+						Version:  v1.SchemeGroupVersion.Version,
+						Resource: "namespaces",
+					},
+					Object: getObj(t, newNamespace()),
+				},
+			},
+			want: newNamespace(),
+			convertFn: func(i map[string]interface{}) client.Object {
+				out := &v1.Namespace{}
 				_ = runtime.DefaultUnstructuredConverter.FromUnstructured(i, out)
 				return out
 			},
@@ -156,8 +175,8 @@ func getObj(t *testing.T, obj runtime.Object) map[string]interface{} {
 	return unstructured
 }
 
-func newDeployment(opts ...func(d *appsv1.Deployment)) *appsv1.Deployment {
-	out := &appsv1.Deployment{
+func newDeployment(opts ...func(d runtime.Object)) runtime.Object {
+	out := appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Deployment",
 			APIVersion: "apps/v1",
@@ -170,8 +189,26 @@ func newDeployment(opts ...func(d *appsv1.Deployment)) *appsv1.Deployment {
 			Template: v1.PodTemplateSpec{},
 		},
 	}
+	var obj runtime.Object = &out
 	for _, opt := range opts {
-		opt(out)
+		opt(obj)
 	}
-	return out
+	return obj
+}
+
+func newNamespace(opts ...func(d runtime.Object)) runtime.Object {
+	out := v1.Namespace{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Namespace",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "bob-namespace",
+		},
+	}
+	var obj runtime.Object = &out
+	for _, opt := range opts {
+		opt(obj)
+	}
+	return obj
 }
