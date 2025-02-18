@@ -25,6 +25,6 @@ jobs:
         id: fossa-test
         if: ${{ github.event_name == 'pull_request' }}
         with:
-          api-key: ${{ secrets.FOSSA_PR_REPORT_API_KEY }}
+          api-key: ${{ secrets.FOSSA_API_KEY }}
           run-tests: true
           test-diff-revision: ${{ github.event.pull_request.base.sha }}
