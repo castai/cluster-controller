@@ -19,7 +19,7 @@ require (
 	github.com/stretchr/testify v1.9.0
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.34.0
-	helm.sh/helm/v3 v3.16.2
+	helm.sh/helm/v3 v3.17.1
 	k8s.io/api v0.31.1
 	k8s.io/apimachinery v0.31.1
 	k8s.io/apiserver v0.31.1
