@@ -379,17 +379,19 @@ func (h *DrainNodeHandler) waitNodePodsTerminated(ctx context.Context, log logru
 				return true, fmt.Errorf("listing %q pods to be terminated: %w", node.Name, err)
 			}
 
-			remainingPods := len(pods)
+			podsNames := lo.Map(pods, func(p v1.Pod, _ int) string {
+				return fmt.Sprintf("%s/%s", p.Namespace, p.Name)
+			})
+
+			remainingPodsList := podsNames
 			if len(podsToIgnore) > 0 {
-				for i := range pods {
-					_, shouldIgnore := podsToIgnoreLookup[fmt.Sprintf("%s/%s", pods[i].Namespace, pods[i].Name)]
-					if shouldIgnore {
-						remainingPods--
-					}
-				}
+				remainingPodsList = lo.Filter(remainingPodsList, func(podName string, _ int) bool {
+					_, ok := podsToIgnoreLookup[podName]
+					return !ok
+				})
 			}
-			if remainingPods > 0 {
-				return true, fmt.Errorf("waiting for %d pods to be terminated on node %v", remainingPods, node.Name)
+			if remainingPods := len(remainingPodsList); remainingPods > 0 {
+				return true, fmt.Errorf("waiting for %d pods (%v) to be terminated on node %v", remainingPods, remainingPodsList, node.Name)
 			}
 			return false, nil
 		},
