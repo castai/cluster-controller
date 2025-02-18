@@ -5,15 +5,12 @@ import (
 	"fmt"
 	"net/http"
 	"time"
-
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/logging"
 )
 
 func CreateClient(apiURL, apiToken, userAgent string) (*ClientWithResponses, error) {
 	httpClientOption := func(client *Client) error {
 		client.Client = &http.Client{
-			Transport: logging.NewSubsystemLoggingHTTPTransport("CAST.AI", http.DefaultTransport),
-			Timeout:   1 * time.Minute,
+			Timeout: 1 * time.Minute,
 		}
 		client.RequestEditors = append(client.RequestEditors, func(_ context.Context, req *http.Request) error {
 			req.Header.Set("user-agent", userAgent)
