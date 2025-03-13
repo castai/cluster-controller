@@ -9,6 +9,7 @@ import (
 
 	"github.com/castai/cluster-controller/cmd/controller"
 	"github.com/castai/cluster-controller/cmd/monitor"
+	"github.com/castai/cluster-controller/cmd/testserver"
 )
 
 var rootCmd = &cobra.Command{
@@ -40,6 +41,7 @@ func Execute(ctx context.Context) {
 func init() {
 	rootCmd.AddCommand(controller.NewCmd())
 	rootCmd.AddCommand(monitor.NewCmd())
+	rootCmd.AddCommand(testserver.NewCmd())
 }
 
 func fatal(err error) {
