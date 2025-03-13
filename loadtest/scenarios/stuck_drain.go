@@ -37,6 +37,7 @@ func StuckDrain(nodeCount int, deploymentReplicas int, log *slog.Logger) TestSce
 				}
 				nodesToDrain = append(nodesToDrain, node)
 
+				log.Info(fmt.Sprintf("Creating deployment on node %s", nodeName))
 				deployment, pdb := DeploymentWithStuckPDB(fmt.Sprintf("fake-deployment-%s-%d", node.Name, i))
 				deployment.ObjectMeta.Namespace = namespace
 				deployment.Spec.Replicas = lo.ToPtr(int32(deploymentReplicas))
@@ -46,6 +47,19 @@ func StuckDrain(nodeCount int, deploymentReplicas int, log *slog.Logger) TestSce
 				_, err = clientset.AppsV1().Deployments(namespace).Create(ctx, deployment, metav1.CreateOptions{})
 				if err != nil {
 					return fmt.Errorf("failed to create fake deployment: %w", err)
+				}
+
+				// Wait for deployment to become ready, otherwise we might start draining before the pod is up.
+				progressed := WaitUntil(ctx, 30*time.Second, func() bool {
+					d, err := clientset.AppsV1().Deployments(namespace).Get(ctx, deployment.Name, metav1.GetOptions{})
+					if err != nil {
+						log.Warn("failed to get deployment after creating", "err", err)
+						return false
+					}
+					return d.Status.ReadyReplicas == *d.Spec.Replicas
+				})
+				if !progressed {
+					return fmt.Errorf("deployment %s did not progress to ready state in time", deployment.Name)
 				}
 
 				_, err = clientset.PolicyV1().PodDisruptionBudgets(namespace).Create(ctx, pdb, metav1.CreateOptions{})
