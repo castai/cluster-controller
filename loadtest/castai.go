@@ -42,7 +42,6 @@ func (c *CastAITestServer) GetActions(ctx context.Context, _ string) ([]*castai.
 	// If none arrive, we simulate the "empty poll" case of cluster-hub and return empty list.
 	select {
 	case x := <-c.actionsPushChannel:
-		c.log.Info("Received action", "action", *x.ActionDrainNode)
 		actionsToReturn = append(actionsToReturn, &x)
 	case <-time.After(c.cfg.TimeoutWaitingForActions):
 		c.log.Info(fmt.Sprintf("No actions to return in %v", c.cfg.TimeoutWaitingForActions))

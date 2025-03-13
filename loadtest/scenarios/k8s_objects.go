@@ -1,4 +1,4 @@
-package loadtest
+package scenarios
 
 import (
 	"fmt"
@@ -17,10 +17,6 @@ const (
 	KwokMarkerValue   = "fake-node"
 )
 
-// Kwok wraps
-type Kwok struct {
-}
-
 type KwokConfig struct {
 	// Label should match what kwok is configured to use via --manage-nodes-with-label-selector
 	// Default is DefaultKwokMarker. Value is always KwokMarkerValue.
@@ -30,12 +26,6 @@ type KwokConfig struct {
 	// Default is DefaultKwokMarker. Value is always KwokMarkerValue.
 	Annotation string
 }
-
-// Should be able to create kwok-owned nodes
-// And scheduled deployments, etc on them.
-
-// Run fake server + kwok controller
-// Either as two processes or as two container in the same deployment.
 
 // NewKwokNode creates a fake node with reasonable defaults.
 // Can be customized but the marker label/annotation must be present.
@@ -98,10 +88,6 @@ func NewKwokNode(cfg KwokConfig, nodeName string) *corev1.Node {
 			Phase: corev1.NodeRunning,
 		},
 	}
-}
-
-func ForceDeploymentOnNode(deployment *appsv1.Deployment, nodeName string) {
-	deployment.Spec.Template.Spec.NodeName = nodeName
 }
 
 // DeploymentWithStuckPDB creates a 1-replica deployment with "stuck PDB" that is never satisfiable, i.e. no pods can be evicted.
