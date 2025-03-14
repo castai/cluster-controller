@@ -27,7 +27,6 @@ const (
 type CastAIClient interface {
 	GetActions(ctx context.Context, k8sVersion string) ([]*ClusterAction, error)
 	AckAction(ctx context.Context, actionID string, req *AckClusterActionRequest) error
-	SendAKSInitData(ctx context.Context, req *AKSInitDataRequest) error
 	SendLog(ctx context.Context, e *LogEntry) error
 }
 
@@ -124,21 +123,6 @@ func createTLSConfig(ca string) (*tls.Config, error) {
 		RootCAs:    certPool,
 		MinVersion: tls.VersionTLS12,
 	}, nil
-}
-
-func (c *Client) SendAKSInitData(ctx context.Context, req *AKSInitDataRequest) error {
-	resp, err := c.rest.R().
-		SetBody(req).
-		SetContext(ctx).
-		Post(fmt.Sprintf("/v1/kubernetes/external-clusters/%s/aks-init-data", c.clusterID))
-	if err != nil {
-		return fmt.Errorf("sending aks init data: %w", err)
-	}
-	if resp.IsError() {
-		return fmt.Errorf("sending aks init data: request error status_code=%d body=%s", resp.StatusCode(), resp.Body())
-	}
-
-	return nil
 }
 
 func (c *Client) SendLog(ctx context.Context, e *LogEntry) error {
