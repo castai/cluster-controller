@@ -27,10 +27,11 @@ func PodEvents(count int, log *slog.Logger) TestScenario {
 			return nil
 		}
 
-		run := func(_ context.Context, actionChannel chan<- castai.ClusterAction) error {
+		run := func(ctx context.Context, executor ActionExecutor) error {
 			log.Info(fmt.Sprintf("Starting creating %d events for different pods", count))
+			actions := make([]castai.ClusterAction, 0, count)
 			for i := range count {
-				actionChannel <- castai.ClusterAction{
+				actions = append(actions, castai.ClusterAction{
 					ID: uuid.NewString(),
 					ActionCreateEvent: &castai.ActionCreateEvent{
 						Reporter: "provisioning.cast.ai",
@@ -48,8 +49,9 @@ func PodEvents(count int, log *slog.Logger) TestScenario {
 						Action:  "During node creation.",
 						Message: "Oh common, you can do better.",
 					},
-				}
+				})
 			}
+			executor.ExecuteActions(ctx, actions)
 
 			return nil
 		}

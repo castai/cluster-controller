@@ -16,18 +16,25 @@ import (
 	"github.com/castai/cluster-controller/internal/castai"
 )
 
+// TODO Spend more than 2 seconds thinking about names
+
+type ActionExecutor interface {
+	// ExecuteActions is expected to execute all actions and wait for ack before returning; otherwise cleanups might run too early.
+	ExecuteActions(ctx context.Context, actions []castai.ClusterAction)
+}
+
 type Preparation func(ctx context.Context, namespace string, clientset kubernetes.Interface) error
 
 type Cleanup func(ctx context.Context, namespace string, clientset kubernetes.Interface) error
 
-type TestRun func(ctx context.Context, actionChannel chan<- castai.ClusterAction) error
+type TestRun func(ctx context.Context, executor ActionExecutor) error
 
 type TestScenario func() (Preparation, Cleanup, TestRun)
 
 func RunScenario(
 	ctx context.Context,
 	scenario TestScenario,
-	actionChannel chan<- castai.ClusterAction,
+	actioner ActionExecutor,
 	logger *slog.Logger,
 	clientset kubernetes.Interface,
 ) error {
@@ -87,7 +94,7 @@ func RunScenario(
 	defer cancel()
 
 	logger.Info("Starting scenario execution")
-	err = run(scenarioCtx, actionChannel)
+	err = run(scenarioCtx, actioner)
 	if err != nil {
 		return fmt.Errorf("failed to run scenario: %w", err)
 	}

@@ -49,6 +49,11 @@ func StuckDrain(nodeCount int, deploymentReplicas int, log *slog.Logger) TestSce
 					return fmt.Errorf("failed to create fake deployment: %w", err)
 				}
 
+				_, err = clientset.PolicyV1().PodDisruptionBudgets(namespace).Create(ctx, pdb, metav1.CreateOptions{})
+				if err != nil {
+					return fmt.Errorf("failed to create fake pod disruption budget: %w", err)
+				}
+
 				// Wait for deployment to become ready, otherwise we might start draining before the pod is up.
 				progressed := WaitUntil(ctx, 30*time.Second, func() bool {
 					d, err := clientset.AppsV1().Deployments(namespace).Get(ctx, deployment.Name, metav1.GetOptions{})
@@ -60,11 +65,6 @@ func StuckDrain(nodeCount int, deploymentReplicas int, log *slog.Logger) TestSce
 				})
 				if !progressed {
 					return fmt.Errorf("deployment %s did not progress to ready state in time", deployment.Name)
-				}
-
-				_, err = clientset.PolicyV1().PodDisruptionBudgets(namespace).Create(ctx, pdb, metav1.CreateOptions{})
-				if err != nil {
-					return fmt.Errorf("failed to create fake pod disruption budget: %w", err)
 				}
 			}
 
@@ -114,10 +114,12 @@ func StuckDrain(nodeCount int, deploymentReplicas int, log *slog.Logger) TestSce
 			return nil
 		}
 
-		run := func(ctx context.Context, actionChannel chan<- castai.ClusterAction) error {
+		run := func(ctx context.Context, executor ActionExecutor) error {
 			log.Info(fmt.Sprintf("Starting drain action creation with %d nodes", len(nodesToDrain)))
+
+			actions := make([]castai.ClusterAction, 0, len(nodesToDrain))
 			for _, node := range nodesToDrain {
-				actionChannel <- castai.ClusterAction{
+				actions = append(actions, castai.ClusterAction{
 					ID:        uuid.NewString(),
 					CreatedAt: time.Now().UTC(),
 					ActionDrainNode: &castai.ActionDrainNode{
@@ -126,8 +128,10 @@ func StuckDrain(nodeCount int, deploymentReplicas int, log *slog.Logger) TestSce
 						DrainTimeoutSeconds: 60,
 						Force:               false,
 					},
-				}
+				})
 			}
+
+			executor.ExecuteActions(ctx, actions)
 
 			return nil
 		}
