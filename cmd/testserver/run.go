@@ -27,7 +27,7 @@ func run(ctx context.Context) error {
 	logger.Info("creating test server")
 	// TODO: Defaults...
 	testServer := loadtest.NewTestServer(logger, loadtest.TestServerConfig{
-		BufferSize:               1000,
+		BufferSize:               0,
 		MaxActionsPerCall:        500,
 		TimeoutWaitingForActions: 60 * time.Second,
 	})
@@ -54,10 +54,8 @@ func run(ctx context.Context) error {
 		}
 	}()
 
-	ch := testServer.GetActionsPushChannel()
-
 	testScenarios := []scenarios.TestScenario{
-		scenarios.PodEvents(2000, logger),
+		//scenarios.PodEvents(2000, logger),
 		scenarios.StuckDrain(100, 1, logger),
 	}
 
@@ -70,7 +68,7 @@ func run(ctx context.Context) error {
 			defer wg.Done()
 			logger.Info(fmt.Sprintf("Starting test scenario %d", i))
 
-			err := scenarios.RunScenario(ctx, test, ch, logger, clientSet)
+			err := scenarios.RunScenario(ctx, test, testServer, logger, clientSet)
 			errs <- err
 		}()
 	}
