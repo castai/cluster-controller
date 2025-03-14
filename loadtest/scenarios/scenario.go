@@ -23,13 +23,12 @@ type ActionExecutor interface {
 	ExecuteActions(ctx context.Context, actions []castai.ClusterAction)
 }
 
-type Preparation func(ctx context.Context, namespace string, clientset kubernetes.Interface) error
-
-type Cleanup func(ctx context.Context, namespace string, clientset kubernetes.Interface) error
-
-type TestRun func(ctx context.Context, executor ActionExecutor) error
-
-type TestScenario func() (Preparation, Cleanup, TestRun)
+type TestScenario interface {
+	Name() string
+	Preparation(ctx context.Context, namespace string, clientset kubernetes.Interface) error
+	Cleanup(ctx context.Context, namespace string, clientset kubernetes.Interface) error
+	Run(ctx context.Context, namespace string, clientset kubernetes.Interface, executor ActionExecutor) error
+}
 
 func RunScenario(
 	ctx context.Context,
@@ -39,7 +38,7 @@ func RunScenario(
 	clientset kubernetes.Interface,
 ) error {
 	namespaceForTest := fmt.Sprintf("test-namespace-%d", rand.Int31())
-	logger = logger.With("namespace", namespaceForTest)
+	logger = logger.With("namespace", namespaceForTest, "scenario", scenario.Name())
 
 	// Prepare the namespace to run the test in.
 	logger.Info("Preparing namespace for test")
@@ -75,16 +74,15 @@ func RunScenario(
 	logger.Info("Namespace created")
 
 	logger.Info("Starting test scenario")
-	prepare, cleanup, run := scenario()
 
 	logger.Info("Running preparation function")
-	err = prepare(ctx, namespaceForTest, clientset)
+	err = scenario.Preparation(ctx, namespaceForTest, clientset)
 	if err != nil {
 		return fmt.Errorf("failed to run preparation function: %w", err)
 	}
 	defer func() {
 		logger.Info("Running cleanup function")
-		err := cleanup(ctx, namespaceForTest, clientset)
+		err := scenario.Cleanup(ctx, namespaceForTest, clientset)
 		if err != nil {
 			logger.Error("failed ot run cleanup", "error", err)
 		}
@@ -94,7 +92,7 @@ func RunScenario(
 	defer cancel()
 
 	logger.Info("Starting scenario execution")
-	err = run(scenarioCtx, actioner)
+	err = scenario.Run(scenarioCtx, namespaceForTest, clientset, actioner)
 	if err != nil {
 		return fmt.Errorf("failed to run scenario: %w", err)
 	}
