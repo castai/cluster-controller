@@ -11,6 +11,7 @@ import (
 
 	"github.com/bombsimon/logrusr/v4"
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apiserver/pkg/server/healthz"
@@ -24,7 +25,6 @@ import (
 
 	"github.com/castai/cluster-controller/cmd/utils"
 	"github.com/castai/cluster-controller/health"
-	"github.com/castai/cluster-controller/internal/actions/csr"
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/config"
 	"github.com/castai/cluster-controller/internal/controller"
@@ -178,6 +178,20 @@ func runController(
 			log.Errorf("failed to start pprof http server: %v", err)
 		}
 	}()
+
+	// Start http server for metrics if needed
+	if cfg.Metrics.Enabled {
+		addr := fmt.Sprintf(":%d", cfg.Metrics.Port)
+		log.Infof("starting metrics on %s", addr)
+
+		// TODO: Remove once TLS is supported.
+		//nolint:gosec
+		metricsMux := http.NewServeMux()
+		metricsMux.Handle("/metrics", promhttp.Handler())
+		if err := http.ListenAndServe(addr, metricsMux); err != nil {
+			log.Errorf("failed to start metrics http server: %v", err)
+		}
+	}
 
 	if err := saveMetadata(cfg.ClusterID, cfg, log); err != nil {
 		return err
