@@ -181,22 +181,20 @@ func runController(
 		}
 	}()
 
-	// Start http server for metrics if needed
-	if cfg.Metrics.Enabled {
-		go func() {
-			addr := fmt.Sprintf(":%d", cfg.Metrics.Port)
-			log.Infof("starting metrics on %s", addr)
+	// Start http server for metrics
+	go func() {
+		addr := fmt.Sprintf(":%d", cfg.Metrics.Port)
+		log.Infof("starting metrics on %s", addr)
 
-			metrics.RegisterCustomMetrics()
-			metricsMux := metrics.NewMetricsMux()
-			// https://deepsource.com/directory/go/issues/GO-S2114
-			// => This is not a public API and runs in customer cluster; risk should be OK.
-			//nolint:gosec
-			if err := http.ListenAndServe(addr, metricsMux); err != nil {
-				log.Errorf("failed to start metrics http server: %v", err)
-			}
-		}()
-	}
+		metrics.RegisterCustomMetrics()
+		metricsMux := metrics.NewMetricsMux()
+		// https://deepsource.com/directory/go/issues/GO-S2114
+		// => This is not a public API and runs in customer cluster; risk should be OK.
+		//nolint:gosec
+		if err := http.ListenAndServe(addr, metricsMux); err != nil {
+			log.Errorf("failed to start metrics http server: %v", err)
+		}
+	}()
 
 	if err := saveMetadata(cfg.ClusterID, cfg, log); err != nil {
 		return err

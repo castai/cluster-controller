@@ -54,8 +54,7 @@ type TLS struct {
 }
 
 type Metrics struct {
-	Enabled bool
-	Port    int
+	Port int
 }
 
 type LeaderElection struct {
@@ -154,10 +153,8 @@ func Get() Config {
 		cfg.MaxActionsInProgress = 1000
 	}
 
-	if cfg.Metrics.Enabled {
-		if cfg.Metrics.Port == 0 {
-			cfg.Metrics.Port = 9090
-		}
+	if cfg.Metrics.Port == 0 {
+		cfg.Metrics.Port = 9090
 	}
 
 	return *cfg
