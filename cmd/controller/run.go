@@ -11,7 +11,6 @@ import (
 
 	"github.com/bombsimon/logrusr/v4"
 	"github.com/google/uuid"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apiserver/pkg/server/healthz"
@@ -25,12 +24,14 @@ import (
 
 	"github.com/castai/cluster-controller/cmd/utils"
 	"github.com/castai/cluster-controller/health"
+	"github.com/castai/cluster-controller/internal/actions/csr"
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/config"
 	"github.com/castai/cluster-controller/internal/controller"
 	"github.com/castai/cluster-controller/internal/controller/logexporter"
 	"github.com/castai/cluster-controller/internal/helm"
 	"github.com/castai/cluster-controller/internal/k8sversion"
+	"github.com/castai/cluster-controller/internal/metrics"
 	"github.com/castai/cluster-controller/internal/monitor"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
@@ -172,7 +173,8 @@ func runController(
 		addr := fmt.Sprintf(":%d", cfg.PprofPort)
 		log.Infof("starting pprof server on %s", addr)
 
-		//TODO: remove nolint when we have a proper solution for this
+		// https://deepsource.com/directory/go/issues/GO-S2114
+		// => This is not a public API and runs in customer cluster; risk should be OK.
 		//nolint:gosec
 		if err := http.ListenAndServe(addr, httpMux); err != nil {
 			log.Errorf("failed to start pprof http server: %v", err)
@@ -181,16 +183,18 @@ func runController(
 
 	// Start http server for metrics if needed
 	if cfg.Metrics.Enabled {
-		addr := fmt.Sprintf(":%d", cfg.Metrics.Port)
-		log.Infof("starting metrics on %s", addr)
+		go func() {
+			addr := fmt.Sprintf(":%d", cfg.Metrics.Port)
+			log.Infof("starting metrics on %s", addr)
 
-		// TODO: Remove once TLS is supported.
-		//nolint:gosec
-		metricsMux := http.NewServeMux()
-		metricsMux.Handle("/metrics", promhttp.Handler())
-		if err := http.ListenAndServe(addr, metricsMux); err != nil {
-			log.Errorf("failed to start metrics http server: %v", err)
-		}
+			metricsMux := metrics.NewMetricsMux()
+			// https://deepsource.com/directory/go/issues/GO-S2114
+			// => This is not a public API and runs in customer cluster; risk should be OK.
+			//nolint:gosec
+			if err := http.ListenAndServe(addr, metricsMux); err != nil {
+				log.Errorf("failed to start metrics http server: %v", err)
+			}
+		}()
 	}
 
 	if err := saveMetadata(cfg.ClusterID, cfg, log); err != nil {
