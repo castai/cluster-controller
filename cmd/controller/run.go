@@ -187,6 +187,7 @@ func runController(
 			addr := fmt.Sprintf(":%d", cfg.Metrics.Port)
 			log.Infof("starting metrics on %s", addr)
 
+			metrics.RegisterCustomMetrics()
 			metricsMux := metrics.NewMetricsMux()
 			// https://deepsource.com/directory/go/issues/GO-S2114
 			// => This is not a public API and runs in customer cluster; risk should be OK.
