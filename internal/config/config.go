@@ -100,7 +100,6 @@ func Get() Config {
 	_ = viper.BindEnv("self_pod.namespace", "LEADER_ELECTION_NAMESPACE")
 	_ = viper.BindEnv("max_action_in_progress", "MAX_ACTIONS_IN_PROGRESS")
 	_ = viper.BindEnv("metrics.port", "METRICS_PORT")
-	_ = viper.BindEnv("metrics.enabled", "METRICS_ENABLED")
 
 	cfg = &Config{}
 	if err := viper.Unmarshal(&cfg); err != nil {
