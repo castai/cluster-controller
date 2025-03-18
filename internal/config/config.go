@@ -25,6 +25,7 @@ type Config struct {
 	KubeClient     KubeClient
 	ClusterID      string
 	PprofPort      int
+	Metrics        Metrics
 	LeaderElection LeaderElection
 	// MaxActionsInProgress serves as a safeguard to limit the number of Goroutines in progress.
 	MaxActionsInProgress int
@@ -50,6 +51,10 @@ type API struct {
 
 type TLS struct {
 	CACert string
+}
+
+type Metrics struct {
+	Port int
 }
 
 type LeaderElection struct {
@@ -94,6 +99,7 @@ func Get() Config {
 	_ = viper.BindEnv("self_pod.name", "KUBERNETES_POD")
 	_ = viper.BindEnv("self_pod.namespace", "LEADER_ELECTION_NAMESPACE")
 	_ = viper.BindEnv("max_action_in_progress", "MAX_ACTIONS_IN_PROGRESS")
+	_ = viper.BindEnv("metrics.port", "METRICS_PORT")
 
 	cfg = &Config{}
 	if err := viper.Unmarshal(&cfg); err != nil {
@@ -144,6 +150,10 @@ func Get() Config {
 
 	if cfg.MaxActionsInProgress == 0 {
 		cfg.MaxActionsInProgress = 1000
+	}
+
+	if cfg.Metrics.Port == 0 {
+		cfg.Metrics.Port = 9090
 	}
 
 	return *cfg

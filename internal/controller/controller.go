@@ -18,6 +18,7 @@ import (
 	"github.com/castai/cluster-controller/internal/actions"
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/helm"
+	"github.com/castai/cluster-controller/internal/metrics"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
 
@@ -230,10 +231,13 @@ func (s *Controller) handleAction(ctx context.Context, action *castai.ClusterAct
 
 func (s *Controller) ackAction(ctx context.Context, action *castai.ClusterAction, handleErr error) error {
 	actionType := reflect.TypeOf(action.Data())
+	actionError := getHandlerError(handleErr)
 	s.log.WithFields(logrus.Fields{
 		actions.ActionIDLogField: action.ID,
 		"type":                   actionType.String(),
 	}).Info("ack action")
+
+	metrics.ActionFinished(actionType.String(), actionError == nil)
 
 	boff := waitext.NewConstantBackoff(s.cfg.AckRetryWait)
 
@@ -241,7 +245,7 @@ func (s *Controller) ackAction(ctx context.Context, action *castai.ClusterAction
 		ctx, cancel := context.WithTimeout(ctx, s.cfg.AckTimeout)
 		defer cancel()
 		return true, s.castAIClient.AckAction(ctx, action.ID, &castai.AckClusterActionRequest{
-			Error: getHandlerError(handleErr),
+			Error: actionError,
 		})
 	}, func(err error) {
 		s.log.Debugf("ack failed, will retry: %v", err)

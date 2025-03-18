@@ -31,6 +31,7 @@ import (
 	"github.com/castai/cluster-controller/internal/controller/logexporter"
 	"github.com/castai/cluster-controller/internal/helm"
 	"github.com/castai/cluster-controller/internal/k8sversion"
+	"github.com/castai/cluster-controller/internal/metrics"
 	"github.com/castai/cluster-controller/internal/monitor"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
@@ -172,10 +173,26 @@ func runController(
 		addr := fmt.Sprintf(":%d", cfg.PprofPort)
 		log.Infof("starting pprof server on %s", addr)
 
-		//TODO: remove nolint when we have a proper solution for this
+		// https://deepsource.com/directory/go/issues/GO-S2114
+		// => This is not a public API and runs in customer cluster; risk should be OK.
 		//nolint:gosec
 		if err := http.ListenAndServe(addr, httpMux); err != nil {
 			log.Errorf("failed to start pprof http server: %v", err)
+		}
+	}()
+
+	// Start http server for metrics
+	go func() {
+		addr := fmt.Sprintf(":%d", cfg.Metrics.Port)
+		log.Infof("starting metrics on %s", addr)
+
+		metrics.RegisterCustomMetrics()
+		metricsMux := metrics.NewMetricsMux()
+		// https://deepsource.com/directory/go/issues/GO-S2114
+		// => This is not a public API and runs in customer cluster; risk should be OK.
+		//nolint:gosec
+		if err := http.ListenAndServe(addr, metricsMux); err != nil {
+			log.Errorf("failed to start metrics http server: %v", err)
 		}
 	}()
 

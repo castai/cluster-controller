@@ -21,6 +21,7 @@ func TestConfig(t *testing.T) {
 	require.NoError(t, os.Setenv("LEADER_ELECTION_LOCK_NAME", "castai-cluster-controller"))
 	require.NoError(t, os.Setenv("LEADER_ELECTION_LEASE_DURATION", "25s"))
 	require.NoError(t, os.Setenv("LEADER_ELECTION_LEASE_RENEW_DEADLINE", "20s"))
+	require.NoError(t, os.Setenv("METRICS_PORT", "16000"))
 
 	cfg := Get()
 
@@ -49,6 +50,7 @@ func TestConfig(t *testing.T) {
 			Burst: 150,
 		},
 		MaxActionsInProgress: 1000,
+		Metrics:              Metrics{Port: 16000},
 	}
 
 	require.Equal(t, expected, cfg)
