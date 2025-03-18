@@ -34,7 +34,6 @@ type ClusterAction struct {
 	ActionChartUninstall    *ActionChartUninstall    `json:"actionChartUninstall,omitempty"`
 	ActionChartRollback     *ActionChartRollback     `json:"actionChartRollback,omitempty"`
 	ActionDisconnectCluster *ActionDisconnectCluster `json:"actionDisconnectCluster,omitempty"`
-	ActionSendAKSInitData   *ActionSendAKSInitData   `json:"actionSendAksInitData,omitempty"`
 	ActionCheckNodeDeleted  *ActionCheckNodeDeleted  `json:"actionCheckNodeDeleted,omitempty"`
 	ActionCheckNodeStatus   *ActionCheckNodeStatus   `json:"actionCheckNodeStatus,omitempty"`
 	ActionEvictPod          *ActionEvictPod          `json:"actionEvictPod,omitempty"`
@@ -73,9 +72,6 @@ func (c *ClusterAction) Data() interface{} {
 	}
 	if c.ActionDisconnectCluster != nil {
 		return c.ActionDisconnectCluster
-	}
-	if c.ActionSendAKSInitData != nil {
-		return c.ActionSendAKSInitData
 	}
 	if c.ActionCheckNodeDeleted != nil {
 		return c.ActionCheckNodeDeleted
@@ -189,8 +185,6 @@ type ActionCreateEvent struct {
 
 type ActionDisconnectCluster struct{}
 
-type ActionSendAKSInitData struct{}
-
 type ActionCheckNodeDeleted struct {
 	NodeName string `json:"nodeName"`
 	NodeID   string `json:"nodeId"`
@@ -249,10 +243,4 @@ func (c *ChartSource) Validate() error {
 		return fmt.Errorf("version: %w", errFieldNotSet)
 	}
 	return nil
-}
-
-type AKSInitDataRequest struct {
-	CloudConfigBase64       string `json:"cloudConfigBase64"`
-	ProtectedSettingsBase64 string `json:"protectedSettingsBase64"`
-	Architecture            string `json:"architecture"`
 }

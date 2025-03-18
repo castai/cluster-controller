@@ -64,20 +64,6 @@ func (mr *MockCastAIClientMockRecorder) GetActions(arg0, arg1 interface{}) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActions", reflect.TypeOf((*MockCastAIClient)(nil).GetActions), arg0, arg1)
 }
 
-// SendAKSInitData mocks base method.
-func (m *MockCastAIClient) SendAKSInitData(arg0 context.Context, arg1 *castai.AKSInitDataRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SendAKSInitData", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SendAKSInitData indicates an expected call of SendAKSInitData.
-func (mr *MockCastAIClientMockRecorder) SendAKSInitData(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendAKSInitData", reflect.TypeOf((*MockCastAIClient)(nil).SendAKSInitData), arg0, arg1)
-}
-
 // SendLog mocks base method.
 func (m *MockCastAIClient) SendLog(arg0 context.Context, arg1 *castai.LogEntry) error {
 	m.ctrl.T.Helper()

@@ -60,7 +60,6 @@ func NewService(
 			reflect.TypeOf(&castai.ActionChartUninstall{}):    actions.NewChartUninstallHandler(log, helmClient),
 			reflect.TypeOf(&castai.ActionChartRollback{}):     actions.NewChartRollbackHandler(log, helmClient, cfg.Version),
 			reflect.TypeOf(&castai.ActionDisconnectCluster{}): actions.NewDisconnectClusterHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionSendAKSInitData{}):   actions.NewSendAKSInitDataHandler(log, castaiClient),
 			reflect.TypeOf(&castai.ActionCheckNodeDeleted{}):  actions.NewCheckNodeDeletedHandler(log, clientset),
 			reflect.TypeOf(&castai.ActionCheckNodeStatus{}):   actions.NewCheckNodeStatusHandler(log, clientset),
 			reflect.TypeOf(&castai.ActionEvictPod{}):          actions.NewEvictPodHandler(log, clientset),
