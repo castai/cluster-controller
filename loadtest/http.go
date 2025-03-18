@@ -1,6 +1,7 @@
 package loadtest
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -8,8 +9,7 @@ import (
 	"github.com/castai/cluster-controller/internal/castai"
 )
 
-func NewHttpServer(cfg Config, testServer *CastAITestServer) error {
-
+func NewHttpServer(ctx context.Context, cfg Config, testServer *CastAITestServer) error {
 	http.HandleFunc("/v1/kubernetes/clusters/{cluster_id}/actions", func(w http.ResponseWriter, r *http.Request) {
 		result, err := testServer.GetActions(r.Context(), "")
 		if err != nil {
@@ -27,8 +27,6 @@ func NewHttpServer(cfg Config, testServer *CastAITestServer) error {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-
-		return
 	})
 
 	http.HandleFunc("/v1/kubernetes/clusters/{cluster_id}/actions/{action_id}/ack", func(w http.ResponseWriter, r *http.Request) {
@@ -45,8 +43,6 @@ func NewHttpServer(cfg Config, testServer *CastAITestServer) error {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-
-		return
 	})
 
 	http.HandleFunc("/v1/kubernetes/clusters/{cluster_id}/actions/logs", func(w http.ResponseWriter, r *http.Request) {
@@ -62,10 +58,8 @@ func NewHttpServer(cfg Config, testServer *CastAITestServer) error {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-
-		return
 	})
 
+	//nolint:gosec // Missing timeouts are not a real issue here.
 	return http.ListenAndServe(fmt.Sprintf(":%d", cfg.Port), nil)
-
 }

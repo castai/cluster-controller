@@ -37,6 +37,7 @@ func RunScenario(
 	logger *slog.Logger,
 	clientset kubernetes.Interface,
 ) error {
+	//nolint:gosec // No point to use crypto/rand.
 	namespaceForTest := fmt.Sprintf("test-namespace-%d", rand.Int31())
 	logger = logger.With("namespace", namespaceForTest, "scenario", scenario.Name())
 

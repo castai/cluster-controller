@@ -13,7 +13,7 @@ func WaitUntil(ctx context.Context, duration time.Duration, condition func() boo
 			return false
 		default:
 		}
-		if time.Now().Sub(start) > duration {
+		if time.Since(start) > duration {
 			return false
 		}
 		if condition() {

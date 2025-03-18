@@ -85,7 +85,7 @@ func (c *CastAITestServer) GetActions(ctx context.Context, _ string) ([]*castai.
 		c.log.Info(fmt.Sprintf("No actions to return in %v", c.cfg.TimeoutWaitingForActions))
 		return nil, nil
 	case <-ctx.Done():
-		return nil, fmt.Errorf("context done with cause (%v), err (%v)", context.Cause(ctx), ctx.Err())
+		return nil, fmt.Errorf("context done with cause (%w), err (%w)", context.Cause(ctx), ctx.Err())
 	}
 
 	// Attempt to drain up to max items from the channel.
@@ -97,7 +97,7 @@ func (c *CastAITestServer) GetActions(ctx context.Context, _ string) ([]*castai.
 			// If we haven't received enough items, just flush.
 			return actionsToReturn, nil
 		case <-ctx.Done():
-			return nil, fmt.Errorf("context done with cause (%v), err (%v)", context.Cause(ctx), ctx.Err())
+			return nil, fmt.Errorf("context done with cause (%w), err (%w)", context.Cause(ctx), ctx.Err())
 		}
 	}
 
