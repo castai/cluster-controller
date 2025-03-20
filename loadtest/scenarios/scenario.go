@@ -61,8 +61,12 @@ func RunScenario(
 		return fmt.Errorf("failed to create namespace %v: %w", namespaceForTest, err)
 	}
 	defer func() {
+		// Cleanup uses different context so it runs even when the overall one is already cancelled
+		ctxForCleanup, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+
 		logger.Info("Deleting namespace for test")
-		err := clientset.CoreV1().Namespaces().Delete(ctx, namespaceForTest, metav1.DeleteOptions{
+		err := clientset.CoreV1().Namespaces().Delete(ctxForCleanup, namespaceForTest, metav1.DeleteOptions{
 			GracePeriodSeconds: lo.ToPtr(int64(0)),
 			PropagationPolicy:  lo.ToPtr(metav1.DeletePropagationBackground),
 		})
@@ -82,8 +86,12 @@ func RunScenario(
 		return fmt.Errorf("failed to run preparation function: %w", err)
 	}
 	defer func() {
+		// Cleanup uses different context so it runs even when the overall one is already cancelled
+		ctxForCleanup, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+
 		logger.Info("Running cleanup function")
-		err := scenario.Cleanup(ctx, namespaceForTest, clientset)
+		err := scenario.Cleanup(ctxForCleanup, namespaceForTest, clientset)
 		if err != nil {
 			logger.Error("failed ot run cleanup", "error", err)
 		}
