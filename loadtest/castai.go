@@ -119,29 +119,7 @@ func (c *CastAITestServer) AckAction(ctx context.Context, actionID string, req *
 }
 
 func (c *CastAITestServer) SendLog(ctx context.Context, e *castai.LogEntry) error {
-	//var slogLvl slog.Level
-	//switch e.Level {
-	//case "INFO":
-	//	slogLvl = slog.LevelInfo
-	//case "DEBUG":
-	//	slogLvl = slog.LevelDebug
-	//case "WARN":
-	//	slogLvl = slog.LevelWarn
-	//case "ERROR":
-	//	slogLvl = slog.LevelError
-	//default:
-	//	slogLvl = 100 // Some arbitrary value
-	//}
-	//
-	//attrs := make([]slog.Attr, 0, len(e.Fields))
-	//for k, v := range e.Fields {
-	//	attrs = append(attrs, slog.Any(k, v))
-	//}
-	//
-	//msg := fmt.Sprintf("log from controller: %s", e.Message)
-	//
-	//c.log.LogAttrs(ctx, slogLvl, msg, attrs...)
-
+	// No-op for now, maybe track metrics in the future?
 	return nil
 }
 
