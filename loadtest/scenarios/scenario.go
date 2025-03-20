@@ -25,7 +25,12 @@ type ActionExecutor interface {
 
 type TestScenario interface {
 	Name() string
+	// Preparation should create any necessary resources in the cluster for the test so it runs in realistic env.
 	Preparation(ctx context.Context, namespace string, clientset kubernetes.Interface) error
+	// Cleanup should delete any items created by the preparation or the test itself.
+	// It might be called even if Preparation or Run did not complete so it should handle those cases gracefully.
+	// The scenario's namespace is deleted at the end but ideally scenarios delete their resources as well,
+	// otherwise namespace deletion can take very long to propagate.
 	Cleanup(ctx context.Context, namespace string, clientset kubernetes.Interface) error
 	Run(ctx context.Context, namespace string, clientset kubernetes.Interface, executor ActionExecutor) error
 }
@@ -81,10 +86,7 @@ func RunScenario(
 	logger.Info("Starting test scenario")
 
 	logger.Info("Running preparation function")
-	err = scenario.Preparation(ctx, namespaceForTest, clientset)
-	if err != nil {
-		return fmt.Errorf("failed to run preparation function: %w", err)
-	}
+	// We defer the cleanup before running preparation or run because each can "fail" in the middle and leave hanging resources.
 	defer func() {
 		// Cleanup uses different context so it runs even when the overall one is already cancelled
 		ctxForCleanup, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -96,6 +98,11 @@ func RunScenario(
 			logger.Error("failed ot run cleanup", "error", err)
 		}
 	}()
+
+	err = scenario.Preparation(ctx, namespaceForTest, clientset)
+	if err != nil {
+		return fmt.Errorf("failed to run preparation function: %w", err)
+	}
 
 	scenarioCtx, cancel := context.WithTimeout(ctx, 30*time.Minute)
 	defer cancel()
