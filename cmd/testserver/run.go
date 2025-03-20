@@ -42,8 +42,9 @@ func run(ctx context.Context) error {
 	}()
 
 	testScenarios := []scenarios.TestScenario{
-		scenarios.PodEvents(5000, logger),
+		//scenarios.PodEvents(5000, logger),
 		//scenarios.StuckDrain(100, 60, logger),
+		scenarios.StuckDrain(10, 1, logger),
 	}
 
 	var wg sync.WaitGroup
@@ -72,7 +73,6 @@ func run(ctx context.Context) error {
 	}
 	logger.Info(fmt.Sprintf("All test scenarios are done, received (%d) errors, exiting", len(receivedErrors)))
 
-	// TODO: Wait for server channel to be empty as well
 	return errors.Join(receivedErrors...)
 }
 

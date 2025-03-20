@@ -57,7 +57,7 @@ func (c *CastAITestServer) ExecuteActions(ctx context.Context, actions []castai.
 	for {
 		select {
 		case <-ctx.Done():
-			// TODO: Clean up all actions?
+			c.log.Info(fmt.Sprintf("Received signal to stop finished with cause (%q) and err (%v). Closing executor.", context.Cause(ctx), ctx.Err()))
 			return
 		case finishedAction := <-ownerChannel:
 			c.removeActionFromStore(finishedAction)
@@ -89,11 +89,12 @@ func (c *CastAITestServer) GetActions(ctx context.Context, _ string) ([]*castai.
 	}
 
 	// Attempt to drain up to max items from the channel.
-	for len(actionsToReturn) <= c.cfg.MaxActionsPerCall {
+	for len(actionsToReturn) < c.cfg.MaxActionsPerCall {
 		select {
 		case x := <-c.actionsPushChannel:
 			actionsToReturn = append(actionsToReturn, &x)
 		case <-time.After(50 * time.Millisecond):
+			c.log.Info(fmt.Sprintf("Returning %d actions for processing", len(actionsToReturn)))
 			// If we haven't received enough items, just flush.
 			return actionsToReturn, nil
 		case <-ctx.Done():
@@ -101,6 +102,7 @@ func (c *CastAITestServer) GetActions(ctx context.Context, _ string) ([]*castai.
 		}
 	}
 
+	c.log.Info(fmt.Sprintf("Returning %d actions for processing", len(actionsToReturn)))
 	return actionsToReturn, nil
 }
 
