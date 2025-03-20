@@ -98,6 +98,11 @@ func (c *Certificate) NodeBootstrap() bool {
 	return c.RequestingUser == "kubelet-bootstrap" || c.RequestingUser == "system:serviceaccount:castai-agent:castai-cluster-controller"
 }
 
+func (c *Certificate) SystemNode() bool {
+	// To avoid waiting for the certificate to be approved by control plane.
+	return strings.HasPrefix(c.RequestingUser, "system:node")
+}
+
 func isAlreadyApproved(err error) bool {
 	if err == nil {
 		return false
@@ -179,15 +184,18 @@ func (c *Certificate) NewCSR(ctx context.Context, client kubernetes.Interface) (
 	return &Certificate{v1: resp}, nil
 }
 
-func startInformer(ctx context.Context, log logrus.FieldLogger, factory informers.SharedInformerFactory) {
+func startInformers(ctx context.Context, log logrus.FieldLogger, factories ...informers.SharedInformerFactory) {
 	stopCh := make(chan struct{})
 	defer close(stopCh)
 
-	factory.Start(stopCh)
-	log.Info("watching for new node csr")
+	for _, factory := range factories {
+		factory.Start(stopCh)
+	}
+
+	log.Info("watching for new node CSRs")
 
 	<-ctx.Done()
-	log.WithField("context", ctx.Err()).Info("finished watching for new node csr")
+	log.WithField("context", ctx.Err()).Info("finished watching for new node CSRs")
 }
 
 func get(ctx context.Context, client kubernetes.Interface, cert *Certificate) (*Certificate, error) {
@@ -316,7 +324,7 @@ func getNodeCSRV1Beta1(ctx context.Context, client kubernetes.Interface, nodeNam
 	return nil, ErrNodeCertificateNotFound
 }
 
-func createInformer(ctx context.Context, client kubernetes.Interface) (informers.SharedInformerFactory, cache.SharedIndexInformer, error) {
+func createInformer(ctx context.Context, client kubernetes.Interface, fieldSelectorV1, fieldSelectorV1beta1 string) (informers.SharedInformerFactory, cache.SharedIndexInformer, error) {
 	var (
 		errv1      error
 		errv1beta1 error
@@ -325,7 +333,7 @@ func createInformer(ctx context.Context, client kubernetes.Interface) (informers
 	if _, errv1 = client.CertificatesV1().CertificateSigningRequests().List(ctx, metav1.ListOptions{}); errv1 == nil {
 		v1Factory := informers.NewSharedInformerFactoryWithOptions(client, csrInformerResyncPeriod,
 			informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
-				opts.FieldSelector = getOptions(certv1.KubeAPIServerClientKubeletSignerName).FieldSelector
+				opts.FieldSelector = fieldSelectorV1
 			}))
 		v1Informer := v1Factory.Certificates().V1().CertificateSigningRequests().Informer()
 		return v1Factory, v1Informer, nil
@@ -334,7 +342,7 @@ func createInformer(ctx context.Context, client kubernetes.Interface) (informers
 	if _, errv1beta1 = client.CertificatesV1beta1().CertificateSigningRequests().List(ctx, metav1.ListOptions{}); errv1beta1 == nil {
 		v1Factory := informers.NewSharedInformerFactoryWithOptions(client, csrInformerResyncPeriod,
 			informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
-				opts.FieldSelector = getOptions(certv1beta1.KubeAPIServerClientKubeletSignerName).FieldSelector
+				opts.FieldSelector = fieldSelectorV1beta1
 			}))
 		v1Informer := v1Factory.Certificates().V1beta1().CertificateSigningRequests().Informer()
 		return v1Factory, v1Informer, nil
@@ -345,7 +353,7 @@ func createInformer(ctx context.Context, client kubernetes.Interface) (informers
 
 var errUnexpectedObjectType = errors.New("unexpected object type")
 
-func processCSREvent(ctx context.Context, c chan<- *Certificate, csrObj interface{}) error {
+func processCSRKubeletSignerEvent(ctx context.Context, c chan<- *Certificate, csrObj interface{}) error {
 	cert, err := toCertificate(csrObj)
 	if err != nil {
 		return err
@@ -355,7 +363,7 @@ func processCSREvent(ctx context.Context, c chan<- *Certificate, csrObj interfac
 		return nil
 	}
 
-	if cert.Approved() || !cert.ForCASTAINode() || !cert.NodeBootstrap() || cert.Outdated() {
+	if cert.Approved() || !cert.ForCASTAINode() || (!cert.NodeBootstrap() && !cert.SystemNode()) || cert.Outdated() {
 		return nil
 	}
 

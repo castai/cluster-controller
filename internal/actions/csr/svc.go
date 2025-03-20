@@ -14,6 +14,8 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/castai/cluster-controller/internal/waitext"
+	certv1 "k8s.io/api/certificates/v1"
+	certv1beta1 "k8s.io/api/certificates/v1beta1"
 )
 
 const (
@@ -37,22 +39,39 @@ type ApprovalManager struct {
 }
 
 func (h *ApprovalManager) Start(ctx context.Context) error {
-	informerFactory, csrInformer, err := createInformer(ctx, h.clientset)
+	informerKubeletSignerFactory, csrInformerKubeletSigner, err := createInformer(
+		ctx,
+		h.clientset,
+		getOptions(certv1.KubeAPIServerClientKubeletSignerName).FieldSelector,
+		getOptions(certv1beta1.KubeAPIServerClientKubeletSignerName).FieldSelector)
 	if err != nil {
-		return fmt.Errorf("while creating informer: %w", err)
+		return fmt.Errorf("while creating informer for %v: %w", certv1beta1.KubeletServingSignerName, err)
+	}
+
+	informerKubeletServingFactory, csrInformerKubeletServing, err := createInformer(
+		ctx,
+		h.clientset,
+		getOptions(certv1.KubeletServingSignerName).FieldSelector,
+		getOptions(certv1beta1.KubeletServingSignerName).FieldSelector)
+	if err != nil {
+		return fmt.Errorf("while creating informer for %v: %w", certv1beta1.KubeletServingSignerName, err)
 	}
 
 	c := make(chan *Certificate, 1)
 
 	handlerFuncs := cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			if err := processCSREvent(ctx, c, obj); err != nil {
+			if err := processCSRKubeletSignerEvent(ctx, c, obj); err != nil {
 				h.log.WithError(err).Warn("failed to process csr add event")
 			}
 		},
 	}
 
-	if _, err := csrInformer.AddEventHandler(handlerFuncs); err != nil {
+	if _, err := csrInformerKubeletSigner.AddEventHandler(handlerFuncs); err != nil {
+		return fmt.Errorf("adding csr informer event handlers: %w", err)
+	}
+
+	if _, err := csrInformerKubeletServing.AddEventHandler(handlerFuncs); err != nil {
 		return fmt.Errorf("adding csr informer event handlers: %w", err)
 	}
 
@@ -61,7 +80,7 @@ func (h *ApprovalManager) Start(ctx context.Context) error {
 		return nil
 	}
 
-	go startInformer(ctx, h.log, informerFactory)
+	go startInformers(ctx, h.log, informerKubeletSignerFactory, informerKubeletServingFactory)
 	go h.runAutoApproveForCastAINodes(ctx, c)
 
 	return nil
