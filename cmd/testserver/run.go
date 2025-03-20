@@ -4,16 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/castai/cluster-controller/internal/config"
 	"github.com/castai/cluster-controller/loadtest"
 	"github.com/castai/cluster-controller/loadtest/scenarios"
 )
@@ -21,9 +20,8 @@ import (
 func run(ctx context.Context) error {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	// TODO: Export as envVars
-	cfg := loadtest.Config{
-		Port: 8080,
-	}
+	cfg := loadtest.GetConfig()
+	logger.Info(fmt.Sprintf("%v", cfg))
 	logger.Info("creating test server")
 	// TODO: Defaults...
 	testServer := loadtest.NewTestServer(logger, loadtest.TestServerConfig{
@@ -32,17 +30,9 @@ func run(ctx context.Context) error {
 		TimeoutWaitingForActions: 60 * time.Second,
 	})
 
-	// Not ideal but fast
-	discardLogger := logrus.New()
-	discardLogger.Out = io.Discard
-	restConfig, err := config.RetrieveKubeConfig(discardLogger)
+	clientSet, err := createK8SClient(cfg, logger)
 	if err != nil {
-		return fmt.Errorf("failed to get kubeconfig: %w", err)
-	}
-
-	clientSet, err := kubernetes.NewForConfig(restConfig)
-	if err != nil {
-		return fmt.Errorf("obtaining kubernetes clientset: %w", err)
+		return err
 	}
 
 	go func() {
@@ -55,8 +45,8 @@ func run(ctx context.Context) error {
 	}()
 
 	testScenarios := []scenarios.TestScenario{
-		scenarios.PodEvents(2000, logger),
-		scenarios.StuckDrain(100, 1, logger),
+		scenarios.PodEvents(100000, logger),
+		//scenarios.StuckDrain(100, 1, logger),
 	}
 
 	var wg sync.WaitGroup
@@ -86,4 +76,36 @@ func run(ctx context.Context) error {
 
 	// TODO: Wait for server channel to be empty as well
 	return errors.Join(receivedErrors...)
+}
+
+func createK8SClient(cfg loadtest.Config, logger *slog.Logger) (*kubernetes.Clientset, error) {
+	if cfg.KubeConfig == "" {
+		logger.Info("Using in-cluster configuration")
+		restConfig, err := rest.InClusterConfig()
+		if err != nil {
+			return nil, fmt.Errorf("error creating in-cluster config: %w", err)
+		}
+		clientSet, err := kubernetes.NewForConfig(restConfig)
+		if err != nil {
+			return nil, fmt.Errorf("obtaining kubernetes clientset: %w", err)
+		}
+		return clientSet, nil
+	}
+
+	logger.Info(fmt.Sprintf("Using kubeconfig from %q", cfg.KubeConfig))
+	data, err := os.ReadFile(cfg.KubeConfig)
+	if err != nil {
+		return nil, fmt.Errorf("reading kubeconfig at %s: %w", cfg.KubeConfig, err)
+	}
+
+	restConfig, err := clientcmd.RESTConfigFromKubeConfig(data)
+	if err != nil {
+		return nil, fmt.Errorf("creating rest config from %q: %w", cfg.KubeConfig, err)
+	}
+
+	clientSet, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("obtaining kubernetes clientset: %w", err)
+	}
+	return clientSet, nil
 }
