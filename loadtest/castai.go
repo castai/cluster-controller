@@ -118,10 +118,6 @@ func (c *CastAITestServer) AckAction(ctx context.Context, actionID string, req *
 	return nil
 }
 
-func (c *CastAITestServer) SendAKSInitData(ctx context.Context, req *castai.AKSInitDataRequest) error {
-	return fmt.Errorf("not implemented; obsolete")
-}
-
 func (c *CastAITestServer) SendLog(ctx context.Context, e *castai.LogEntry) error {
 	//var slogLvl slog.Level
 	//switch e.Level {
