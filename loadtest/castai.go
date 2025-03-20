@@ -34,10 +34,6 @@ func NewTestServer(logger *slog.Logger, cfg TestServerConfig) *CastAITestServer 
 	}
 }
 
-func (c *CastAITestServer) Shutdown() {
-	// Drain
-}
-
 // ExecuteActions pushes the list of actions to the queue for cluster controller to process.
 // This method returns when all actions are acked or context is cancelled.
 func (c *CastAITestServer) ExecuteActions(ctx context.Context, actions []castai.ClusterAction) {
