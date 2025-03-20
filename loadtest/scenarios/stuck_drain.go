@@ -104,14 +104,13 @@ func (s *stuckDrainScenario) Cleanup(ctx context.Context, namespace string, clie
 	}
 
 	// We assume no other tests are using the same NS so just delete all.
-	s.log.Info("Deleting deployments from stuck drain nodes")
-
 	deploymentsInNS, err := clientset.AppsV1().Deployments(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to list deployments: %w", err)
 	}
 
 	for _, deployment := range deploymentsInNS.Items {
+		s.log.Info(fmt.Sprintf("Deleting deployment %s", deployment.Name))
 		err = clientset.AppsV1().Deployments(namespace).Delete(ctx, deployment.Name, metav1.DeleteOptions{})
 		if err != nil && !apierrors.IsNotFound(err) {
 			return fmt.Errorf("failed to delete fake deployment: %w", err)
@@ -124,6 +123,7 @@ func (s *stuckDrainScenario) Cleanup(ctx context.Context, namespace string, clie
 	}
 
 	for _, pdb := range pdbsInNS.Items {
+		s.log.Info(fmt.Sprintf("Deleting PDB %s", pdb.Name))
 		err = clientset.PolicyV1().PodDisruptionBudgets(namespace).Delete(ctx, pdb.Name, metav1.DeleteOptions{})
 		if err != nil && !apierrors.IsNotFound(err) {
 			return fmt.Errorf("failed to delete fake pod disruption budget: %w", err)
