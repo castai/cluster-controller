@@ -67,6 +67,9 @@ Option 1. Deploy controller in Kind cluster.
     --set clusterID="your-cluster-id" | kubectl apply -f - -n castai-agent
   ```
 
+### Load tests
+See [docs](loadtest/README.md)
+
 ## Community
 
 - [Twitter](https://twitter.com/cast_ai)
