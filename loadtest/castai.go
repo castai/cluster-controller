@@ -28,7 +28,7 @@ type CastAITestServer struct {
 func NewTestServer(logger *slog.Logger, cfg TestServerConfig) *CastAITestServer {
 	return &CastAITestServer{
 		log:                logger,
-		actionsPushChannel: make(chan castai.ClusterAction, cfg.BufferSize),
+		actionsPushChannel: make(chan castai.ClusterAction, 10000),
 		cfg:                cfg,
 		actionsLog:         make(map[string]chan string),
 	}

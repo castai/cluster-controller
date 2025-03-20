@@ -19,14 +19,11 @@ import (
 
 func run(ctx context.Context) error {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	// TODO: Export as envVars
 	cfg := loadtest.GetConfig()
-	logger.Info(fmt.Sprintf("%v", cfg))
 	logger.Info("creating test server")
-	// TODO: Defaults...
+
 	testServer := loadtest.NewTestServer(logger, loadtest.TestServerConfig{
-		BufferSize:               0,
-		MaxActionsPerCall:        500,
+		MaxActionsPerCall:        1000,
 		TimeoutWaitingForActions: 60 * time.Second,
 	})
 
@@ -45,8 +42,8 @@ func run(ctx context.Context) error {
 	}()
 
 	testScenarios := []scenarios.TestScenario{
-		scenarios.PodEvents(100000, logger),
-		//scenarios.StuckDrain(100, 1, logger),
+		scenarios.PodEvents(5000, logger),
+		//scenarios.StuckDrain(100, 60, logger),
 	}
 
 	var wg sync.WaitGroup
@@ -65,6 +62,7 @@ func run(ctx context.Context) error {
 
 	logger.Info("Waiting for test scenarios to finish")
 	wg.Wait()
+
 	close(errs)
 	receivedErrors := make([]error, 0)
 	for err := range errs {
