@@ -42,8 +42,8 @@ func run(ctx context.Context) error {
 	}()
 
 	testScenarios := []scenarios.TestScenario{
-		//scenarios.PodEvents(5000, logger),
-		//scenarios.StuckDrain(100, 60, logger),
+		// scenarios.PodEvents(5000, logger),
+		// scenarios.StuckDrain(100, 60, logger),
 		scenarios.StuckDrain(10, 1, logger),
 	}
 
