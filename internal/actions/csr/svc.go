@@ -8,14 +8,14 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	certv1 "k8s.io/api/certificates/v1"
+	certv1beta1 "k8s.io/api/certificates/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/castai/cluster-controller/internal/waitext"
-	certv1 "k8s.io/api/certificates/v1"
-	certv1beta1 "k8s.io/api/certificates/v1beta1"
 )
 
 const (
