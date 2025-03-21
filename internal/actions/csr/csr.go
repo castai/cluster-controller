@@ -364,8 +364,12 @@ func processCSRKubeletSignerEvent(ctx context.Context, c chan<- *Certificate, cs
 	if cert == nil {
 		return nil
 	}
+	fmt.Printf("csr: cert name %v approved: %v isCast: %v, bootstrap: %v, system:%v, outdated:%v",
+		cert.Name, cert.Approved(), cert.ForCASTAINode(), cert.NodeBootstrap(), cert.SystemNode(), cert.Outdated())
 
 	if cert.Approved() || !cert.ForCASTAINode() || (!cert.NodeBootstrap() && !cert.SystemNode()) || cert.Outdated() {
+		fmt.Printf("cert skipped name %v approved: %v isCast: %v, bootstrap: %v, system:%v, outdated:%v",
+			cert.Name, cert.Approved(), cert.ForCASTAINode(), cert.NodeBootstrap(), cert.SystemNode(), cert.Outdated())
 		return nil
 	}
 
