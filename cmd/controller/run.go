@@ -207,6 +207,8 @@ func runController(
 			log.Fatalf("failed to determine if running on GKE: %v", err)
 		}
 
+		log.Infof("Running on GKE is: %v", isGKE)
+
 		if isGKE {
 			csrMgr := csr.NewApprovalManager(log, clientset)
 			if err := csrMgr.Start(ctx); err != nil {
@@ -322,6 +324,11 @@ func (e *logContextError) Unwrap() error {
 }
 
 func runningOnGKE(clientset *kubernetes.Clientset, cfg config.Config) (isGKE bool, err error) {
+	// When running locally, there is no node.
+	if cfg.SelfPod.Node == "" {
+		return false, nil
+	}
+
 	err = waitext.Retry(context.Background(), waitext.DefaultExponentialBackoff(), 3, func(ctx context.Context) (bool, error) {
 		node, err := clientset.CoreV1().Nodes().Get(ctx, cfg.SelfPod.Node, metav1.GetOptions{})
 		if err != nil && !apierrors.IsNotFound(err) {
