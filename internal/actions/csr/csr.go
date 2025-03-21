@@ -406,7 +406,7 @@ func toCertificate(obj interface{}) (cert *Certificate, err error) {
 
 	cn, err := getSubjectCommonName(name, request)
 	if err != nil {
-		return nil, fmt.Errorf("getSubjectCommonName: Name: %v RequestingUser: %v  request: %v %w", cert.OriginalCSRName, cert.RequestingUser, string(request), err)
+		return nil, fmt.Errorf("csr: getSubjectCommonName: Name: %v RequestingUser: %v  request: %v %w", cert.OriginalCSRName, cert.RequestingUser, string(request), err)
 	}
 
 	cert.Name = cn
@@ -423,7 +423,9 @@ func sendCertificate(ctx context.Context, c chan<- *Certificate, cert *Certifica
 }
 
 func getSubjectCommonName(csrName string, csrRequest []byte) (string, error) {
-	if !strings.HasPrefix(csrName, "node-csr") {
+	// node-csr prefix for bootstrap kubelet csr.
+	// csr- prefix for kubelet csr.
+	if !strings.HasPrefix(csrName, "node-csr") && !strings.HasPrefix(csrName, "csr-") {
 		return "", nil
 	}
 
