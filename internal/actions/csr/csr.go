@@ -37,10 +37,12 @@ var ErrNodeCertificateNotFound = errors.New("node certificate not found")
 
 // Certificate wraps v1 and v1beta1 csr.
 type Certificate struct {
-	v1             *certv1.CertificateSigningRequest
-	v1Beta1        *certv1beta1.CertificateSigningRequest
-	Name           string
-	RequestingUser string
+	v1              *certv1.CertificateSigningRequest
+	v1Beta1         *certv1beta1.CertificateSigningRequest
+	Name            string
+	OriginalCSRName string
+	RequestingUser  string
+	SignerName      string
 }
 
 var errCSRNotFound = errors.New("v1 or v1beta csr should be set")
@@ -379,18 +381,30 @@ func toCertificate(obj interface{}) (cert *Certificate, err error) {
 	case *certv1.CertificateSigningRequest:
 		name = e.Name
 		request = e.Spec.Request
-		cert = &Certificate{Name: name, v1: e, RequestingUser: e.Spec.Username}
+		cert = &Certificate{
+			OriginalCSRName: e.Name,
+			SignerName:      e.Spec.SignerName,
+			v1:              e,
+			RequestingUser:  e.Spec.Username,
+		}
 	case *certv1beta1.CertificateSigningRequest:
 		name = e.Name
 		request = e.Spec.Request
-		cert = &Certificate{Name: name, v1Beta1: e, RequestingUser: e.Spec.Username}
+		cert = &Certificate{
+			OriginalCSRName: name,
+			v1Beta1:         e,
+			RequestingUser:  e.Spec.Username,
+		}
+		if e.Spec.SignerName != nil {
+			cert.SignerName = *e.Spec.SignerName
+		}
 	default:
 		return nil, errUnexpectedObjectType
 	}
 
 	cn, err := getSubjectCommonName(name, request)
 	if err != nil {
-		return nil, fmt.Errorf("getSubjectCommonName: Name: %v RequestingUser: %v  request: %v %w", cert.Name, cert.RequestingUser, string(request), err)
+		return nil, fmt.Errorf("getSubjectCommonName: Name: %v RequestingUser: %v  request: %v %w", cert.OriginalCSRName, cert.RequestingUser, string(request), err)
 	}
 
 	cert.Name = cn

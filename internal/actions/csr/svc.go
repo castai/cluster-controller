@@ -167,7 +167,11 @@ func (h *ApprovalManager) runAutoApproveForCastAINodes(ctx context.Context, c <-
 			go func(cert *Certificate) {
 				defer h.removeInProgress(cert.Name)
 
-				log := log.WithField("node_name", cert.Name)
+				log := log.WithFields(logrus.Fields{
+					"csr_name":          cert.Name,
+					"signer":            cert.SignerName,
+					"original_csr_name": cert.OriginalCSRName,
+				})
 				log.Info("auto approving csr")
 				err := h.handleWithRetry(ctx, log, cert)
 				if err != nil {
