@@ -45,7 +45,7 @@ func (h *ApprovalManager) Start(ctx context.Context) error {
 		getOptions(certv1.KubeAPIServerClientKubeletSignerName).FieldSelector,
 		getOptions(certv1beta1.KubeAPIServerClientKubeletSignerName).FieldSelector)
 	if err != nil {
-		return fmt.Errorf("while creating informer for %v: %w", certv1beta1.KubeletServingSignerName, err)
+		return fmt.Errorf("while creating informer for %v: %w", certv1.KubeAPIServerClientKubeletSignerName, err)
 	}
 
 	informerKubeletServingFactory, csrInformerKubeletServing, err := createInformer(
@@ -54,7 +54,7 @@ func (h *ApprovalManager) Start(ctx context.Context) error {
 		getOptions(certv1.KubeletServingSignerName).FieldSelector,
 		getOptions(certv1beta1.KubeletServingSignerName).FieldSelector)
 	if err != nil {
-		return fmt.Errorf("while creating informer for %v: %w", certv1beta1.KubeletServingSignerName, err)
+		return fmt.Errorf("while creating informer for %v: %w", certv1.KubeletServingSignerName, err)
 	}
 
 	c := make(chan *Certificate, 100)
