@@ -102,7 +102,7 @@ func (c *Certificate) NodeBootstrap() bool {
 
 func (c *Certificate) SystemNode() bool {
 	// To avoid waiting for the certificate to be approved by control plane.
-	return strings.HasPrefix(c.RequestingUser, "system:node")
+	return strings.HasPrefix(c.RequestingUser, "system:node:")
 }
 
 func isAlreadyApproved(err error) bool {
