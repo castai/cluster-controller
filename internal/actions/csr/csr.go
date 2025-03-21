@@ -374,12 +374,10 @@ func processCSREvent(ctx context.Context, c chan<- *Certificate, csrObj interfac
 }
 
 func toCertificate(obj interface{}) (cert *Certificate, err error) {
-	var name string
 	var request []byte
 
 	switch e := obj.(type) {
 	case *certv1.CertificateSigningRequest:
-		name = e.Name
 		request = e.Spec.Request
 		cert = &Certificate{
 			OriginalCSRName: e.Name,
@@ -388,10 +386,9 @@ func toCertificate(obj interface{}) (cert *Certificate, err error) {
 			RequestingUser:  e.Spec.Username,
 		}
 	case *certv1beta1.CertificateSigningRequest:
-		name = e.Name
 		request = e.Spec.Request
 		cert = &Certificate{
-			OriginalCSRName: name,
+			OriginalCSRName: e.Name,
 			v1Beta1:         e,
 			RequestingUser:  e.Spec.Username,
 		}
@@ -402,9 +399,9 @@ func toCertificate(obj interface{}) (cert *Certificate, err error) {
 		return nil, errUnexpectedObjectType
 	}
 
-	cn, err := getSubjectCommonName(name, request)
+	cn, err := getSubjectCommonName(cert.OriginalCSRName, request)
 	if err != nil {
-		return nil, fmt.Errorf("csr: getSubjectCommonName: Name: %v RequestingUser: %v  request: %v %w", cert.OriginalCSRName, cert.RequestingUser, string(request), err)
+		return nil, fmt.Errorf("getSubjectCommonName: Name: %v RequestingUser: %v  request: %v %w", cert.OriginalCSRName, cert.RequestingUser, string(request), err)
 	}
 
 	cert.Name = cn
