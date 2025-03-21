@@ -355,7 +355,7 @@ func createInformer(ctx context.Context, client kubernetes.Interface, fieldSelec
 
 var errUnexpectedObjectType = errors.New("unexpected object type")
 
-func processCSRKubeletSignerEvent(ctx context.Context, c chan<- *Certificate, csrObj interface{}) error {
+func processCSREvent(ctx context.Context, c chan<- *Certificate, csrObj interface{}) error {
 	cert, err := toCertificate(csrObj)
 	if err != nil {
 		return fmt.Errorf("toCertificate: %w", err)

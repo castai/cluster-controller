@@ -61,7 +61,7 @@ func (h *ApprovalManager) Start(ctx context.Context) error {
 
 	handlerFuncs := cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			if err := processCSRKubeletSignerEvent(ctx, c, obj); err != nil {
+			if err := processCSREvent(ctx, c, obj); err != nil {
 				h.log.WithError(err).Warn("failed to process csr add event")
 			}
 		},
