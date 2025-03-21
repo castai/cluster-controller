@@ -174,8 +174,10 @@ func Test_nodeBootstrap(t *testing.T) {
 }
 
 func Test_toCertificate(t *testing.T) {
-	testCSRv1 := getCSRv1("node-csr", "kubelet-bootstrap")
-	testCSRv1beta1 := getCSRv1betav1("node-csr", "kubelet-bootstrap")
+	kBootstrapCSRv1 := getCSRv1("node-csr", "kubelet-bootstrap")
+	kBootstrapCtCSRv1beta1 := getCSRv1betav1("node-csr", "kubelet-bootstrap")
+	kServingCSRv1 := getCSRv1("csr-s7v44", "system:node:gke-va")
+	kServingCSRv1beta1 := getCSRv1betav1("csr-s7v44", "system:node:gke-va")
 	type args struct {
 		obj interface{}
 	}
@@ -199,7 +201,7 @@ func Test_toCertificate(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						CreationTimestamp: metav1.Time{Time: time.Now().Add(-csrTTL)},
 					},
-					Spec: testCSRv1.Spec,
+					Spec: kBootstrapCSRv1.Spec,
 				},
 			},
 			checkFunc: func(t *testing.T, cert *Certificate) {
@@ -225,27 +227,51 @@ func Test_toCertificate(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "ok v1",
+			name: "kubelet-bootstrap: ok v1",
 			args: args{
-				obj: testCSRv1,
+				obj: kBootstrapCSRv1,
 			},
 			checkFunc: func(t *testing.T, cert *Certificate) {
 				require.Equal(t, "system:node:gke-dev-master-cast-pool-cb53177b", cert.Name)
 				require.Equal(t, "kubelet-bootstrap", cert.RequestingUser)
-				require.Equal(t, testCSRv1, cert.v1)
+				require.Equal(t, kBootstrapCSRv1, cert.v1)
 			},
 			wantErr: false,
 		},
 		{
-			name: "ok v1beta1",
+			name: "kubelet-bootstrap: ok v1beta1",
 			args: args{
-				obj: testCSRv1beta1,
+				obj: kBootstrapCtCSRv1beta1,
 			},
 			wantErr: false,
 			checkFunc: func(t *testing.T, cert *Certificate) {
 				require.Equal(t, "system:node:gke-dev-master-cast-pool-cb53177b", cert.Name)
 				require.Equal(t, "kubelet-bootstrap", cert.RequestingUser)
-				require.Equal(t, testCSRv1beta1, cert.v1Beta1)
+				require.Equal(t, kBootstrapCtCSRv1beta1, cert.v1Beta1)
+			},
+		},
+		{
+			name: "kubelet-serving: ok v1",
+			args: args{
+				obj: kServingCSRv1,
+			},
+			checkFunc: func(t *testing.T, cert *Certificate) {
+				require.Equal(t, "system:node:gke-dev-master-cast-pool-cb53177b", cert.Name)
+				require.Equal(t, "system:node:gke-va", cert.RequestingUser)
+				require.Equal(t, kServingCSRv1, cert.v1)
+			},
+			wantErr: false,
+		},
+		{
+			name: "kubelet-serving: ok v1beta1",
+			args: args{
+				obj: kServingCSRv1beta1,
+			},
+			wantErr: false,
+			checkFunc: func(t *testing.T, cert *Certificate) {
+				require.Equal(t, "system:node:gke-dev-master-cast-pool-cb53177b", cert.Name)
+				require.Equal(t, "system:node:gke-va", cert.RequestingUser)
+				require.Equal(t, kServingCSRv1beta1, cert.v1Beta1)
 			},
 		},
 	}

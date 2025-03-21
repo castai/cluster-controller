@@ -37,10 +37,12 @@ var ErrNodeCertificateNotFound = errors.New("node certificate not found")
 
 // Certificate wraps v1 and v1beta1 csr.
 type Certificate struct {
-	v1             *certv1.CertificateSigningRequest
-	v1Beta1        *certv1beta1.CertificateSigningRequest
-	Name           string
-	RequestingUser string
+	v1              *certv1.CertificateSigningRequest
+	v1Beta1         *certv1beta1.CertificateSigningRequest
+	Name            string
+	OriginalCSRName string
+	RequestingUser  string
+	SignerName      string
 }
 
 var errCSRNotFound = errors.New("v1 or v1beta csr should be set")
@@ -96,6 +98,11 @@ func (c *Certificate) NodeBootstrap() bool {
 	// which is the node name, we can process the controller's certificates and kubelet-bootstrap`s.
 	// This covers the case when the controller restarts but the bootstrap certificate was deleted without our own certificate being approved.
 	return c.RequestingUser == "kubelet-bootstrap" || c.RequestingUser == "system:serviceaccount:castai-agent:castai-cluster-controller"
+}
+
+func (c *Certificate) SystemNode() bool {
+	// To avoid waiting for the certificate to be approved by control plane.
+	return strings.HasPrefix(c.RequestingUser, "system:node:")
 }
 
 func isAlreadyApproved(err error) bool {
@@ -179,15 +186,18 @@ func (c *Certificate) NewCSR(ctx context.Context, client kubernetes.Interface) (
 	return &Certificate{v1: resp}, nil
 }
 
-func startInformer(ctx context.Context, log logrus.FieldLogger, factory informers.SharedInformerFactory) {
+func startInformers(ctx context.Context, log logrus.FieldLogger, factories ...informers.SharedInformerFactory) {
 	stopCh := make(chan struct{})
 	defer close(stopCh)
 
-	factory.Start(stopCh)
-	log.Info("watching for new node csr")
+	for _, factory := range factories {
+		factory.Start(stopCh)
+	}
+
+	log.Info("watching for new node CSRs")
 
 	<-ctx.Done()
-	log.WithField("context", ctx.Err()).Info("finished watching for new node csr")
+	log.WithField("context", ctx.Err()).Info("finished watching for new node CSRs")
 }
 
 func get(ctx context.Context, client kubernetes.Interface, cert *Certificate) (*Certificate, error) {
@@ -316,7 +326,7 @@ func getNodeCSRV1Beta1(ctx context.Context, client kubernetes.Interface, nodeNam
 	return nil, ErrNodeCertificateNotFound
 }
 
-func createInformer(ctx context.Context, client kubernetes.Interface) (informers.SharedInformerFactory, cache.SharedIndexInformer, error) {
+func createInformer(ctx context.Context, client kubernetes.Interface, fieldSelectorV1, fieldSelectorV1beta1 string) (informers.SharedInformerFactory, cache.SharedIndexInformer, error) {
 	var (
 		errv1      error
 		errv1beta1 error
@@ -325,7 +335,7 @@ func createInformer(ctx context.Context, client kubernetes.Interface) (informers
 	if _, errv1 = client.CertificatesV1().CertificateSigningRequests().List(ctx, metav1.ListOptions{}); errv1 == nil {
 		v1Factory := informers.NewSharedInformerFactoryWithOptions(client, csrInformerResyncPeriod,
 			informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
-				opts.FieldSelector = getOptions(certv1.KubeAPIServerClientKubeletSignerName).FieldSelector
+				opts.FieldSelector = fieldSelectorV1
 			}))
 		v1Informer := v1Factory.Certificates().V1().CertificateSigningRequests().Informer()
 		return v1Factory, v1Informer, nil
@@ -334,7 +344,7 @@ func createInformer(ctx context.Context, client kubernetes.Interface) (informers
 	if _, errv1beta1 = client.CertificatesV1beta1().CertificateSigningRequests().List(ctx, metav1.ListOptions{}); errv1beta1 == nil {
 		v1Factory := informers.NewSharedInformerFactoryWithOptions(client, csrInformerResyncPeriod,
 			informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
-				opts.FieldSelector = getOptions(certv1beta1.KubeAPIServerClientKubeletSignerName).FieldSelector
+				opts.FieldSelector = fieldSelectorV1beta1
 			}))
 		v1Informer := v1Factory.Certificates().V1beta1().CertificateSigningRequests().Informer()
 		return v1Factory, v1Informer, nil
@@ -348,14 +358,18 @@ var errUnexpectedObjectType = errors.New("unexpected object type")
 func processCSREvent(ctx context.Context, c chan<- *Certificate, csrObj interface{}) error {
 	cert, err := toCertificate(csrObj)
 	if err != nil {
-		return err
+		return fmt.Errorf("toCertificate: %w", err)
 	}
 
 	if cert == nil {
 		return nil
 	}
 
-	if cert.Approved() || !cert.ForCASTAINode() || !cert.NodeBootstrap() || cert.Outdated() {
+	if cert.Approved() ||
+		!cert.ForCASTAINode() ||
+		// approve only node bootstrap and kubelet CSR from node.
+		(!cert.NodeBootstrap() && !cert.SystemNode()) ||
+		cert.Outdated() {
 		return nil
 	}
 
@@ -364,25 +378,34 @@ func processCSREvent(ctx context.Context, c chan<- *Certificate, csrObj interfac
 }
 
 func toCertificate(obj interface{}) (cert *Certificate, err error) {
-	var name string
 	var request []byte
 
 	switch e := obj.(type) {
 	case *certv1.CertificateSigningRequest:
-		name = e.Name
 		request = e.Spec.Request
-		cert = &Certificate{Name: name, v1: e, RequestingUser: e.Spec.Username}
+		cert = &Certificate{
+			OriginalCSRName: e.Name,
+			SignerName:      e.Spec.SignerName,
+			v1:              e,
+			RequestingUser:  e.Spec.Username,
+		}
 	case *certv1beta1.CertificateSigningRequest:
-		name = e.Name
 		request = e.Spec.Request
-		cert = &Certificate{Name: name, v1Beta1: e, RequestingUser: e.Spec.Username}
+		cert = &Certificate{
+			OriginalCSRName: e.Name,
+			v1Beta1:         e,
+			RequestingUser:  e.Spec.Username,
+		}
+		if e.Spec.SignerName != nil {
+			cert.SignerName = *e.Spec.SignerName
+		}
 	default:
 		return nil, errUnexpectedObjectType
 	}
 
-	cn, err := getSubjectCommonName(name, request)
+	cn, err := getSubjectCommonName(cert.OriginalCSRName, request)
 	if err != nil {
-		return nil, fmt.Errorf("getSubjectCommonName: Name: %v RequestingUser: %v  request: %v %w", cert.Name, cert.RequestingUser, string(request), err)
+		return nil, fmt.Errorf("getSubjectCommonName: Name: %v RequestingUser: %v  request: %v %w", cert.OriginalCSRName, cert.RequestingUser, string(request), err)
 	}
 
 	cert.Name = cn
@@ -399,7 +422,9 @@ func sendCertificate(ctx context.Context, c chan<- *Certificate, cert *Certifica
 }
 
 func getSubjectCommonName(csrName string, csrRequest []byte) (string, error) {
-	if !strings.HasPrefix(csrName, "node-csr") {
+	// node-csr prefix for bootstrap kubelet csr.
+	// csr- prefix for kubelet csr.
+	if !strings.HasPrefix(csrName, "node-csr") && !strings.HasPrefix(csrName, "csr-") {
 		return "", nil
 	}
 
