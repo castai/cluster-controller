@@ -365,7 +365,11 @@ func processCSREvent(ctx context.Context, c chan<- *Certificate, csrObj interfac
 		return nil
 	}
 
-	if cert.Approved() || !cert.ForCASTAINode() || (!cert.NodeBootstrap() && !cert.SystemNode()) || cert.Outdated() {
+	if cert.Approved() ||
+		!cert.ForCASTAINode() ||
+		// approve only node bootstrap and kubelet CSR from node.
+		(!cert.NodeBootstrap() && !cert.SystemNode()) ||
+		cert.Outdated() {
 		return nil
 	}
 
