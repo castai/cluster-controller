@@ -366,8 +366,6 @@ func processCSREvent(ctx context.Context, c chan<- *Certificate, csrObj interfac
 	}
 
 	if cert.Approved() || !cert.ForCASTAINode() || (!cert.NodeBootstrap() && !cert.SystemNode()) || cert.Outdated() {
-		fmt.Printf("cert skipped name %v approved: %v isCast: %v, bootstrap: %v, system:%v, outdated:%v",
-			cert.Name, cert.Approved(), cert.ForCASTAINode(), cert.NodeBootstrap(), cert.SystemNode(), cert.Outdated())
 		return nil
 	}
 
