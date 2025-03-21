@@ -12,6 +12,7 @@ import (
 	"github.com/bombsimon/logrusr/v4"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apiserver/pkg/server/healthz"
 	"k8s.io/client-go/dynamic"
@@ -323,7 +324,7 @@ func (e *logContextError) Unwrap() error {
 func runningOnGKE(clientset *kubernetes.Clientset, cfg config.Config) (isGKE bool, err error) {
 	err = waitext.Retry(context.Background(), waitext.DefaultExponentialBackoff(), 3, func(ctx context.Context) (bool, error) {
 		node, err := clientset.CoreV1().Nodes().Get(ctx, cfg.SelfPod.Node, metav1.GetOptions{})
-		if err != nil {
+		if err != nil && !apierrors.IsNotFound(err) {
 			return true, fmt.Errorf("getting node: %w", err)
 		}
 
