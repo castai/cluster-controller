@@ -57,7 +57,7 @@ func (h *ApprovalManager) Start(ctx context.Context) error {
 		return fmt.Errorf("while creating informer for %v: %w", certv1.KubeletServingSignerName, err)
 	}
 
-	c := make(chan *Certificate, 100)
+	c := make(chan *Certificate, 1)
 
 	handlerFuncs := cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
