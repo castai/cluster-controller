@@ -161,7 +161,7 @@ func (h *ApprovalManager) runAutoApproveForCastAINodes(ctx context.Context, c <-
 				continue
 			}
 			// prevent starting goroutine for the same node certificate
-			if !h.addInProgress(cert.Name) {
+			if !h.addInProgress(fmt.Sprintf("%v_%v", cert.Name, cert.SignerName)) {
 				continue
 			}
 			go func(cert *Certificate) {
@@ -214,17 +214,17 @@ func newApproveCSRExponentialBackoff() wait.Backoff {
 	return b
 }
 
-func (h *ApprovalManager) addInProgress(nodeName string) bool {
+func (h *ApprovalManager) addInProgress(name string) bool {
 	h.m.Lock()
 	defer h.m.Unlock()
 	if h.inProgress == nil {
 		h.inProgress = make(map[string]struct{})
 	}
-	_, ok := h.inProgress[nodeName]
+	_, ok := h.inProgress[name]
 	if ok {
 		return false
 	}
-	h.inProgress[nodeName] = struct{}{}
+	h.inProgress[name] = struct{}{}
 	return true
 }
 
