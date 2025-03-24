@@ -154,7 +154,10 @@ func (s *Controller) handleActions(ctx context.Context, clusterActions []*castai
 
 		go func(action *castai.ClusterAction) {
 			defer s.finishProcessing(action.ID)
-
+			if action.Data() == nil {
+				s.log.WithField(actions.ActionIDLogField, action.ID).Error("unknown action type, try upgrading to the latest version")
+				return
+			}
 			var err error
 			handleErr := s.handleAction(ctx, action)
 			if errors.Is(handleErr, context.Canceled) {
