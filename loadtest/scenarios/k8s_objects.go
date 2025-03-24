@@ -14,7 +14,7 @@ import (
 
 const (
 	DefaultKwokMarker = "kwok.x-k8s.io/node"
-	KwokMarkerValue   = "fake-node"
+	KwokMarkerValue   = "fake"
 )
 
 type KwokConfig struct {
@@ -71,12 +71,12 @@ func NewKwokNode(cfg KwokConfig, nodeName string) *corev1.Node {
 		},
 		Status: corev1.NodeStatus{
 			Allocatable: corev1.ResourceList{
-				corev1.ResourceCPU:    *resource.NewMilliQuantity(32, resource.DecimalSI),
+				corev1.ResourceCPU:    *resource.NewMilliQuantity(4000, resource.DecimalSI),
 				corev1.ResourceMemory: *resource.NewQuantity(256*1024*1024*1024, resource.BinarySI),
 				corev1.ResourcePods:   *resource.NewQuantity(110, resource.DecimalSI),
 			},
 			Capacity: corev1.ResourceList{
-				corev1.ResourceCPU:    *resource.NewMilliQuantity(32, resource.DecimalSI),
+				corev1.ResourceCPU:    *resource.NewMilliQuantity(4000, resource.DecimalSI),
 				corev1.ResourceMemory: *resource.NewQuantity(256*1024*1024*1024, resource.BinarySI),
 				corev1.ResourcePods:   *resource.NewQuantity(110, resource.DecimalSI),
 			},

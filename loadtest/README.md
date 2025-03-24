@@ -11,7 +11,7 @@ Start kwok:
 ```
  kwok --kubeconfig=~/.kube/config \
     --manage-all-nodes=false \
-    --manage-nodes-with-annotation-selector=kwok.x-k8s.io/node=fake-node \
+    --manage-nodes-with-annotation-selector=kwok.x-k8s.io/node=fake \
     --node-lease-duration-seconds=40 \
     --cidr=10.0.0.1/24 \
     --node-ip=10.0.0.1
