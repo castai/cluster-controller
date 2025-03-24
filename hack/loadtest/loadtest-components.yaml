@@ -1,0 +1,110 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: castai-loadtest-agent-sa
+  namespace: castai-agent
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: castai-agent-cluster-admin-binding
+subjects:
+  - kind: ServiceAccount
+    name: castai-loadtest-agent-sa
+    namespace: castai-agent
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: castai-agent
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+    scrape_configs:
+      - job_name: 'cluster-controller'
+        static_configs:
+          - targets: ['localhost:9090']
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-service
+  namespace: castai-agent
+spec:
+  selector:
+    app: monitored-app
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: castai-loadtest-agent
+  namespace: castai-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: castai-loadtest-agent
+  template:
+    metadata:
+      labels:
+        app: castai-loadtest-agent
+    spec:
+      serviceAccountName: castai-loadtest-agent-sa
+      containers:
+        - name: prometheus-sidecar
+          image: prom/prometheus:latest
+          args:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+          ports:
+            - containerPort: 9091
+          volumeMounts:
+            - name: prometheus-config-volume
+              mountPath: /etc/prometheus
+        - name: grafana
+          image: grafana/grafana:latest
+          ports:
+            - containerPort: 3000
+        - name: castai-agent
+          image: docker.io/lachezarcast/cluster-controller:loadtest2 # TODO!
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          command:
+            - "castai-cluster-controller"
+            - "test-server"
+          env:
+            - name: PORT
+              value: "8080"
+      volumes:
+        - name: prometheus-config-volume
+          configMap:
+            name: prometheus-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: castai-loadtest-agent-service
+  namespace: castai-agent
+spec:
+  selector:
+    app: castai-loadtest-agent
+  ports:
+    - name: prometheus
+      port: 9091
+      targetPort: 9091
+    - name: grafana
+      port: 3000
+      targetPort: 3000
+    - name: loadtest
+      port: 8080
+      targetPort: 8080
