@@ -223,11 +223,14 @@ func (s *Controller) handleAction(ctx context.Context, action *castai.ClusterAct
 
 func (s *Controller) ackAction(ctx context.Context, action *castai.ClusterAction, handleErr error) error {
 	actionType := reflect.TypeOf(action.Data())
-	s.log.WithFields(logrus.Fields{
-		actions.ActionIDLogField: action.ID,
-		"type":                   actionType.String(),
-	}).Info("ack action")
-
+	if action.Data() == nil {
+		s.log.Infof("unknown action %+T\n", action)
+	} else {
+		s.log.WithFields(logrus.Fields{
+			actions.ActionIDLogField: action.ID,
+			"type":                   actionType.String(),
+		}).Info("ack action")
+	}
 	boff := waitext.NewConstantBackoff(s.cfg.AckRetryWait)
 
 	return waitext.Retry(ctx, boff, s.cfg.AckRetriesCount, func(ctx context.Context) (bool, error) {
