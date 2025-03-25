@@ -57,7 +57,7 @@ metadata:
 data:
   prometheus.yml: |
     global:
-      scrape_interval: 15s
+      scrape_interval: 5s
     scrape_configs:
       - job_name: 'cluster-controller'
         kubernetes_sd_configs:
@@ -75,46 +75,6 @@ data:
             regex: ([^:]+)(?::\d+)?
             target_label: __address__
             replacement: $1:9090
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: grafana-config
-  namespace: castai-agent
-data:
-  datasource.yaml: |
-    apiVersion: 1
-    datasources:
-      - name: Prometheus
-        type: prometheus
-        access: proxy
-        url: http://localhost:9090
-        isDefault: true
-  grafana.ini: |
-    [auth]
-    disable_login_form = true
-
-    [auth.anonymous]
-    enabled = true
-    org_role = Admin
-  dashboards.yaml: |
-    apiVersion: 1
-    providers:
-      - name: 'default'
-        orgId: 1
-        folder: ''
-        type: file
-        options:
-          path: /var/lib/grafana/dashboards
-  cc-dashboard.json: |
-    {
-      "annotations": {
-        "list": []
-      },
-      "panels": [],
-      "title": "Cluster controller",
-      "version": 1
-    }
 ---
 apiVersion: v1
 kind: Service
@@ -167,7 +127,8 @@ spec:
           volumeMounts:
             # Mount the datasource provisioning
             - name: grafana-config
-              mountPath: /etc/grafana/provisioning/datasources
+              mountPath: /etc/grafana/provisioning/datasources/datasource.yaml
+              subPath: datasource.yaml
             # Mount the custom grafana.ini to disable login and enable anonymous access
             - name: grafana-config
               mountPath: /etc/grafana/grafana.ini
@@ -176,10 +137,10 @@ spec:
             - name: grafana-config
               mountPath: /etc/grafana/provisioning/dashboards/dashboards.yaml
               subPath: dashboards.yaml
-            # Mount the pre-created dashboards JSON files
+            # Mount the pre-created dashboards JSON file
             - name: grafana-config
-              mountPath: /var/lib/grafana/dashboards/cc-dashboard.json
-              subPath: cc-dashboard.json
+              mountPath: /var/lib/grafana/dashboards/cluster-controller-dashboard.json
+              subPath: cluster-controller-dashboard.json
       volumes:
         - name: prometheus-config-volume
           configMap:

@@ -17,10 +17,4 @@ helm upgrade --namespace castai-agent --create-namespace --install  cluster-cont
   --set image.pullPolicy="Always" \
   --set autoscaling.enabled="true"
 
-
-
-# Config for load test server
-# Config for prometheus
-# Config for grafana?
-
-# Kwok !
+kubectl apply -k . # TODO
