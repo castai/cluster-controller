@@ -444,7 +444,31 @@ func parseCSR(pemData []byte) (*x509.CertificateRequest, error) {
 	if block == nil || block.Type != "CERTIFICATE REQUEST" {
 		return nil, fmt.Errorf("PEM block type must be CERTIFICATE REQUEST")
 	}
-	return x509.ParseCertificateRequest(block.Bytes)
+	csr, err := x509.ParseCertificateRequest(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("parse certificate request: %w", err)
+	}
+	if err := validateCSR(csr); err != nil {
+		return nil, fmt.Errorf("validate CSR: %w", err)
+	}
+	return csr, nil
+}
+
+var ErrInvalidCSR = errors.New("invalid CSR")
+
+func validateCSR(csr *x509.CertificateRequest) error {
+	if len(csr.Subject.CommonName) == 0 {
+		return fmt.Errorf("%w: CSR subject common name", ErrCSRNotSupported)
+	}
+	if len(csr.URIs) > 0 {
+		return fmt.Errorf("%w: CSR subject URIs", ErrCSRNotSupported)
+	}
+	if len(csr.EmailAddresses) > 0 {
+		return fmt.Errorf("%w: CSR subject email addresses", ErrCSRNotSupported)
+	}
+
+	// TODO add validation of IP and DNS
+	return nil
 }
 
 //nolint:unparam
