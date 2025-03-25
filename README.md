@@ -45,6 +45,7 @@ API_KEY=your-api-key \
 API_URL=your-api-url \
 CLUSTER_ID=your-cluster-id \
 KUBECONFIG=path-to-kubeconfig \
+self_pod.namespace=castai-agent \
 go run .
 ```
 
