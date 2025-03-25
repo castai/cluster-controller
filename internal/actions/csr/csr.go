@@ -6,7 +6,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -43,6 +42,7 @@ type Certificate struct {
 	OriginalCSRName string
 	RequestingUser  string
 	SignerName      string
+	Usages          []string
 }
 
 var (
@@ -261,75 +261,6 @@ func createV1beta1(ctx context.Context, client kubernetes.Interface, csr *certv1
 	return req, nil
 }
 
-// GetCertificateByNodeName lists all csr objects and parses request pem encoded cert to find it by node name.
-func GetCertificateByNodeName(ctx context.Context, client kubernetes.Interface, nodeName string) (*Certificate, error) {
-	v1req, err := getNodeCSRV1(ctx, client, nodeName)
-	if err != nil && !apierrors.IsNotFound(err) {
-		return nil, err
-	}
-	if v1req != nil {
-		return v1req, nil
-	}
-
-	v1betareq, err := getNodeCSRV1Beta1(ctx, client, nodeName)
-	if err != nil {
-		return nil, err
-	}
-	return v1betareq, nil
-}
-
-func getNodeCSRV1(ctx context.Context, client kubernetes.Interface, nodeName string) (*Certificate, error) {
-	csrList, err := client.CertificatesV1().CertificateSigningRequests().List(ctx, getOptions(certv1.KubeAPIServerClientKubeletSignerName))
-	if err != nil {
-		return nil, err
-	}
-
-	// Sort by newest first soo we don't need to parse old items.
-	sort.Slice(csrList.Items, func(i, j int) bool {
-		return csrList.Items[i].CreationTimestamp.After(csrList.Items[j].CreationTimestamp.Time)
-	})
-
-	for _, csr := range csrList.Items {
-		csr := csr
-		sn, err := getSubjectCommonName(csr.Name, csr.Spec.Request)
-		if err != nil {
-			return nil, err
-		}
-		if sn == fmt.Sprintf("system:node:%s", nodeName) {
-			return &Certificate{v1: &csr}, nil
-		}
-	}
-
-	return nil, ErrNodeCertificateNotFound
-}
-
-func getNodeCSRV1Beta1(ctx context.Context, client kubernetes.Interface, nodeName string) (*Certificate, error) {
-	csrList, err := client.CertificatesV1beta1().CertificateSigningRequests().
-		List(ctx, getOptions(certv1beta1.KubeAPIServerClientKubeletSignerName))
-	if err != nil {
-		return nil, err
-	}
-
-	// Sort by newest first soo we don't need to parse old items.
-	sort.Slice(csrList.Items, func(i, j int) bool {
-		return csrList.Items[i].GetCreationTimestamp().After(csrList.Items[j].GetCreationTimestamp().Time)
-	})
-
-	for _, csr := range csrList.Items {
-		sn, err := getSubjectCommonName(csr.Name, csr.Spec.Request)
-		if err != nil {
-			return nil, err
-		}
-		if sn == fmt.Sprintf("system:node:%s", nodeName) {
-			return &Certificate{
-				v1Beta1: &csr,
-			}, nil
-		}
-	}
-
-	return nil, ErrNodeCertificateNotFound
-}
-
 func createInformer(ctx context.Context, client kubernetes.Interface, fieldSelectorV1, fieldSelectorV1beta1 string) (informers.SharedInformerFactory, cache.SharedIndexInformer, error) {
 	var (
 		errv1      error
@@ -392,6 +323,7 @@ func toCertificate(obj interface{}) (cert *Certificate, err error) {
 			SignerName:      e.Spec.SignerName,
 			v1:              e,
 			RequestingUser:  e.Spec.Username,
+			Usages:          toKeyUsage(e.Spec.Usages),
 		}
 	case *certv1beta1.CertificateSigningRequest:
 		request = e.Spec.Request
@@ -399,6 +331,7 @@ func toCertificate(obj interface{}) (cert *Certificate, err error) {
 			OriginalCSRName: e.Name,
 			v1Beta1:         e,
 			RequestingUser:  e.Spec.Username,
+			Usages:          toKeyUsage(e.Spec.Usages),
 		}
 		if e.Spec.SignerName != nil {
 			cert.SignerName = *e.Spec.SignerName
@@ -407,7 +340,7 @@ func toCertificate(obj interface{}) (cert *Certificate, err error) {
 		return nil, errUnexpectedObjectType
 	}
 
-	cn, err := getSubjectCommonName(cert.OriginalCSRName, request)
+	cn, err := cert.getSubjectCommonName(request)
 	if err != nil {
 		return nil, fmt.Errorf("getSubjectCommonName: Name: %v RequestingUser: %v  request: %v %w", cert.OriginalCSRName, cert.RequestingUser, string(request), err)
 	}
@@ -425,14 +358,14 @@ func sendCertificate(ctx context.Context, c chan<- *Certificate, cert *Certifica
 	}
 }
 
-func getSubjectCommonName(csrName string, csrRequest []byte) (string, error) {
+func (c *Certificate) getSubjectCommonName(csrRequest []byte) (string, error) {
 	// node-csr prefix for bootstrap kubelet csr.
 	// csr- prefix for kubelet csr.
-	if !strings.HasPrefix(csrName, "node-csr") && !strings.HasPrefix(csrName, "csr-") {
-		return "", fmt.Errorf("invalid CSR name: %s %w", csrName, errInvalidCSR)
+	if !strings.HasPrefix(c.OriginalCSRName, "node-csr") && !strings.HasPrefix(c.OriginalCSRName, "csr-") {
+		return "", fmt.Errorf("invalid CSR name: %s %w", c.OriginalCSRName, errInvalidCSR)
 	}
 
-	certReq, err := parseCSR(csrRequest)
+	certReq, err := c.parseCSR(csrRequest)
 	if err != nil {
 		return "", err
 	}
@@ -440,7 +373,7 @@ func getSubjectCommonName(csrName string, csrRequest []byte) (string, error) {
 }
 
 // parseCSR is mostly needed to extract node name from cert subject common name.
-func parseCSR(pemData []byte) (*x509.CertificateRequest, error) {
+func (c *Certificate) parseCSR(pemData []byte) (*x509.CertificateRequest, error) {
 	block, _ := pem.Decode(pemData)
 	if block == nil || block.Type != "CERTIFICATE REQUEST" {
 		return nil, fmt.Errorf("PEM block type must be CERTIFICATE REQUEST")
@@ -449,24 +382,35 @@ func parseCSR(pemData []byte) (*x509.CertificateRequest, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse certificate request: %w", err)
 	}
-	if err := validateCSR(csr); err != nil {
+	if err := c.validateCSR(csr); err != nil {
 		return nil, fmt.Errorf("validate CSR: %w", err)
 	}
 	return csr, nil
 }
 
-func validateCSR(csr *x509.CertificateRequest) error {
-	if len(csr.Subject.CommonName) == 0 {
-		return fmt.Errorf("%w: CSR subject common name", errInvalidCSR)
-	}
-	if len(csr.URIs) > 0 {
-		return fmt.Errorf("%w: CSR subject URIs", errInvalidCSR)
-	}
-	if len(csr.EmailAddresses) > 0 {
-		return fmt.Errorf("%w: CSR subject email addresses", errInvalidCSR)
+func (c *Certificate) validateCSR(csr *x509.CertificateRequest) error {
+	if c.SignerName == certv1.KubeletServingSignerName {
+		if len(csr.Subject.CommonName) == 0 {
+			return fmt.Errorf("%w: CSR subject common name", errInvalidCSR)
+		}
+		if len(csr.URIs) > 0 {
+			return fmt.Errorf("%w: CSR subject URIs", errInvalidCSR)
+		}
+		if len(csr.EmailAddresses) > 0 {
+			return fmt.Errorf("%w: CSR subject email addresses", errInvalidCSR)
+		}
+
+		for _, u := range c.Usages {
+			if u != fmt.Sprintf("%v", certv1.UsageServerAuth) &&
+				u != fmt.Sprintf("%v", certv1.UsageDigitalSignature) &&
+				u != fmt.Sprintf("%v", certv1.UsageKeyEncipherment) {
+				return fmt.Errorf("%w: CSR usages", errInvalidCSR)
+			}
+		}
+		// TODO add validation of IP and DNS
+		// https://kubernetes.io/docs/reference/access-authn-authz/kubelet-tls-bootstrapping/#certificate-rotation
 	}
 
-	// TODO add validation of IP and DNS
 	return nil
 }
 
@@ -477,4 +421,12 @@ func getOptions(signer string) metav1.ListOptions {
 			"spec.sign4erName": signer,
 		}).String(),
 	}
+}
+
+func toKeyUsage[T certv1.KeyUsage | certv1beta1.KeyUsage](usages []T) []string {
+	u := make([]string, 0, len(usages))
+	for _, usage := range usages {
+		u = append(u, string(usage))
+	}
+	return u
 }

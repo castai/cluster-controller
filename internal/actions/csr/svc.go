@@ -161,11 +161,11 @@ func (h *ApprovalManager) runAutoApproveForCastAINodes(ctx context.Context, c <-
 				continue
 			}
 			// prevent starting goroutine for the same node certificate
-			if !h.addInProgress(fmt.Sprintf("%v_%v", cert.Name, cert.SignerName)) {
+			if !h.addInProgress(cert.Name, cert.SignerName) {
 				continue
 			}
 			go func(cert *Certificate) {
-				defer h.removeInProgress(cert.Name)
+				defer h.removeInProgress(cert.Name, cert.SignerName)
 
 				log := log.WithFields(logrus.Fields{
 					"csr_name":          cert.Name,
@@ -214,23 +214,28 @@ func newApproveCSRExponentialBackoff() wait.Backoff {
 	return b
 }
 
-func (h *ApprovalManager) addInProgress(name string) bool {
+func (h *ApprovalManager) addInProgress(certName, signerName string) bool {
 	h.m.Lock()
 	defer h.m.Unlock()
 	if h.inProgress == nil {
 		h.inProgress = make(map[string]struct{})
 	}
-	_, ok := h.inProgress[name]
+	key := createKey(certName, signerName)
+	_, ok := h.inProgress[key]
 	if ok {
 		return false
 	}
-	h.inProgress[name] = struct{}{}
+	h.inProgress[key] = struct{}{}
 	return true
 }
 
-func (h *ApprovalManager) removeInProgress(nodeName string) {
+func (h *ApprovalManager) removeInProgress(certName, signerName string) {
 	h.m.Lock()
 	defer h.m.Unlock()
 
-	delete(h.inProgress, nodeName)
+	delete(h.inProgress, createKey(certName, signerName))
+}
+
+func createKey(certName, signerName string) string {
+	return fmt.Sprintf("%s-%s", certName, signerName)
 }
