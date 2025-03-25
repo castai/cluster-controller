@@ -418,7 +418,7 @@ func (c *Certificate) validateCSR(csr *x509.CertificateRequest) error {
 func getOptions(signer string) metav1.ListOptions {
 	return metav1.ListOptions{
 		FieldSelector: fields.SelectorFromSet(fields.Set{
-			"spec.sign4erName": signer,
+			"spec.signerName": signer,
 		}).String(),
 	}
 }
