@@ -45,7 +45,10 @@ type Certificate struct {
 	SignerName      string
 }
 
-var errCSRNotFound = errors.New("v1 or v1beta csr should be set")
+var (
+	errCSRNotFound = errors.New("v1 or v1beta csr should be set")
+	errInvalidCSR  = errors.New("invalid CSR")
+)
 
 func (c *Certificate) Validate() error {
 	if c.v1 == nil && c.v1Beta1 == nil {
@@ -422,12 +425,11 @@ func sendCertificate(ctx context.Context, c chan<- *Certificate, cert *Certifica
 	}
 }
 
-// var ErrCSRNotSupported = fmt.Errorf("CSR not supported")
 func getSubjectCommonName(csrName string, csrRequest []byte) (string, error) {
 	// node-csr prefix for bootstrap kubelet csr.
 	// csr- prefix for kubelet csr.
 	if !strings.HasPrefix(csrName, "node-csr") && !strings.HasPrefix(csrName, "csr-") {
-		return "", nil
+		return "", fmt.Errorf("invalid CSR name: %s %w", csrName, errInvalidCSR)
 	}
 
 	certReq, err := parseCSR(csrRequest)
@@ -453,17 +455,15 @@ func parseCSR(pemData []byte) (*x509.CertificateRequest, error) {
 	return csr, nil
 }
 
-var ErrInvalidCSR = errors.New("invalid CSR")
-
 func validateCSR(csr *x509.CertificateRequest) error {
 	if len(csr.Subject.CommonName) == 0 {
-		return fmt.Errorf("%w: CSR subject common name", ErrInvalidCSR)
+		return fmt.Errorf("%w: CSR subject common name", errInvalidCSR)
 	}
 	if len(csr.URIs) > 0 {
-		return fmt.Errorf("%w: CSR subject URIs", ErrInvalidCSR)
+		return fmt.Errorf("%w: CSR subject URIs", errInvalidCSR)
 	}
 	if len(csr.EmailAddresses) > 0 {
-		return fmt.Errorf("%w: CSR subject email addresses", ErrInvalidCSR)
+		return fmt.Errorf("%w: CSR subject email addresses", errInvalidCSR)
 	}
 
 	// TODO add validation of IP and DNS

@@ -110,7 +110,7 @@ func (ts *gkeTestSuite) Run(ctx context.Context, t *testing.T) {
 		},
 	})
 
-	r.NoError(err, "failed to add node")
+	r.NoError(err, "failed to add node", err)
 
 	t.Cleanup(func() {
 		if err := cleanupNode(); err != nil {
