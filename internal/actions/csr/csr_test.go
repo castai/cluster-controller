@@ -200,6 +200,7 @@ func Test_toCertificate(t *testing.T) {
 				obj: &certv1.CertificateSigningRequest{
 					ObjectMeta: metav1.ObjectMeta{
 						CreationTimestamp: metav1.Time{Time: time.Now().Add(-csrTTL)},
+						Name:              "node-csr-gke-dev-master-cast-pool-cb53177b",
 					},
 					Spec: kBootstrapCSRv1.Spec,
 				},
@@ -221,10 +222,7 @@ func Test_toCertificate(t *testing.T) {
 					},
 				},
 			},
-			checkFunc: func(t *testing.T, cert *Certificate) {
-				require.False(t, cert.isRequestedByNodeBootstrap())
-			},
-			wantErr: false,
+			wantErr: true,
 		},
 		{
 			name: "kubelet-bootstrap: ok v1",
