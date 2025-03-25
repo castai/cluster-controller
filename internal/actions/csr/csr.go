@@ -421,11 +421,13 @@ func sendCertificate(ctx context.Context, c chan<- *Certificate, cert *Certifica
 	}
 }
 
+var ErrCSRNotSupported = fmt.Errorf("CSR not supported")
+
 func getSubjectCommonName(csrName string, csrRequest []byte) (string, error) {
 	// node-csr prefix for bootstrap kubelet csr.
 	// csr- prefix for kubelet csr.
 	if !strings.HasPrefix(csrName, "node-csr") && !strings.HasPrefix(csrName, "csr-") {
-		return "", nil
+		return "", ErrCSRNotSupported
 	}
 
 	certReq, err := parseCSR(csrRequest)
@@ -448,7 +450,7 @@ func parseCSR(pemData []byte) (*x509.CertificateRequest, error) {
 func getOptions(signer string) metav1.ListOptions {
 	return metav1.ListOptions{
 		FieldSelector: fields.SelectorFromSet(fields.Set{
-			"spec.signerName": signer,
+			"spec.sign4erName": signer,
 		}).String(),
 	}
 }
