@@ -167,7 +167,7 @@ spec:
       serviceAccountName: castai-loadtest-agent-sa
       containers:
         - name: castai-agent
-          image: docker.io/lachezarcast/cluster-controller:loadtest2 # TODO!
+          image: ${LOADTEST_REPOSITORY}:${LOADTEST_TAG}
           imagePullPolicy: Always
           ports:
             - containerPort: 8080

@@ -2,6 +2,8 @@
 
 CC_IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-us-docker.pkg.dev/castai-hub/library/cluster-controller}"
 CC_IMAGE_TAG="${IMAGE_TAG:-latest}"
+LOAD_TEST_IMAGE_REPOSITORY="${LOAD_TEST_IMAGE_REPOSITORY:-$CC_IMAGE_REPOSITORY}"
+LOAD_TEST_IMAGE_TAG="${LOAD_TEST_IMAGE_TAG:-$CC_IMAGE_TAG}"
 DEPLOY_CLUSTER_CONTROLLER="${DEPLOY_CLUSTER_CONTROLLER:-true}"
 
 # Determine the directory where the script resides.
@@ -28,4 +30,6 @@ if [ "$DEPLOY_CLUSTER_CONTROLLER" = "true" ]; then
 fi
 
 echo "Deploying load testing components"
-kubectl apply -k "$SCRIPT_DIR"
+kubectl kustomize "$SCRIPT_DIR" | \
+  LOADTEST_REPOSITORY="$LOAD_TEST_IMAGE_REPOSITORY" LOADTEST_TAG="$LOAD_TEST_IMAGE_TAG" envsubst \$LOADTEST_REPOSITORY,\$LOADTEST_TAG | \
+  kubectl apply -f -
