@@ -18,6 +18,38 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus-sa
+  namespace: castai-agent
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus-role-binding
+subjects:
+  - kind: ServiceAccount
+    name: prometheus-sa
+    namespace: castai-agent
+roleRef:
+  kind: ClusterRole
+  name: prometheus-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus-role
+rules:
+  - apiGroups: [""]
+    resources:
+      - nodes
+      - services
+      - endpoints
+      - pods
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: v1
 kind: ConfigMap
 metadata:
   name: prometheus-config
@@ -28,21 +60,74 @@ data:
       scrape_interval: 15s
     scrape_configs:
       - job_name: 'cluster-controller'
-        static_configs:
-          - targets: ['localhost:9090']
+        kubernetes_sd_configs:
+        - role: pod
+          namespaces:
+            names:
+              - castai-agent
+        relabel_configs:
+          # Filter targets based on a deployment label.
+          - source_labels: [ __meta_kubernetes_pod_label_app_kubernetes_io_name ]
+            action: keep
+            regex: castai-cluster-controller
+          # Explicitly set the scrape port to 9090 as this is what CC uses.
+          - source_labels: [ __address__ ]
+            regex: ([^:]+)(?::\d+)?
+            target_label: __address__
+            replacement: $1:9090
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: grafana-service
+  name: observability-service
   namespace: castai-agent
 spec:
   selector:
-    app: monitored-app
+    app: simple-observability
   ports:
     - protocol: TCP
       port: 3000
       targetPort: 3000
+      name: grafana
+    - protocol: TCP
+      port: 9090
+      targetPort: 9090
+      name: prometheus
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simple-observability
+  namespace: castai-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: simple-observability
+  template:
+    metadata:
+      labels:
+        app: simple-observability
+    spec:
+      serviceAccountName: prometheus-sa
+      containers:
+        - name: prometheus
+          image: prom/prometheus:latest
+          args:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+          ports:
+            - containerPort: 9090
+          volumeMounts:
+            - name: prometheus-config-volume
+              mountPath: /etc/prometheus
+        - name: grafana
+          image: grafana/grafana:latest
+          ports:
+            - containerPort: 3000
+      volumes:
+        - name: prometheus-config-volume
+          configMap:
+            name: prometheus-config
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -61,19 +146,6 @@ spec:
     spec:
       serviceAccountName: castai-loadtest-agent-sa
       containers:
-        - name: prometheus-sidecar
-          image: prom/prometheus:latest
-          args:
-            - "--config.file=/etc/prometheus/prometheus.yml"
-          ports:
-            - containerPort: 9091
-          volumeMounts:
-            - name: prometheus-config-volume
-              mountPath: /etc/prometheus
-        - name: grafana
-          image: grafana/grafana:latest
-          ports:
-            - containerPort: 3000
         - name: castai-agent
           image: docker.io/lachezarcast/cluster-controller:loadtest2 # TODO!
           imagePullPolicy: Always
@@ -85,10 +157,6 @@ spec:
           env:
             - name: PORT
               value: "8080"
-      volumes:
-        - name: prometheus-config-volume
-          configMap:
-            name: prometheus-config
 ---
 apiVersion: v1
 kind: Service
@@ -99,12 +167,6 @@ spec:
   selector:
     app: castai-loadtest-agent
   ports:
-    - name: prometheus
-      port: 9091
-      targetPort: 9091
-    - name: grafana
-      port: 3000
-      targetPort: 3000
     - name: loadtest
       port: 8080
       targetPort: 8080
