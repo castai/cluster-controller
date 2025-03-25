@@ -168,7 +168,7 @@ func Test_nodeBootstrap(t *testing.T) {
 			cert := &Certificate{
 				RequestingUser: tc.reqUser,
 			}
-			require.Equal(t, tc.want, cert.NodeBootstrap())
+			require.Equal(t, tc.want, cert.isRequestedByNodeBootstrap())
 		})
 	}
 }
@@ -222,7 +222,7 @@ func Test_toCertificate(t *testing.T) {
 				},
 			},
 			checkFunc: func(t *testing.T, cert *Certificate) {
-				require.False(t, cert.NodeBootstrap())
+				require.False(t, cert.isRequestedByNodeBootstrap())
 			},
 			wantErr: false,
 		},
