@@ -5,7 +5,11 @@ Load test requires 3 components:
 - Kwok controller to simulate nodes/pods
 - Cluster controller itself.
 
-Right now this is extremely basic and you have to run those manually locally.
+Optionally, observability stack helps identify problems with the deployment.
+
+## Local run
+This runs all 3 components as local processes against a cluster. 
+Useful for debugging. https://github.com/arl/statsviz can be used for local observability.
 
 Start kwok:
 ```
@@ -26,3 +30,16 @@ After starting, start cluster controller with some dummy values and point it to 
 ```
 API_KEY=dummy API_URL=http://localhost:8080 CLUSTER_ID=D30A163C-C5DF-4CC8-985C-D1449398295E KUBECONFIG=~/.kube/config LOG_LEVEL=4 LEADER_ELECTION_NAMESPACE=default METRICS_ENABLED=true go run .                     
 ```
+
+## Deployment in cluster
+Running the command below will build the local cluster controller, push it to a repository and deploy all 3 required components + observability stack into the current cluster.
+Both the cluster controller and the test server will use the same image but will run in different modes. 
+
+`make deploy-loadtest DOCKER_REPOSITORY=<repository_for_iamge> VERSION=<tag> ARCH=amd64`
+
+If you wish to skip deploying cluster controller, prefix make with `DEPLOY_CLUSTER_CONTROLLER=false`. Be sure to update the existing cluster controller to use the deployed test server's URL.
+
+If you wish to use different repository for cluster controller and for test server, pass `LOAD_TEST_IMAGE_REPOSITORY` and `LOAD_TEST_IMAGE_TAG` env vars to the command.
+
+The deploy command also includes prometheus and grafana. 
+Use `kubectl port-forward -n castai-agent svc/observability-service 3000:3000` to reach the grafana instance. There is already a preconfigured dashboard available on the instance.
