@@ -1,8 +1,6 @@
 package csr
 
 import (
-	"context"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -10,51 +8,23 @@ import (
 	certv1 "k8s.io/api/certificates/v1"
 	certv1beta1 "k8s.io/api/certificates/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
-	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/client-go/util/homedir"
 )
 
-func TestApproveCSR(t *testing.T) {
-	if testing.Short() {
-		t.Skip()
-	}
-
-	r := require.New(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	client, err := getClient()
-	r.NoError(err)
-
-	cert, err := GetCertificateByNodeName(ctx, client, "gke-csr-cast-pool-ab259afb")
-	r.NoError(err)
-
-	err = cert.DeleteCSR(ctx, client)
-	r.NoError(err)
-
-	cert, err = cert.NewCSR(ctx, client)
-	r.NoError(err)
-
-	_, err = cert.ApproveCSRCertificate(ctx, client)
-	r.NoError(err)
-}
-
-func getClient() (*kubernetes.Clientset, error) {
-	var kubeconfig string
-	if home := homedir.HomeDir(); home != "" {
-		kubeconfig = filepath.Join(home, ".kube", "config")
-	}
-
-	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-	if err != nil {
-		return nil, err
-	}
-
-	clientset, err := kubernetes.NewForConfig(config)
-	return clientset, err
-}
+//func getClient() (*kubernetes.Clientset, error) {
+//	var kubeconfig string
+//	if home := homedir.HomeDir(); home != "" {
+//		kubeconfig = filepath.Join(home, ".kube", "config")
+//	}
+//
+//	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+//	if err != nil {
+//		return nil, err
+//	}
+//
+//	clientset, err := kubernetes.NewForConfig(config)
+//	return clientset, err
+//}
 
 func Test_isCastAINodeCsr(t *testing.T) {
 	type args struct {
