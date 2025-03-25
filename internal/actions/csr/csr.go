@@ -404,7 +404,7 @@ func (c *Certificate) validateCSR(csr *x509.CertificateRequest) error {
 			if u != fmt.Sprintf("%v", certv1.UsageServerAuth) &&
 				u != fmt.Sprintf("%v", certv1.UsageDigitalSignature) &&
 				u != fmt.Sprintf("%v", certv1.UsageKeyEncipherment) {
-				return fmt.Errorf("%w: CSR usages", errInvalidCSR)
+				return fmt.Errorf("%v: CSR usages %w", c.Usages, errInvalidCSR)
 			}
 		}
 		// TODO add validation of IP and DNS
