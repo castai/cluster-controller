@@ -127,7 +127,9 @@ func Get() Config {
 	}
 
 	if cfg.SelfPod.Namespace == "" {
-		required("LEADER_ELECTION_NAMESPACE")
+		// LEADER_ELECTION_NAMESPACE exists for backwards compatibility.
+		// But we use the namespace even without leader election so it's required.
+		required("self_pod.namespace or LEADER_ELECTION_NAMESPACE")
 	}
 
 	if cfg.LeaderElection.Enabled {
