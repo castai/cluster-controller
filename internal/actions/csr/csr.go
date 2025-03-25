@@ -93,15 +93,16 @@ func (c *Certificate) ForCASTAINode() bool {
 	return false
 }
 
-func (c *Certificate) NodeBootstrap() bool {
+func (c *Certificate) isRequestedByNodeBootstrap() bool {
 	// Since we only have one handler per CSR/certificate name,
 	// which is the node name, we can process the controller's certificates and kubelet-bootstrap`s.
 	// This covers the case when the controller restarts but the bootstrap certificate was deleted without our own certificate being approved.
 	return c.RequestingUser == "kubelet-bootstrap" || c.RequestingUser == "system:serviceaccount:castai-agent:castai-cluster-controller"
 }
 
-func (c *Certificate) SystemNode() bool {
+func (c *Certificate) isRequestedBySystemNode() bool {
 	// To avoid waiting for the certificate to be approved by control plane.
+	// We can approve the certificate if it was requested by the system node.
 	return strings.HasPrefix(c.RequestingUser, "system:node:")
 }
 
@@ -368,7 +369,7 @@ func processCSREvent(ctx context.Context, c chan<- *Certificate, csrObj interfac
 	if cert.Approved() ||
 		!cert.ForCASTAINode() ||
 		// approve only node bootstrap and kubelet CSR from node.
-		(!cert.NodeBootstrap() && !cert.SystemNode()) ||
+		(!cert.isRequestedBySystemNode() && !cert.isRequestedBySystemNode()) ||
 		cert.Outdated() {
 		return nil
 	}
