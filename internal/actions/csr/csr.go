@@ -422,8 +422,7 @@ func sendCertificate(ctx context.Context, c chan<- *Certificate, cert *Certifica
 	}
 }
 
-//var ErrCSRNotSupported = fmt.Errorf("CSR not supported")
-
+// var ErrCSRNotSupported = fmt.Errorf("CSR not supported")
 func getSubjectCommonName(csrName string, csrRequest []byte) (string, error) {
 	// node-csr prefix for bootstrap kubelet csr.
 	// csr- prefix for kubelet csr.
