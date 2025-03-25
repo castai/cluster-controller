@@ -48,7 +48,5 @@ generate-e2e-client:
 	go generate ./e2e/client
 .PHONY: generate-e2e-client
 
-# TODO: Make this less simplistic
-run-loadtest:
-	# TODO: Required because of reusing config
-	API_KEY=dummy API_URL=http://example.com CLUSTER_ID=D30A163C-C5DF-4CC8-985C-D1449398295E KUBECONFIG=~/.kube/config LOG_LEVEL=4 go run . test-server
+deploy-loadtest: release
+	IMAGE_REPOSITORY=$(DOCKER_REPOSITORY) IMAGE_TAG=$(VERSION) ./hack/loadtest/deploy.sh
