@@ -404,10 +404,10 @@ func (c *Certificate) validateCSR(csr *x509.CertificateRequest) error {
 		return fmt.Errorf("%w: CSR subject common name", errInvalidCSR)
 	}
 	if len(csr.URIs) > 0 {
-		return fmt.Errorf("%w: CSR subject URIs: %v", errInvalidCSR, csr.URIs)
+		return fmt.Errorf("%w: CSR subject URIs must be empty: %v", errInvalidCSR, csr.URIs)
 	}
 	if len(csr.EmailAddresses) > 0 {
-		return fmt.Errorf("%w: CSR subject email addresses: %v", errInvalidCSR, csr.EmailAddresses)
+		return fmt.Errorf("%w: CSR subject email addresses must be empty: %v", errInvalidCSR, csr.EmailAddresses)
 	}
 
 	if len(c.Usages) == 0 {
