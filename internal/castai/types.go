@@ -149,6 +149,7 @@ type ActionEvictPod struct {
 	PodName   string `json:"podName"`
 }
 
+// TODO clean up after proper handling unknown actions https://castai.atlassian.net/browse/KUBE-1036.
 type ActionApproveCSR struct {
 	NodeName         string `json:"nodeName"`
 	NodeID           string `json:"nodeId"`

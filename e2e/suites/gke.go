@@ -110,13 +110,13 @@ func (ts *gkeTestSuite) Run(ctx context.Context, t *testing.T) {
 		},
 	})
 
+	r.NoError(err, "failed to add node", err)
+
 	t.Cleanup(func() {
 		if err := cleanupNode(); err != nil {
 			ts.t.Logf("failed to cleanup node %s: %v", *node.Id, err)
 		}
 	})
-
-	r.NoError(err)
 
 	ts.t.Logf("node %s ready", *node.Id)
 

@@ -6,7 +6,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -37,13 +36,15 @@ var ErrNodeCertificateNotFound = errors.New("node certificate not found")
 
 // Certificate wraps v1 and v1beta1 csr.
 type Certificate struct {
-	v1             *certv1.CertificateSigningRequest
-	v1Beta1        *certv1beta1.CertificateSigningRequest
-	Name           string
-	RequestingUser string
+	v1      *certv1.CertificateSigningRequest
+	v1Beta1 *certv1beta1.CertificateSigningRequest
+	Name    string
 }
 
-var errCSRNotFound = errors.New("v1 or v1beta csr should be set")
+var (
+	errCSRNotFound = errors.New("v1 or v1beta csr should be set")
+	errInvalidCSR  = errors.New("invalid CSR")
+)
 
 func (c *Certificate) Validate() error {
 	if c.v1 == nil && c.v1Beta1 == nil {
@@ -91,11 +92,17 @@ func (c *Certificate) ForCASTAINode() bool {
 	return false
 }
 
-func (c *Certificate) NodeBootstrap() bool {
+func (c *Certificate) isRequestedByNodeBootstrap() bool {
 	// Since we only have one handler per CSR/certificate name,
 	// which is the node name, we can process the controller's certificates and kubelet-bootstrap`s.
 	// This covers the case when the controller restarts but the bootstrap certificate was deleted without our own certificate being approved.
-	return c.RequestingUser == "kubelet-bootstrap" || c.RequestingUser == "system:serviceaccount:castai-agent:castai-cluster-controller"
+	return c.RequestingUser() == "kubelet-bootstrap" || c.RequestingUser() == "system:serviceaccount:castai-agent:castai-cluster-controller"
+}
+
+func (c *Certificate) isRequestedBySystemNode() bool {
+	// To avoid waiting for the certificate to be approved by control plane.
+	// We can approve the certificate if it was requested by the system node.
+	return strings.HasPrefix(c.RequestingUser(), "system:node:")
 }
 
 func isAlreadyApproved(err error) bool {
@@ -179,15 +186,18 @@ func (c *Certificate) NewCSR(ctx context.Context, client kubernetes.Interface) (
 	return &Certificate{v1: resp}, nil
 }
 
-func startInformer(ctx context.Context, log logrus.FieldLogger, factory informers.SharedInformerFactory) {
+func startInformers(ctx context.Context, log logrus.FieldLogger, factories ...informers.SharedInformerFactory) {
 	stopCh := make(chan struct{})
 	defer close(stopCh)
 
-	factory.Start(stopCh)
-	log.Info("watching for new node csr")
+	for _, factory := range factories {
+		factory.Start(stopCh)
+	}
+
+	log.Info("watching for new node CSRs")
 
 	<-ctx.Done()
-	log.WithField("context", ctx.Err()).Info("finished watching for new node csr")
+	log.WithField("context", ctx.Err()).Info("finished watching for new node CSRs")
 }
 
 func get(ctx context.Context, client kubernetes.Interface, cert *Certificate) (*Certificate, error) {
@@ -247,76 +257,7 @@ func createV1beta1(ctx context.Context, client kubernetes.Interface, csr *certv1
 	return req, nil
 }
 
-// GetCertificateByNodeName lists all csr objects and parses request pem encoded cert to find it by node name.
-func GetCertificateByNodeName(ctx context.Context, client kubernetes.Interface, nodeName string) (*Certificate, error) {
-	v1req, err := getNodeCSRV1(ctx, client, nodeName)
-	if err != nil && !apierrors.IsNotFound(err) {
-		return nil, err
-	}
-	if v1req != nil {
-		return v1req, nil
-	}
-
-	v1betareq, err := getNodeCSRV1Beta1(ctx, client, nodeName)
-	if err != nil {
-		return nil, err
-	}
-	return v1betareq, nil
-}
-
-func getNodeCSRV1(ctx context.Context, client kubernetes.Interface, nodeName string) (*Certificate, error) {
-	csrList, err := client.CertificatesV1().CertificateSigningRequests().List(ctx, getOptions(certv1.KubeAPIServerClientKubeletSignerName))
-	if err != nil {
-		return nil, err
-	}
-
-	// Sort by newest first soo we don't need to parse old items.
-	sort.Slice(csrList.Items, func(i, j int) bool {
-		return csrList.Items[i].CreationTimestamp.After(csrList.Items[j].CreationTimestamp.Time)
-	})
-
-	for _, csr := range csrList.Items {
-		csr := csr
-		sn, err := getSubjectCommonName(csr.Name, csr.Spec.Request)
-		if err != nil {
-			return nil, err
-		}
-		if sn == fmt.Sprintf("system:node:%s", nodeName) {
-			return &Certificate{v1: &csr}, nil
-		}
-	}
-
-	return nil, ErrNodeCertificateNotFound
-}
-
-func getNodeCSRV1Beta1(ctx context.Context, client kubernetes.Interface, nodeName string) (*Certificate, error) {
-	csrList, err := client.CertificatesV1beta1().CertificateSigningRequests().
-		List(ctx, getOptions(certv1beta1.KubeAPIServerClientKubeletSignerName))
-	if err != nil {
-		return nil, err
-	}
-
-	// Sort by newest first soo we don't need to parse old items.
-	sort.Slice(csrList.Items, func(i, j int) bool {
-		return csrList.Items[i].GetCreationTimestamp().After(csrList.Items[j].GetCreationTimestamp().Time)
-	})
-
-	for _, csr := range csrList.Items {
-		sn, err := getSubjectCommonName(csr.Name, csr.Spec.Request)
-		if err != nil {
-			return nil, err
-		}
-		if sn == fmt.Sprintf("system:node:%s", nodeName) {
-			return &Certificate{
-				v1Beta1: &csr,
-			}, nil
-		}
-	}
-
-	return nil, ErrNodeCertificateNotFound
-}
-
-func createInformer(ctx context.Context, client kubernetes.Interface) (informers.SharedInformerFactory, cache.SharedIndexInformer, error) {
+func createInformer(ctx context.Context, client kubernetes.Interface, fieldSelectorV1, fieldSelectorV1beta1 string) (informers.SharedInformerFactory, cache.SharedIndexInformer, error) {
 	var (
 		errv1      error
 		errv1beta1 error
@@ -325,7 +266,7 @@ func createInformer(ctx context.Context, client kubernetes.Interface) (informers
 	if _, errv1 = client.CertificatesV1().CertificateSigningRequests().List(ctx, metav1.ListOptions{}); errv1 == nil {
 		v1Factory := informers.NewSharedInformerFactoryWithOptions(client, csrInformerResyncPeriod,
 			informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
-				opts.FieldSelector = getOptions(certv1.KubeAPIServerClientKubeletSignerName).FieldSelector
+				opts.FieldSelector = fieldSelectorV1
 			}))
 		v1Informer := v1Factory.Certificates().V1().CertificateSigningRequests().Informer()
 		return v1Factory, v1Informer, nil
@@ -334,7 +275,7 @@ func createInformer(ctx context.Context, client kubernetes.Interface) (informers
 	if _, errv1beta1 = client.CertificatesV1beta1().CertificateSigningRequests().List(ctx, metav1.ListOptions{}); errv1beta1 == nil {
 		v1Factory := informers.NewSharedInformerFactoryWithOptions(client, csrInformerResyncPeriod,
 			informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
-				opts.FieldSelector = getOptions(certv1beta1.KubeAPIServerClientKubeletSignerName).FieldSelector
+				opts.FieldSelector = fieldSelectorV1beta1
 			}))
 		v1Informer := v1Factory.Certificates().V1beta1().CertificateSigningRequests().Informer()
 		return v1Factory, v1Informer, nil
@@ -348,14 +289,18 @@ var errUnexpectedObjectType = errors.New("unexpected object type")
 func processCSREvent(ctx context.Context, c chan<- *Certificate, csrObj interface{}) error {
 	cert, err := toCertificate(csrObj)
 	if err != nil {
-		return err
+		return fmt.Errorf("toCertificate: %w", err)
 	}
 
 	if cert == nil {
 		return nil
 	}
 
-	if cert.Approved() || !cert.ForCASTAINode() || !cert.NodeBootstrap() || cert.Outdated() {
+	if cert.Approved() ||
+		!cert.ForCASTAINode() ||
+		// approve only node bootstrap and kubelet CSR from node.
+		(!cert.isRequestedBySystemNode() && !cert.isRequestedByNodeBootstrap()) ||
+		cert.Outdated() {
 		return nil
 	}
 
@@ -364,25 +309,29 @@ func processCSREvent(ctx context.Context, c chan<- *Certificate, csrObj interfac
 }
 
 func toCertificate(obj interface{}) (cert *Certificate, err error) {
-	var name string
 	var request []byte
+	originalCSRName := ""
 
 	switch e := obj.(type) {
 	case *certv1.CertificateSigningRequest:
-		name = e.Name
 		request = e.Spec.Request
-		cert = &Certificate{Name: name, v1: e, RequestingUser: e.Spec.Username}
+		originalCSRName = e.Name
+		cert = &Certificate{
+			v1: e,
+		}
 	case *certv1beta1.CertificateSigningRequest:
-		name = e.Name
 		request = e.Spec.Request
-		cert = &Certificate{Name: name, v1Beta1: e, RequestingUser: e.Spec.Username}
+		originalCSRName = e.Name
+		cert = &Certificate{
+			v1Beta1: e,
+		}
 	default:
 		return nil, errUnexpectedObjectType
 	}
 
-	cn, err := getSubjectCommonName(name, request)
+	cn, err := cert.getSubjectCommonName(request)
 	if err != nil {
-		return nil, fmt.Errorf("getSubjectCommonName: Name: %v RequestingUser: %v  request: %v %w", cert.Name, cert.RequestingUser, string(request), err)
+		return nil, fmt.Errorf("getSubjectCommonName: Name: %v RequestingUser: %v  request: %v %w", originalCSRName, cert.RequestingUser(), string(request), err)
 	}
 
 	cert.Name = cn
@@ -398,25 +347,126 @@ func sendCertificate(ctx context.Context, c chan<- *Certificate, cert *Certifica
 	}
 }
 
-func getSubjectCommonName(csrName string, csrRequest []byte) (string, error) {
-	if !strings.HasPrefix(csrName, "node-csr") {
-		return "", nil
+func (c *Certificate) OriginalCSRName() string {
+	if c.v1 != nil {
+		return c.v1.Name
+	}
+	if c.v1Beta1 != nil {
+		return c.v1Beta1.Name
 	}
 
-	certReq, err := parseCSR(csrRequest)
+	return ""
+}
+
+func (c *Certificate) RequestingUser() string {
+	if c.v1 != nil {
+		return c.v1.Spec.Username
+	}
+	if c.v1Beta1 != nil {
+		return c.v1Beta1.Spec.Username
+	}
+
+	return ""
+}
+
+func (c *Certificate) SignerName() string {
+	if c.v1 != nil {
+		return c.v1.Spec.SignerName
+	}
+	if c.v1Beta1 != nil {
+		if c.v1Beta1.Spec.SignerName != nil {
+			return *c.v1Beta1.Spec.SignerName
+		}
+	}
+
+	return ""
+}
+
+func (c *Certificate) Usages() []string {
+	if c.v1 != nil {
+		return toKeyUsage(c.v1.Spec.Usages)
+	}
+	if c.v1Beta1 != nil {
+		return toKeyUsage(c.v1Beta1.Spec.Usages)
+	}
+
+	return nil
+}
+
+func (c *Certificate) getSubjectCommonName(csrRequest []byte) (string, error) {
+	// node-csr prefix for bootstrap kubelet csr.
+	// csr- prefix for kubelet csr.
+	originalCSRName := c.OriginalCSRName()
+	if !strings.HasPrefix(originalCSRName, "node-csr") && !strings.HasPrefix(originalCSRName, "csr-") {
+		return "", fmt.Errorf("invalid CSR name: %s %w", originalCSRName, errInvalidCSR)
+	}
+
+	certReq, err := c.parseCSR(csrRequest)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("parse CSR: %w", err)
 	}
 	return certReq.Subject.CommonName, nil
 }
 
 // parseCSR is mostly needed to extract node name from cert subject common name.
-func parseCSR(pemData []byte) (*x509.CertificateRequest, error) {
+func (c *Certificate) parseCSR(pemData []byte) (*x509.CertificateRequest, error) {
 	block, _ := pem.Decode(pemData)
 	if block == nil || block.Type != "CERTIFICATE REQUEST" {
 		return nil, fmt.Errorf("PEM block type must be CERTIFICATE REQUEST")
 	}
-	return x509.ParseCertificateRequest(block.Bytes)
+	csr, err := x509.ParseCertificateRequest(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("parse certificate request: %w", err)
+	}
+	if err := c.validateCSR(csr); err != nil {
+		return nil, fmt.Errorf("validate CSR: %w", err)
+	}
+	return csr, nil
+}
+
+func (c *Certificate) validateCSR(csr *x509.CertificateRequest) error {
+	if csr == nil {
+		return fmt.Errorf("%w: nil CSR", errInvalidCSR)
+	}
+	if c.SignerName() == certv1.KubeAPIServerClientKubeletSignerName {
+		// no validation
+		return nil
+	}
+	if c.SignerName() != certv1.KubeletServingSignerName {
+		return fmt.Errorf("%w: unknown signer name %s", errInvalidCSR, c.SignerName())
+	}
+
+	if len(csr.Subject.CommonName) == 0 {
+		return fmt.Errorf("%w: CSR subject common name", errInvalidCSR)
+	}
+	if len(csr.URIs) > 0 {
+		return fmt.Errorf("%w: CSR subject URIs must be empty: %v", errInvalidCSR, csr.URIs)
+	}
+	if len(csr.EmailAddresses) > 0 {
+		return fmt.Errorf("%w: CSR subject email addresses must be empty: %v", errInvalidCSR, csr.EmailAddresses)
+	}
+
+	if len(c.Usages()) == 0 {
+		return fmt.Errorf("%w: CSR Usages is empty", errInvalidCSR)
+	}
+	usageServerAuthExisted := false
+	for _, u := range c.Usages() {
+		if u != fmt.Sprintf("%v", certv1.UsageServerAuth) &&
+			u != fmt.Sprintf("%v", certv1.UsageDigitalSignature) &&
+			u != fmt.Sprintf("%v", certv1.UsageKeyEncipherment) {
+			return fmt.Errorf("%v: CSR usages %w", c.Usages(), errInvalidCSR)
+		}
+		if u == fmt.Sprintf("%v", certv1.UsageServerAuth) {
+			usageServerAuthExisted = true
+		}
+	}
+	if !usageServerAuthExisted {
+		return fmt.Errorf("%w: CSR usages must be for server usage %v", errInvalidCSR, c.Usages())
+	}
+	// TODO add validation of IP and DNS
+	// https://kubernetes.io/docs/reference/access-authn-authz/kubelet-tls-bootstrapping/#certificate-rotation
+
+	return nil
 }
 
 //nolint:unparam
@@ -426,4 +476,12 @@ func getOptions(signer string) metav1.ListOptions {
 			"spec.signerName": signer,
 		}).String(),
 	}
+}
+
+func toKeyUsage[T certv1.KeyUsage | certv1beta1.KeyUsage](usages []T) []string {
+	u := make([]string, 0, len(usages))
+	for _, usage := range usages {
+		u = append(u, string(usage))
+	}
+	return u
 }

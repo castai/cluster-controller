@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	certv1 "k8s.io/api/certificates/v1"
+	certv1beta1 "k8s.io/api/certificates/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
@@ -37,9 +39,22 @@ type ApprovalManager struct {
 }
 
 func (h *ApprovalManager) Start(ctx context.Context) error {
-	informerFactory, csrInformer, err := createInformer(ctx, h.clientset)
+	informerKubeletSignerFactory, csrInformerKubeletSigner, err := createInformer(
+		ctx,
+		h.clientset,
+		getOptions(certv1.KubeAPIServerClientKubeletSignerName).FieldSelector,
+		getOptions(certv1beta1.KubeAPIServerClientKubeletSignerName).FieldSelector)
 	if err != nil {
-		return fmt.Errorf("while creating informer: %w", err)
+		return fmt.Errorf("while creating informer for %v: %w", certv1.KubeAPIServerClientKubeletSignerName, err)
+	}
+
+	informerKubeletServingFactory, csrInformerKubeletServing, err := createInformer(
+		ctx,
+		h.clientset,
+		getOptions(certv1.KubeletServingSignerName).FieldSelector,
+		getOptions(certv1beta1.KubeletServingSignerName).FieldSelector)
+	if err != nil {
+		return fmt.Errorf("while creating informer for %v: %w", certv1.KubeletServingSignerName, err)
 	}
 
 	c := make(chan *Certificate, 1)
@@ -52,7 +67,11 @@ func (h *ApprovalManager) Start(ctx context.Context) error {
 		},
 	}
 
-	if _, err := csrInformer.AddEventHandler(handlerFuncs); err != nil {
+	if _, err := csrInformerKubeletSigner.AddEventHandler(handlerFuncs); err != nil {
+		return fmt.Errorf("adding csr informer event handlers: %w", err)
+	}
+
+	if _, err := csrInformerKubeletServing.AddEventHandler(handlerFuncs); err != nil {
 		return fmt.Errorf("adding csr informer event handlers: %w", err)
 	}
 
@@ -61,7 +80,7 @@ func (h *ApprovalManager) Start(ctx context.Context) error {
 		return nil
 	}
 
-	go startInformer(ctx, h.log, informerFactory)
+	go startInformers(ctx, h.log, informerKubeletSignerFactory, informerKubeletServingFactory)
 	go h.runAutoApproveForCastAINodes(ctx, c)
 
 	return nil
@@ -142,13 +161,17 @@ func (h *ApprovalManager) runAutoApproveForCastAINodes(ctx context.Context, c <-
 				continue
 			}
 			// prevent starting goroutine for the same node certificate
-			if !h.addInProgress(cert.Name) {
+			if !h.addInProgress(cert.Name, cert.SignerName()) {
 				continue
 			}
 			go func(cert *Certificate) {
-				defer h.removeInProgress(cert.Name)
+				defer h.removeInProgress(cert.Name, cert.SignerName())
 
-				log := log.WithField("node_name", cert.Name)
+				log := log.WithFields(logrus.Fields{
+					"csr_name":          cert.Name,
+					"signer":            cert.SignerName(),
+					"original_csr_name": cert.OriginalCSRName(),
+				})
 				log.Info("auto approving csr")
 				err := h.handleWithRetry(ctx, log, cert)
 				if err != nil {
@@ -191,23 +214,28 @@ func newApproveCSRExponentialBackoff() wait.Backoff {
 	return b
 }
 
-func (h *ApprovalManager) addInProgress(nodeName string) bool {
+func (h *ApprovalManager) addInProgress(certName, signerName string) bool {
 	h.m.Lock()
 	defer h.m.Unlock()
 	if h.inProgress == nil {
 		h.inProgress = make(map[string]struct{})
 	}
-	_, ok := h.inProgress[nodeName]
+	key := createKey(certName, signerName)
+	_, ok := h.inProgress[key]
 	if ok {
 		return false
 	}
-	h.inProgress[nodeName] = struct{}{}
+	h.inProgress[key] = struct{}{}
 	return true
 }
 
-func (h *ApprovalManager) removeInProgress(nodeName string) {
+func (h *ApprovalManager) removeInProgress(certName, signerName string) {
 	h.m.Lock()
 	defer h.m.Unlock()
 
-	delete(h.inProgress, nodeName)
+	delete(h.inProgress, createKey(certName, signerName))
+}
+
+func createKey(certName, signerName string) string {
+	return fmt.Sprintf("%s-%s", certName, signerName)
 }

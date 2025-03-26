@@ -1,8 +1,9 @@
 package csr
 
 import (
-	"context"
-	"path/filepath"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"net/url"
 	"testing"
 	"time"
 
@@ -10,51 +11,8 @@ import (
 	certv1 "k8s.io/api/certificates/v1"
 	certv1beta1 "k8s.io/api/certificates/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
-	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/client-go/util/homedir"
 )
-
-func TestApproveCSR(t *testing.T) {
-	if testing.Short() {
-		t.Skip()
-	}
-
-	r := require.New(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	client, err := getClient()
-	r.NoError(err)
-
-	cert, err := GetCertificateByNodeName(ctx, client, "gke-csr-cast-pool-ab259afb")
-	r.NoError(err)
-
-	err = cert.DeleteCSR(ctx, client)
-	r.NoError(err)
-
-	cert, err = cert.NewCSR(ctx, client)
-	r.NoError(err)
-
-	_, err = cert.ApproveCSRCertificate(ctx, client)
-	r.NoError(err)
-}
-
-func getClient() (*kubernetes.Clientset, error) {
-	var kubeconfig string
-	if home := homedir.HomeDir(); home != "" {
-		kubeconfig = filepath.Join(home, ".kube", "config")
-	}
-
-	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-	if err != nil {
-		return nil, err
-	}
-
-	clientset, err := kubernetes.NewForConfig(config)
-	return clientset, err
-}
 
 func Test_isCastAINodeCsr(t *testing.T) {
 	type args struct {
@@ -166,16 +124,22 @@ func Test_nodeBootstrap(t *testing.T) {
 	for name, tc := range tt {
 		t.Run(name, func(t *testing.T) {
 			cert := &Certificate{
-				RequestingUser: tc.reqUser,
+				v1: &certv1.CertificateSigningRequest{
+					Spec: certv1.CertificateSigningRequestSpec{
+						Username: tc.reqUser,
+					},
+				},
 			}
-			require.Equal(t, tc.want, cert.NodeBootstrap())
+			require.Equal(t, tc.want, cert.isRequestedByNodeBootstrap())
 		})
 	}
 }
 
 func Test_toCertificate(t *testing.T) {
-	testCSRv1 := getCSRv1("node-csr", "kubelet-bootstrap")
-	testCSRv1beta1 := getCSRv1betav1("node-csr", "kubelet-bootstrap")
+	kBootstrapCSRv1 := getCSRv1("node-csr", "kubelet-bootstrap")
+	kBootstrapCtCSRv1beta1 := getCSRv1betav1("node-csr", "kubelet-bootstrap")
+	kServingCSRv1 := getCSRv1("csr-s7v44", "system:node:gke-va")
+	kServingCSRv1beta1 := getCSRv1betav1("csr-s7v44", "system:node:gke-va")
 	type args struct {
 		obj interface{}
 	}
@@ -198,8 +162,9 @@ func Test_toCertificate(t *testing.T) {
 				obj: &certv1.CertificateSigningRequest{
 					ObjectMeta: metav1.ObjectMeta{
 						CreationTimestamp: metav1.Time{Time: time.Now().Add(-csrTTL)},
+						Name:              "node-csr-gke-dev-master-cast-pool-cb53177b",
 					},
-					Spec: testCSRv1.Spec,
+					Spec: kBootstrapCSRv1.Spec,
 				},
 			},
 			checkFunc: func(t *testing.T, cert *Certificate) {
@@ -219,33 +184,54 @@ func Test_toCertificate(t *testing.T) {
 					},
 				},
 			},
+			wantErr: true,
+		},
+		{
+			name: "kubelet-bootstrap: ok v1",
+			args: args{
+				obj: kBootstrapCSRv1,
+			},
 			checkFunc: func(t *testing.T, cert *Certificate) {
-				require.False(t, cert.NodeBootstrap())
+				require.Equal(t, "system:node:gke-dev-master-cast-pool-cb53177b", cert.Name)
+				require.Equal(t, "kubelet-bootstrap", cert.RequestingUser())
+				require.Equal(t, kBootstrapCSRv1, cert.v1)
 			},
 			wantErr: false,
 		},
 		{
-			name: "ok v1",
+			name: "kubelet-bootstrap: ok v1beta1",
 			args: args{
-				obj: testCSRv1,
+				obj: kBootstrapCtCSRv1beta1,
+			},
+			wantErr: false,
+			checkFunc: func(t *testing.T, cert *Certificate) {
+				require.Equal(t, "system:node:gke-dev-master-cast-pool-cb53177b", cert.Name)
+				require.Equal(t, "kubelet-bootstrap", cert.RequestingUser())
+				require.Equal(t, kBootstrapCtCSRv1beta1, cert.v1Beta1)
+			},
+		},
+		{
+			name: "kubelet-serving: ok v1",
+			args: args{
+				obj: kServingCSRv1,
 			},
 			checkFunc: func(t *testing.T, cert *Certificate) {
 				require.Equal(t, "system:node:gke-dev-master-cast-pool-cb53177b", cert.Name)
-				require.Equal(t, "kubelet-bootstrap", cert.RequestingUser)
-				require.Equal(t, testCSRv1, cert.v1)
+				require.Equal(t, "system:node:gke-va", cert.RequestingUser())
+				require.Equal(t, kServingCSRv1, cert.v1)
 			},
 			wantErr: false,
 		},
 		{
-			name: "ok v1beta1",
+			name: "kubelet-serving: ok v1beta1",
 			args: args{
-				obj: testCSRv1beta1,
+				obj: kServingCSRv1beta1,
 			},
 			wantErr: false,
 			checkFunc: func(t *testing.T, cert *Certificate) {
 				require.Equal(t, "system:node:gke-dev-master-cast-pool-cb53177b", cert.Name)
-				require.Equal(t, "kubelet-bootstrap", cert.RequestingUser)
-				require.Equal(t, testCSRv1beta1, cert.v1Beta1)
+				require.Equal(t, "system:node:gke-va", cert.RequestingUser())
+				require.Equal(t, kServingCSRv1beta1, cert.v1Beta1)
 			},
 		},
 	}
@@ -259,6 +245,205 @@ func Test_toCertificate(t *testing.T) {
 
 			if tt.checkFunc != nil {
 				tt.checkFunc(t, gotCert)
+			}
+		})
+	}
+}
+
+func TestCertificate_validateCSR(t *testing.T) {
+	kubeletServingSignerName := certv1beta1.KubeletServingSignerName
+	type fields struct {
+		v1      *certv1.CertificateSigningRequest
+		v1Beta1 *certv1beta1.CertificateSigningRequest
+		Name    string
+	}
+	type args struct {
+		csr *x509.CertificateRequest
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "empty csr",
+			fields: fields{
+				v1: &certv1.CertificateSigningRequest{
+					Spec: certv1.CertificateSigningRequestSpec{},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty signer",
+			fields: fields{
+				v1: &certv1.CertificateSigningRequest{
+					Spec: certv1.CertificateSigningRequestSpec{},
+				},
+			},
+			args: args{
+				csr: &x509.CertificateRequest{},
+			},
+			wantErr: true,
+		},
+		{
+			name: "no validation",
+			fields: fields{
+				v1: &certv1.CertificateSigningRequest{
+					Spec: certv1.CertificateSigningRequestSpec{
+						SignerName: certv1.KubeAPIServerClientKubeletSignerName,
+					},
+				},
+			},
+			args: args{
+				csr: &x509.CertificateRequest{},
+			},
+		},
+		{
+			name: "empty sn for serving CSR",
+			fields: fields{
+				v1: &certv1.CertificateSigningRequest{
+					Spec: certv1.CertificateSigningRequestSpec{
+						SignerName: certv1.KubeletServingSignerName,
+					},
+				},
+			},
+			args: args{
+				csr: &x509.CertificateRequest{},
+			},
+			wantErr: true,
+		},
+		{
+			name: "not empty URI for serving CSR",
+			fields: fields{
+				v1: &certv1.CertificateSigningRequest{
+					Spec: certv1.CertificateSigningRequestSpec{
+						SignerName: certv1.KubeletServingSignerName,
+					},
+				},
+			},
+			args: args{
+				csr: &x509.CertificateRequest{
+					Subject: pkix.Name{
+						CommonName: "system:node:node1",
+					},
+					URIs: []*url.URL{
+						{}, {},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "not empty Emails for serving CSR",
+			fields: fields{
+				v1: &certv1.CertificateSigningRequest{
+					Spec: certv1.CertificateSigningRequestSpec{
+						SignerName: certv1.KubeletServingSignerName,
+					},
+				},
+			},
+			args: args{
+				csr: &x509.CertificateRequest{
+					Subject: pkix.Name{
+						CommonName: "system:node:node1",
+					},
+					EmailAddresses: []string{
+						"test",
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty Usages for serving CSR",
+			fields: fields{
+				v1: &certv1.CertificateSigningRequest{
+					Spec: certv1.CertificateSigningRequestSpec{
+						SignerName: certv1.KubeletServingSignerName,
+					},
+				},
+			},
+			args: args{
+				csr: &x509.CertificateRequest{
+					Subject: pkix.Name{
+						CommonName: "system:node:node1",
+					},
+					EmailAddresses: []string{},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "wrong usages for serving CSR",
+			fields: fields{
+				v1: &certv1.CertificateSigningRequest{
+					Spec: certv1.CertificateSigningRequestSpec{
+						SignerName: certv1.KubeletServingSignerName,
+						Usages:     []certv1.KeyUsage{certv1.UsageServerAuth, "wrong"},
+					},
+				},
+			},
+			args: args{
+				csr: &x509.CertificateRequest{
+					Subject: pkix.Name{
+						CommonName: "system:node:node1",
+					},
+					EmailAddresses: []string{},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "wrong usages: no server auth for serving CSR",
+			fields: fields{
+				v1Beta1: &certv1beta1.CertificateSigningRequest{
+					Spec: certv1beta1.CertificateSigningRequestSpec{
+						Usages:     []certv1beta1.KeyUsage{certv1beta1.UsageDigitalSignature},
+						SignerName: &kubeletServingSignerName,
+					},
+				},
+			},
+			args: args{
+				csr: &x509.CertificateRequest{
+					Subject: pkix.Name{
+						CommonName: "system:node:node1",
+					},
+					EmailAddresses: []string{},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "ok for serving CSR",
+			fields: fields{
+				v1: &certv1.CertificateSigningRequest{
+					Spec: certv1.CertificateSigningRequestSpec{
+						SignerName: certv1.KubeletServingSignerName,
+						Usages:     []certv1.KeyUsage{certv1.UsageServerAuth},
+					},
+				},
+			},
+			args: args{
+				csr: &x509.CertificateRequest{
+					Subject: pkix.Name{
+						CommonName: "system:node:node1",
+					},
+					EmailAddresses: []string{},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Certificate{
+				v1:      tt.fields.v1,
+				v1Beta1: tt.fields.v1Beta1,
+				Name:    tt.fields.Name,
+			}
+			if err := c.validateCSR(tt.args.csr); (err != nil) != tt.wantErr {
+				t.Errorf("validateCSR() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
