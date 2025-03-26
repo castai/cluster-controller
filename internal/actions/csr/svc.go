@@ -161,16 +161,16 @@ func (h *ApprovalManager) runAutoApproveForCastAINodes(ctx context.Context, c <-
 				continue
 			}
 			// prevent starting goroutine for the same node certificate
-			if !h.addInProgress(cert.Name, cert.SignerName) {
+			if !h.addInProgress(cert.Name, cert.SignerName()) {
 				continue
 			}
 			go func(cert *Certificate) {
-				defer h.removeInProgress(cert.Name, cert.SignerName)
+				defer h.removeInProgress(cert.Name, cert.SignerName())
 
 				log := log.WithFields(logrus.Fields{
 					"csr_name":          cert.Name,
 					"signer":            cert.SignerName,
-					"original_csr_name": cert.GetOriginalCSRName(),
+					"original_csr_name": cert.OriginalCSRName(),
 				})
 				log.Info("auto approving csr")
 				err := h.handleWithRetry(ctx, log, cert)

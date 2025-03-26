@@ -125,7 +125,11 @@ func Test_nodeBootstrap(t *testing.T) {
 	for name, tc := range tt {
 		t.Run(name, func(t *testing.T) {
 			cert := &Certificate{
-				RequestingUser: tc.reqUser,
+				v1: &certv1.CertificateSigningRequest{
+					Spec: certv1.CertificateSigningRequestSpec{
+						Username: tc.reqUser,
+					},
+				},
 			}
 			require.Equal(t, tc.want, cert.isRequestedByNodeBootstrap())
 		})
@@ -190,7 +194,7 @@ func Test_toCertificate(t *testing.T) {
 			},
 			checkFunc: func(t *testing.T, cert *Certificate) {
 				require.Equal(t, "system:node:gke-dev-master-cast-pool-cb53177b", cert.Name)
-				require.Equal(t, "kubelet-bootstrap", cert.RequestingUser)
+				require.Equal(t, "kubelet-bootstrap", cert.RequestingUser())
 				require.Equal(t, kBootstrapCSRv1, cert.v1)
 			},
 			wantErr: false,
@@ -203,7 +207,7 @@ func Test_toCertificate(t *testing.T) {
 			wantErr: false,
 			checkFunc: func(t *testing.T, cert *Certificate) {
 				require.Equal(t, "system:node:gke-dev-master-cast-pool-cb53177b", cert.Name)
-				require.Equal(t, "kubelet-bootstrap", cert.RequestingUser)
+				require.Equal(t, "kubelet-bootstrap", cert.RequestingUser())
 				require.Equal(t, kBootstrapCtCSRv1beta1, cert.v1Beta1)
 			},
 		},
@@ -214,7 +218,7 @@ func Test_toCertificate(t *testing.T) {
 			},
 			checkFunc: func(t *testing.T, cert *Certificate) {
 				require.Equal(t, "system:node:gke-dev-master-cast-pool-cb53177b", cert.Name)
-				require.Equal(t, "system:node:gke-va", cert.RequestingUser)
+				require.Equal(t, "system:node:gke-va", cert.RequestingUser())
 				require.Equal(t, kServingCSRv1, cert.v1)
 			},
 			wantErr: false,
@@ -227,7 +231,7 @@ func Test_toCertificate(t *testing.T) {
 			wantErr: false,
 			checkFunc: func(t *testing.T, cert *Certificate) {
 				require.Equal(t, "system:node:gke-dev-master-cast-pool-cb53177b", cert.Name)
-				require.Equal(t, "system:node:gke-va", cert.RequestingUser)
+				require.Equal(t, "system:node:gke-va", cert.RequestingUser())
 				require.Equal(t, kServingCSRv1beta1, cert.v1Beta1)
 			},
 		},
@@ -248,14 +252,11 @@ func Test_toCertificate(t *testing.T) {
 }
 
 func TestCertificate_validateCSR(t *testing.T) {
+	kubeletServingSignerName := certv1beta1.KubeletServingSignerName
 	type fields struct {
-		v1              *certv1.CertificateSigningRequest
-		v1Beta1         *certv1beta1.CertificateSigningRequest
-		Name            string
-		OriginalCSRName string
-		RequestingUser  string
-		SignerName      string
-		Usages          []string
+		v1      *certv1.CertificateSigningRequest
+		v1Beta1 *certv1beta1.CertificateSigningRequest
+		Name    string
 	}
 	type args struct {
 		csr *x509.CertificateRequest
@@ -370,8 +371,12 @@ func TestCertificate_validateCSR(t *testing.T) {
 		{
 			name: "wrong usages: no server auth for serving CSR",
 			fields: fields{
-				SignerName: certv1.KubeletServingSignerName,
-				Usages:     []string{fmt.Sprintf("%v", certv1.UsageDigitalSignature)},
+				v1Beta1: &certv1beta1.CertificateSigningRequest{
+					Spec: certv1beta1.CertificateSigningRequestSpec{
+						Usages:     []certv1beta1.KeyUsage{certv1beta1.UsageDigitalSignature},
+						SignerName: &kubeletServingSignerName,
+					},
+				},
 			},
 			args: args{
 				csr: &x509.CertificateRequest{
@@ -386,8 +391,12 @@ func TestCertificate_validateCSR(t *testing.T) {
 		{
 			name: "ok for serving CSR",
 			fields: fields{
-				SignerName: certv1.KubeletServingSignerName,
-				Usages:     []string{fmt.Sprintf("%v", certv1.UsageServerAuth)},
+				v1: &certv1.CertificateSigningRequest{
+					Spec: certv1.CertificateSigningRequestSpec{
+						SignerName: certv1.KubeletServingSignerName,
+						Usages:     []certv1.KeyUsage{certv1.UsageServerAuth},
+					},
+				},
 			},
 			args: args{
 				csr: &x509.CertificateRequest{
@@ -402,12 +411,9 @@ func TestCertificate_validateCSR(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &Certificate{
-				v1:             tt.fields.v1,
-				v1Beta1:        tt.fields.v1Beta1,
-				Name:           tt.fields.Name,
-				RequestingUser: tt.fields.RequestingUser,
-				SignerName:     tt.fields.SignerName,
-				Usages:         tt.fields.Usages,
+				v1:      tt.fields.v1,
+				v1Beta1: tt.fields.v1Beta1,
+				Name:    tt.fields.Name,
 			}
 			if err := c.validateCSR(tt.args.csr); (err != nil) != tt.wantErr {
 				t.Errorf("validateCSR() error = %v, wantErr %v", err, tt.wantErr)

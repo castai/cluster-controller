@@ -36,12 +36,9 @@ var ErrNodeCertificateNotFound = errors.New("node certificate not found")
 
 // Certificate wraps v1 and v1beta1 csr.
 type Certificate struct {
-	v1             *certv1.CertificateSigningRequest
-	v1Beta1        *certv1beta1.CertificateSigningRequest
-	Name           string
-	RequestingUser string
-	SignerName     string
-	Usages         []string
+	v1      *certv1.CertificateSigningRequest
+	v1Beta1 *certv1beta1.CertificateSigningRequest
+	Name    string
 }
 
 var (
@@ -99,13 +96,13 @@ func (c *Certificate) isRequestedByNodeBootstrap() bool {
 	// Since we only have one handler per CSR/certificate name,
 	// which is the node name, we can process the controller's certificates and kubelet-bootstrap`s.
 	// This covers the case when the controller restarts but the bootstrap certificate was deleted without our own certificate being approved.
-	return c.RequestingUser == "kubelet-bootstrap" || c.RequestingUser == "system:serviceaccount:castai-agent:castai-cluster-controller"
+	return c.RequestingUser() == "kubelet-bootstrap" || c.RequestingUser() == "system:serviceaccount:castai-agent:castai-cluster-controller"
 }
 
 func (c *Certificate) isRequestedBySystemNode() bool {
 	// To avoid waiting for the certificate to be approved by control plane.
 	// We can approve the certificate if it was requested by the system node.
-	return strings.HasPrefix(c.RequestingUser, "system:node:")
+	return strings.HasPrefix(c.RequestingUser(), "system:node:")
 }
 
 func isAlreadyApproved(err error) bool {
@@ -320,21 +317,13 @@ func toCertificate(obj interface{}) (cert *Certificate, err error) {
 		request = e.Spec.Request
 		originalCSRName = e.Name
 		cert = &Certificate{
-			SignerName:     e.Spec.SignerName,
-			v1:             e,
-			RequestingUser: e.Spec.Username,
-			Usages:         toKeyUsage(e.Spec.Usages),
+			v1: e,
 		}
 	case *certv1beta1.CertificateSigningRequest:
 		request = e.Spec.Request
 		originalCSRName = e.Name
 		cert = &Certificate{
-			v1Beta1:        e,
-			RequestingUser: e.Spec.Username,
-			Usages:         toKeyUsage(e.Spec.Usages),
-		}
-		if e.Spec.SignerName != nil {
-			cert.SignerName = *e.Spec.SignerName
+			v1Beta1: e,
 		}
 	default:
 		return nil, errUnexpectedObjectType
@@ -342,7 +331,7 @@ func toCertificate(obj interface{}) (cert *Certificate, err error) {
 
 	cn, err := cert.getSubjectCommonName(request)
 	if err != nil {
-		return nil, fmt.Errorf("getSubjectCommonName: Name: %v RequestingUser: %v  request: %v %w", originalCSRName, cert.RequestingUser, string(request), err)
+		return nil, fmt.Errorf("getSubjectCommonName: Name: %v RequestingUser: %v  request: %v %w", originalCSRName, cert.RequestingUser(), string(request), err)
 	}
 
 	cert.Name = cn
@@ -358,7 +347,7 @@ func sendCertificate(ctx context.Context, c chan<- *Certificate, cert *Certifica
 	}
 }
 
-func (c *Certificate) GetOriginalCSRName() string {
+func (c *Certificate) OriginalCSRName() string {
 	// node-csr prefix for bootstrap kubelet csr.
 	// csr- prefix for kubelet csr.
 	if c.v1 != nil {
@@ -371,10 +360,51 @@ func (c *Certificate) GetOriginalCSRName() string {
 	return ""
 }
 
+func (c *Certificate) RequestingUser() string {
+	// node-csr prefix for bootstrap kubelet csr.
+	// csr- prefix for kubelet csr.
+	if c.v1 != nil {
+		return c.v1.Spec.Username
+	}
+	if c.v1Beta1 != nil {
+		return c.v1Beta1.Spec.Username
+	}
+
+	return ""
+}
+
+func (c *Certificate) SignerName() string {
+	// node-csr prefix for bootstrap kubelet csr.
+	// csr- prefix for kubelet csr.
+	if c.v1 != nil {
+		return c.v1.Spec.SignerName
+	}
+	if c.v1Beta1 != nil {
+		if c.v1Beta1.Spec.SignerName != nil {
+			return *c.v1Beta1.Spec.SignerName
+		}
+	}
+
+	return ""
+}
+
+func (c *Certificate) Usages() []string {
+	// node-csr prefix for bootstrap kubelet csr.
+	// csr- prefix for kubelet csr.
+	if c.v1 != nil {
+		return toKeyUsage(c.v1.Spec.Usages)
+	}
+	if c.v1Beta1 != nil {
+		return toKeyUsage(c.v1Beta1.Spec.Usages)
+	}
+
+	return nil
+}
+
 func (c *Certificate) getSubjectCommonName(csrRequest []byte) (string, error) {
 	// node-csr prefix for bootstrap kubelet csr.
 	// csr- prefix for kubelet csr.
-	originalCSRName := c.GetOriginalCSRName()
+	originalCSRName := c.OriginalCSRName()
 	if !strings.HasPrefix(originalCSRName, "node-csr") && !strings.HasPrefix(originalCSRName, "csr-") {
 		return "", fmt.Errorf("invalid CSR name: %s %w", originalCSRName, errInvalidCSR)
 	}
@@ -406,12 +436,12 @@ func (c *Certificate) validateCSR(csr *x509.CertificateRequest) error {
 	if csr == nil {
 		return fmt.Errorf("%w: nil CSR", errInvalidCSR)
 	}
-	if c.SignerName == certv1.KubeAPIServerClientKubeletSignerName {
+	if c.SignerName() == certv1.KubeAPIServerClientKubeletSignerName {
 		// no validation
 		return nil
 	}
-	if c.SignerName != certv1.KubeletServingSignerName {
-		return fmt.Errorf("%w: unknown signer name %s", errInvalidCSR, c.SignerName)
+	if c.SignerName() != certv1.KubeletServingSignerName {
+		return fmt.Errorf("%w: unknown signer name %s", errInvalidCSR, c.SignerName())
 	}
 
 	if len(csr.Subject.CommonName) == 0 {
@@ -424,22 +454,22 @@ func (c *Certificate) validateCSR(csr *x509.CertificateRequest) error {
 		return fmt.Errorf("%w: CSR subject email addresses must be empty: %v", errInvalidCSR, csr.EmailAddresses)
 	}
 
-	if len(c.Usages) == 0 {
+	if len(c.Usages()) == 0 {
 		return fmt.Errorf("%w: CSR Usages is empty", errInvalidCSR)
 	}
 	usageServerAuthExisted := false
-	for _, u := range c.Usages {
+	for _, u := range c.Usages() {
 		if u != fmt.Sprintf("%v", certv1.UsageServerAuth) &&
 			u != fmt.Sprintf("%v", certv1.UsageDigitalSignature) &&
 			u != fmt.Sprintf("%v", certv1.UsageKeyEncipherment) {
-			return fmt.Errorf("%v: CSR usages %w", c.Usages, errInvalidCSR)
+			return fmt.Errorf("%v: CSR usages %w", c.Usages(), errInvalidCSR)
 		}
 		if u == fmt.Sprintf("%v", certv1.UsageServerAuth) {
 			usageServerAuthExisted = true
 		}
 	}
 	if !usageServerAuthExisted {
-		return fmt.Errorf("%w: CSR usages must be for server usage %v", errInvalidCSR, c.Usages)
+		return fmt.Errorf("%w: CSR usages must be for server usage %v", errInvalidCSR, c.Usages())
 	}
 	// TODO add validation of IP and DNS
 	// https://kubernetes.io/docs/reference/access-authn-authz/kubelet-tls-bootstrapping/#certificate-rotation
