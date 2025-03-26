@@ -8,14 +8,14 @@ import (
 
 // TODO deprecated action
 
-var _ ActionHandler = &ApproveCSRHandler{}
+var _ ActionHandler = &ApproveCSRHandlerDeprecated{}
 
-func NewApproveCSRHandler() *ApproveCSRHandler {
-	return &ApproveCSRHandler{}
+func NewApproveCSRHandler() *ApproveCSRHandlerDeprecated {
+	return &ApproveCSRHandlerDeprecated{}
 }
 
-type ApproveCSRHandler struct{}
+type ApproveCSRHandlerDeprecated struct{}
 
-func (h *ApproveCSRHandler) Handle(_ context.Context, _ *castai.ClusterAction) error {
+func (h *ApproveCSRHandlerDeprecated) Handle(_ context.Context, _ *castai.ClusterAction) error {
 	return nil
 }
