@@ -348,8 +348,6 @@ func sendCertificate(ctx context.Context, c chan<- *Certificate, cert *Certifica
 }
 
 func (c *Certificate) OriginalCSRName() string {
-	// node-csr prefix for bootstrap kubelet csr.
-	// csr- prefix for kubelet csr.
 	if c.v1 != nil {
 		return c.v1.Name
 	}
@@ -361,8 +359,6 @@ func (c *Certificate) OriginalCSRName() string {
 }
 
 func (c *Certificate) RequestingUser() string {
-	// node-csr prefix for bootstrap kubelet csr.
-	// csr- prefix for kubelet csr.
 	if c.v1 != nil {
 		return c.v1.Spec.Username
 	}
@@ -374,8 +370,6 @@ func (c *Certificate) RequestingUser() string {
 }
 
 func (c *Certificate) SignerName() string {
-	// node-csr prefix for bootstrap kubelet csr.
-	// csr- prefix for kubelet csr.
 	if c.v1 != nil {
 		return c.v1.Spec.SignerName
 	}
@@ -389,8 +383,6 @@ func (c *Certificate) SignerName() string {
 }
 
 func (c *Certificate) Usages() []string {
-	// node-csr prefix for bootstrap kubelet csr.
-	// csr- prefix for kubelet csr.
 	if c.v1 != nil {
 		return toKeyUsage(c.v1.Spec.Usages)
 	}
