@@ -3,7 +3,6 @@ package actions
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -29,8 +28,6 @@ type PatchNodeHandler struct {
 	log       logrus.FieldLogger
 	clientset kubernetes.Interface
 }
-
-var errAction = errors.New("not valid action")
 
 func (h *PatchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
 	req, ok := action.Data().(*castai.ActionPatchNode)

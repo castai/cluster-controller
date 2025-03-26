@@ -3,7 +3,6 @@ package actions
 import (
 	"context"
 	"fmt"
-	"reflect"
 
 	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
@@ -43,7 +42,7 @@ func (h *PatchHandler) Handle(ctx context.Context, action *castai.ClusterAction)
 
 	log := h.log.WithFields(logrus.Fields{
 		ActionIDLogField: action.ID,
-		"action":         reflect.TypeOf(action.Data()).String(),
+		"action":         action.GetType(),
 		"gvr":            req.ID.GroupVersionResource.String(),
 		"name":           req.ID.Name,
 	})

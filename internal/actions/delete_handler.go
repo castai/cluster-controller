@@ -3,7 +3,6 @@ package actions
 import (
 	"context"
 	"fmt"
-	"reflect"
 
 	"github.com/sirupsen/logrus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -36,7 +35,7 @@ func (h *DeleteHandler) Handle(ctx context.Context, action *castai.ClusterAction
 
 	log := h.log.WithFields(logrus.Fields{
 		"id":     action.ID,
-		"action": reflect.TypeOf(action.Data()).String(),
+		"action": action.GetType(),
 		"gvr":    req.ID.GroupVersionResource.String(),
 		"name":   req.ID.Name,
 	})
