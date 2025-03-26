@@ -2,10 +2,10 @@ package csr
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
-	"errors"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	certv1 "k8s.io/api/certificates/v1"
