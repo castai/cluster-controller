@@ -411,7 +411,7 @@ func (c *Certificate) getSubjectCommonName(csrRequest []byte) (string, error) {
 
 	certReq, err := c.parseCSR(csrRequest)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("parse CSR: %w", err)
 	}
 	return certReq.Subject.CommonName, nil
 }
