@@ -3,7 +3,6 @@ package csr
 import (
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"fmt"
 	"net/url"
 	"testing"
 	"time"
@@ -268,16 +267,20 @@ func TestCertificate_validateCSR(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "empty",
+			name: "empty csr",
 			fields: fields{
-				SignerName: certv1.KubeletServingSignerName,
+				v1: &certv1.CertificateSigningRequest{
+					Spec: certv1.CertificateSigningRequestSpec{},
+				},
 			},
 			wantErr: true,
 		},
 		{
 			name: "empty signer",
 			fields: fields{
-				SignerName: "",
+				v1: &certv1.CertificateSigningRequest{
+					Spec: certv1.CertificateSigningRequestSpec{},
+				},
 			},
 			args: args{
 				csr: &x509.CertificateRequest{},
@@ -287,7 +290,11 @@ func TestCertificate_validateCSR(t *testing.T) {
 		{
 			name: "no validation",
 			fields: fields{
-				SignerName: certv1.KubeAPIServerClientKubeletSignerName,
+				v1: &certv1.CertificateSigningRequest{
+					Spec: certv1.CertificateSigningRequestSpec{
+						SignerName: certv1.KubeAPIServerClientKubeletSignerName,
+					},
+				},
 			},
 			args: args{
 				csr: &x509.CertificateRequest{},
@@ -296,7 +303,11 @@ func TestCertificate_validateCSR(t *testing.T) {
 		{
 			name: "empty sn for serving CSR",
 			fields: fields{
-				SignerName: certv1.KubeletServingSignerName,
+				v1: &certv1.CertificateSigningRequest{
+					Spec: certv1.CertificateSigningRequestSpec{
+						SignerName: certv1.KubeletServingSignerName,
+					},
+				},
 			},
 			args: args{
 				csr: &x509.CertificateRequest{},
@@ -306,7 +317,11 @@ func TestCertificate_validateCSR(t *testing.T) {
 		{
 			name: "not empty URI for serving CSR",
 			fields: fields{
-				SignerName: certv1.KubeletServingSignerName,
+				v1: &certv1.CertificateSigningRequest{
+					Spec: certv1.CertificateSigningRequestSpec{
+						SignerName: certv1.KubeletServingSignerName,
+					},
+				},
 			},
 			args: args{
 				csr: &x509.CertificateRequest{
@@ -323,7 +338,11 @@ func TestCertificate_validateCSR(t *testing.T) {
 		{
 			name: "not empty Emails for serving CSR",
 			fields: fields{
-				SignerName: certv1.KubeletServingSignerName,
+				v1: &certv1.CertificateSigningRequest{
+					Spec: certv1.CertificateSigningRequestSpec{
+						SignerName: certv1.KubeletServingSignerName,
+					},
+				},
 			},
 			args: args{
 				csr: &x509.CertificateRequest{
@@ -340,7 +359,11 @@ func TestCertificate_validateCSR(t *testing.T) {
 		{
 			name: "empty Usages for serving CSR",
 			fields: fields{
-				SignerName: certv1.KubeletServingSignerName,
+				v1: &certv1.CertificateSigningRequest{
+					Spec: certv1.CertificateSigningRequestSpec{
+						SignerName: certv1.KubeletServingSignerName,
+					},
+				},
 			},
 			args: args{
 				csr: &x509.CertificateRequest{
@@ -355,8 +378,12 @@ func TestCertificate_validateCSR(t *testing.T) {
 		{
 			name: "wrong usages for serving CSR",
 			fields: fields{
-				SignerName: certv1.KubeletServingSignerName,
-				Usages:     []string{fmt.Sprintf("%v", certv1.UsageServerAuth), "wrong"},
+				v1: &certv1.CertificateSigningRequest{
+					Spec: certv1.CertificateSigningRequestSpec{
+						SignerName: certv1.KubeletServingSignerName,
+						Usages:     []certv1.KeyUsage{certv1.UsageServerAuth, "wrong"},
+					},
+				},
 			},
 			args: args{
 				csr: &x509.CertificateRequest{
