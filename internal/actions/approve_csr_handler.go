@@ -6,7 +6,7 @@ import (
 	"github.com/castai/cluster-controller/internal/castai"
 )
 
-// TODO deprecated action
+// // TODO clean up after proper handling unknown actions https://castai.atlassian.net/browse/KUBE-1036.
 
 var _ ActionHandler = &ApproveCSRHandlerDeprecated{}
 
