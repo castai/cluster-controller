@@ -1,18 +1,18 @@
 package csr
 
 import (
-	"testing"
-	"time"
-
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"fmt"
+	"net/url"
+	"testing"
+	"time"
+
 	"github.com/stretchr/testify/require"
 	certv1 "k8s.io/api/certificates/v1"
 	certv1beta1 "k8s.io/api/certificates/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
-	"net/url"
 )
 
 //func getClient() (*kubernetes.Clientset, error) {
