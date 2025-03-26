@@ -413,12 +413,19 @@ func (c *Certificate) validateCSR(csr *x509.CertificateRequest) error {
 	if len(c.Usages) == 0 {
 		return fmt.Errorf("%w: CSR Usages is empty", errInvalidCSR)
 	}
+	usageServerAuthExisted := false
 	for _, u := range c.Usages {
 		if u != fmt.Sprintf("%v", certv1.UsageServerAuth) &&
 			u != fmt.Sprintf("%v", certv1.UsageDigitalSignature) &&
 			u != fmt.Sprintf("%v", certv1.UsageKeyEncipherment) {
 			return fmt.Errorf("%v: CSR usages %w", c.Usages, errInvalidCSR)
 		}
+		if u == fmt.Sprintf("%v", certv1.UsageServerAuth) {
+			usageServerAuthExisted = true
+		}
+	}
+	if !usageServerAuthExisted {
+		return fmt.Errorf("%w: CSR usages must be for server usage %v", errInvalidCSR, c.Usages)
 	}
 	// TODO add validation of IP and DNS
 	// https://kubernetes.io/docs/reference/access-authn-authz/kubelet-tls-bootstrapping/#certificate-rotation

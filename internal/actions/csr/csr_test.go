@@ -383,6 +383,22 @@ func TestCertificate_validateCSR(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name: "wrong usages: no server auth for serving CSR",
+			fields: fields{
+				SignerName: certv1.KubeletServingSignerName,
+				Usages:     []string{fmt.Sprintf("%v", certv1.UsageDigitalSignature)},
+			},
+			args: args{
+				csr: &x509.CertificateRequest{
+					Subject: pkix.Name{
+						CommonName: "system:node:node1",
+					},
+					EmailAddresses: []string{},
+				},
+			},
+			wantErr: true,
+		},
+		{
 			name: "ok for serving CSR",
 			fields: fields{
 				SignerName: certv1.KubeletServingSignerName,
