@@ -15,21 +15,6 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 )
 
-//func getClient() (*kubernetes.Clientset, error) {
-//	var kubeconfig string
-//	if home := homedir.HomeDir(); home != "" {
-//		kubeconfig = filepath.Join(home, ".kube", "config")
-//	}
-//
-//	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-//	if err != nil {
-//		return nil, err
-//	}
-//
-//	clientset, err := kubernetes.NewForConfig(config)
-//	return clientset, err
-//}
-
 func Test_isCastAINodeCsr(t *testing.T) {
 	type args struct {
 		subjectCommonName string
