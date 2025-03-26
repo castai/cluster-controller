@@ -4,11 +4,15 @@ import (
 	"testing"
 	"time"
 
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"fmt"
 	"github.com/stretchr/testify/require"
 	certv1 "k8s.io/api/certificates/v1"
 	certv1beta1 "k8s.io/api/certificates/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	"net/url"
 )
 
 //func getClient() (*kubernetes.Clientset, error) {
@@ -253,6 +257,160 @@ func Test_toCertificate(t *testing.T) {
 
 			if tt.checkFunc != nil {
 				tt.checkFunc(t, gotCert)
+			}
+		})
+	}
+}
+
+func TestCertificate_validateCSR(t *testing.T) {
+	type fields struct {
+		v1              *certv1.CertificateSigningRequest
+		v1Beta1         *certv1beta1.CertificateSigningRequest
+		Name            string
+		OriginalCSRName string
+		RequestingUser  string
+		SignerName      string
+		Usages          []string
+	}
+	type args struct {
+		csr *x509.CertificateRequest
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "empty",
+			fields: fields{
+				SignerName: certv1.KubeletServingSignerName,
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty signer",
+			fields: fields{
+				SignerName: "",
+			},
+			args: args{
+				csr: &x509.CertificateRequest{},
+			},
+			wantErr: true,
+		},
+		{
+			name: "no validation",
+			fields: fields{
+				SignerName: certv1.KubeAPIServerClientKubeletSignerName,
+			},
+			args: args{
+				csr: &x509.CertificateRequest{},
+			},
+		},
+		{
+			name: "empty sn for serving CSR",
+			fields: fields{
+				SignerName: certv1.KubeletServingSignerName,
+			},
+			args: args{
+				csr: &x509.CertificateRequest{},
+			},
+			wantErr: true,
+		},
+		{
+			name: "not empty URI for serving CSR",
+			fields: fields{
+				SignerName: certv1.KubeletServingSignerName,
+			},
+			args: args{
+				csr: &x509.CertificateRequest{
+					Subject: pkix.Name{
+						CommonName: "system:node:node1",
+					},
+					URIs: []*url.URL{
+						{}, {},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "not empty Emails for serving CSR",
+			fields: fields{
+				SignerName: certv1.KubeletServingSignerName,
+			},
+			args: args{
+				csr: &x509.CertificateRequest{
+					Subject: pkix.Name{
+						CommonName: "system:node:node1",
+					},
+					EmailAddresses: []string{
+						"test",
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty Usages for serving CSR",
+			fields: fields{
+				SignerName: certv1.KubeletServingSignerName,
+			},
+			args: args{
+				csr: &x509.CertificateRequest{
+					Subject: pkix.Name{
+						CommonName: "system:node:node1",
+					},
+					EmailAddresses: []string{},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "wrong usages for serving CSR",
+			fields: fields{
+				SignerName: certv1.KubeletServingSignerName,
+				Usages:     []string{fmt.Sprintf("%v", certv1.UsageServerAuth), "wrong"},
+			},
+			args: args{
+				csr: &x509.CertificateRequest{
+					Subject: pkix.Name{
+						CommonName: "system:node:node1",
+					},
+					EmailAddresses: []string{},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "ok for serving CSR",
+			fields: fields{
+				SignerName: certv1.KubeletServingSignerName,
+				Usages:     []string{fmt.Sprintf("%v", certv1.UsageServerAuth)},
+			},
+			args: args{
+				csr: &x509.CertificateRequest{
+					Subject: pkix.Name{
+						CommonName: "system:node:node1",
+					},
+					EmailAddresses: []string{},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Certificate{
+				v1:              tt.fields.v1,
+				v1Beta1:         tt.fields.v1Beta1,
+				Name:            tt.fields.Name,
+				OriginalCSRName: tt.fields.OriginalCSRName,
+				RequestingUser:  tt.fields.RequestingUser,
+				SignerName:      tt.fields.SignerName,
+				Usages:          tt.fields.Usages,
+			}
+			if err := c.validateCSR(tt.args.csr); (err != nil) != tt.wantErr {
+				t.Errorf("validateCSR() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

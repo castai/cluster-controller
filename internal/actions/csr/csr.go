@@ -389,27 +389,39 @@ func (c *Certificate) parseCSR(pemData []byte) (*x509.CertificateRequest, error)
 }
 
 func (c *Certificate) validateCSR(csr *x509.CertificateRequest) error {
-	if c.SignerName == certv1.KubeletServingSignerName {
-		if len(csr.Subject.CommonName) == 0 {
-			return fmt.Errorf("%w: CSR subject common name", errInvalidCSR)
-		}
-		if len(csr.URIs) > 0 {
-			return fmt.Errorf("%w: CSR subject URIs", errInvalidCSR)
-		}
-		if len(csr.EmailAddresses) > 0 {
-			return fmt.Errorf("%w: CSR subject email addresses", errInvalidCSR)
-		}
-
-		for _, u := range c.Usages {
-			if u != fmt.Sprintf("%v", certv1.UsageServerAuth) &&
-				u != fmt.Sprintf("%v", certv1.UsageDigitalSignature) &&
-				u != fmt.Sprintf("%v", certv1.UsageKeyEncipherment) {
-				return fmt.Errorf("%v: CSR usages %w", c.Usages, errInvalidCSR)
-			}
-		}
-		// TODO add validation of IP and DNS
-		// https://kubernetes.io/docs/reference/access-authn-authz/kubelet-tls-bootstrapping/#certificate-rotation
+	if csr == nil {
+		return fmt.Errorf("%w: nil CSR", errInvalidCSR)
 	}
+	if c.SignerName == certv1.KubeAPIServerClientKubeletSignerName {
+		// no validation
+		return nil
+	}
+	if c.SignerName != certv1.KubeletServingSignerName {
+		return fmt.Errorf("%w: unknown signer name %s", errInvalidCSR, c.SignerName)
+	}
+
+	if len(csr.Subject.CommonName) == 0 {
+		return fmt.Errorf("%w: CSR subject common name", errInvalidCSR)
+	}
+	if len(csr.URIs) > 0 {
+		return fmt.Errorf("%w: CSR subject URIs: %v", errInvalidCSR, csr.URIs)
+	}
+	if len(csr.EmailAddresses) > 0 {
+		return fmt.Errorf("%w: CSR subject email addresses: %v", errInvalidCSR, csr.EmailAddresses)
+	}
+
+	if len(c.Usages) == 0 {
+		return fmt.Errorf("%w: CSR Usages is empty", errInvalidCSR)
+	}
+	for _, u := range c.Usages {
+		if u != fmt.Sprintf("%v", certv1.UsageServerAuth) &&
+			u != fmt.Sprintf("%v", certv1.UsageDigitalSignature) &&
+			u != fmt.Sprintf("%v", certv1.UsageKeyEncipherment) {
+			return fmt.Errorf("%v: CSR usages %w", c.Usages, errInvalidCSR)
+		}
+	}
+	// TODO add validation of IP and DNS
+	// https://kubernetes.io/docs/reference/access-authn-authz/kubelet-tls-bootstrapping/#certificate-rotation
 
 	return nil
 }
