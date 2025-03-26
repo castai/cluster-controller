@@ -402,13 +402,12 @@ func TestCertificate_validateCSR(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &Certificate{
-				v1:              tt.fields.v1,
-				v1Beta1:         tt.fields.v1Beta1,
-				Name:            tt.fields.Name,
-				OriginalCSRName: tt.fields.OriginalCSRName,
-				RequestingUser:  tt.fields.RequestingUser,
-				SignerName:      tt.fields.SignerName,
-				Usages:          tt.fields.Usages,
+				v1:             tt.fields.v1,
+				v1Beta1:        tt.fields.v1Beta1,
+				Name:           tt.fields.Name,
+				RequestingUser: tt.fields.RequestingUser,
+				SignerName:     tt.fields.SignerName,
+				Usages:         tt.fields.Usages,
 			}
 			if err := c.validateCSR(tt.args.csr); (err != nil) != tt.wantErr {
 				t.Errorf("validateCSR() error = %v, wantErr %v", err, tt.wantErr)

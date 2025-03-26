@@ -170,7 +170,7 @@ func (h *ApprovalManager) runAutoApproveForCastAINodes(ctx context.Context, c <-
 				log := log.WithFields(logrus.Fields{
 					"csr_name":          cert.Name,
 					"signer":            cert.SignerName,
-					"original_csr_name": cert.OriginalCSRName,
+					"original_csr_name": cert.GetOriginalCSRName(),
 				})
 				log.Info("auto approving csr")
 				err := h.handleWithRetry(ctx, log, cert)

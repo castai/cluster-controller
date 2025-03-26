@@ -36,13 +36,12 @@ var ErrNodeCertificateNotFound = errors.New("node certificate not found")
 
 // Certificate wraps v1 and v1beta1 csr.
 type Certificate struct {
-	v1              *certv1.CertificateSigningRequest
-	v1Beta1         *certv1beta1.CertificateSigningRequest
-	Name            string
-	OriginalCSRName string
-	RequestingUser  string
-	SignerName      string
-	Usages          []string
+	v1             *certv1.CertificateSigningRequest
+	v1Beta1        *certv1beta1.CertificateSigningRequest
+	Name           string
+	RequestingUser string
+	SignerName     string
+	Usages         []string
 }
 
 var (
@@ -314,24 +313,25 @@ func processCSREvent(ctx context.Context, c chan<- *Certificate, csrObj interfac
 
 func toCertificate(obj interface{}) (cert *Certificate, err error) {
 	var request []byte
+	originalCSRName := ""
 
 	switch e := obj.(type) {
 	case *certv1.CertificateSigningRequest:
 		request = e.Spec.Request
+		originalCSRName = e.Name
 		cert = &Certificate{
-			OriginalCSRName: e.Name,
-			SignerName:      e.Spec.SignerName,
-			v1:              e,
-			RequestingUser:  e.Spec.Username,
-			Usages:          toKeyUsage(e.Spec.Usages),
+			SignerName:     e.Spec.SignerName,
+			v1:             e,
+			RequestingUser: e.Spec.Username,
+			Usages:         toKeyUsage(e.Spec.Usages),
 		}
 	case *certv1beta1.CertificateSigningRequest:
 		request = e.Spec.Request
+		originalCSRName = e.Name
 		cert = &Certificate{
-			OriginalCSRName: e.Name,
-			v1Beta1:         e,
-			RequestingUser:  e.Spec.Username,
-			Usages:          toKeyUsage(e.Spec.Usages),
+			v1Beta1:        e,
+			RequestingUser: e.Spec.Username,
+			Usages:         toKeyUsage(e.Spec.Usages),
 		}
 		if e.Spec.SignerName != nil {
 			cert.SignerName = *e.Spec.SignerName
@@ -342,7 +342,7 @@ func toCertificate(obj interface{}) (cert *Certificate, err error) {
 
 	cn, err := cert.getSubjectCommonName(request)
 	if err != nil {
-		return nil, fmt.Errorf("getSubjectCommonName: Name: %v RequestingUser: %v  request: %v %w", cert.OriginalCSRName, cert.RequestingUser, string(request), err)
+		return nil, fmt.Errorf("getSubjectCommonName: Name: %v RequestingUser: %v  request: %v %w", originalCSRName, cert.RequestingUser, string(request), err)
 	}
 
 	cert.Name = cn
@@ -358,11 +358,25 @@ func sendCertificate(ctx context.Context, c chan<- *Certificate, cert *Certifica
 	}
 }
 
+func (c *Certificate) GetOriginalCSRName() string {
+	// node-csr prefix for bootstrap kubelet csr.
+	// csr- prefix for kubelet csr.
+	if c.v1 != nil {
+		return c.v1.Name
+	}
+	if c.v1Beta1 != nil {
+		return c.v1Beta1.Name
+	}
+
+	return ""
+}
+
 func (c *Certificate) getSubjectCommonName(csrRequest []byte) (string, error) {
 	// node-csr prefix for bootstrap kubelet csr.
 	// csr- prefix for kubelet csr.
-	if !strings.HasPrefix(c.OriginalCSRName, "node-csr") && !strings.HasPrefix(c.OriginalCSRName, "csr-") {
-		return "", fmt.Errorf("invalid CSR name: %s %w", c.OriginalCSRName, errInvalidCSR)
+	originalCSRName := c.GetOriginalCSRName()
+	if !strings.HasPrefix(originalCSRName, "node-csr") && !strings.HasPrefix(originalCSRName, "csr-") {
+		return "", fmt.Errorf("invalid CSR name: %s %w", originalCSRName, errInvalidCSR)
 	}
 
 	certReq, err := c.parseCSR(csrRequest)
