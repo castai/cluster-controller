@@ -154,10 +154,7 @@ func (s *Controller) handleActions(ctx context.Context, clusterActions []*castai
 
 		go func(action *castai.ClusterAction) {
 			defer s.finishProcessing(action.ID)
-			if action.Data() == nil {
-				s.log.WithField(actions.ActionIDLogField, action.ID).Error("unknown action type, try upgrading to the latest version")
-				return
-			}
+
 			var err error
 			handleErr := s.handleAction(ctx, action)
 			if errors.Is(handleErr, context.Canceled) {
@@ -208,6 +205,13 @@ func (s *Controller) startProcessing(actionID string) bool {
 }
 
 func (s *Controller) handleAction(ctx context.Context, action *castai.ClusterAction) (err error) {
+	// Check if the action can be used at all before continuing.
+	// We still want to ACK the action in this case, otherwise it will keep being resent until it expires.
+	if !action.IsValid() || (action.GetType() == castai.UnknownActionType) {
+		err = fmt.Errorf("invalid action, check action data or if cluster controller version supports this action type")
+		return
+	}
+
 	actionType := reflect.TypeOf(action.Data())
 
 	defer func() {
@@ -232,14 +236,15 @@ func (s *Controller) handleAction(ctx context.Context, action *castai.ClusterAct
 }
 
 func (s *Controller) ackAction(ctx context.Context, action *castai.ClusterAction, handleErr error) error {
-	actionType := reflect.TypeOf(action.Data())
+	actionType := action.GetType()
 	actionError := getHandlerError(handleErr)
 	s.log.WithFields(logrus.Fields{
 		actions.ActionIDLogField: action.ID,
-		"type":                   actionType.String(),
+		"type":                   actionType,
+		"successful":             actionError == nil,
 	}).Info("ack action")
 
-	metrics.ActionFinished(actionType.String(), actionError == nil)
+	metrics.ActionFinished(actionType, actionError == nil)
 
 	boff := waitext.NewConstantBackoff(s.cfg.AckRetryWait)
 
