@@ -5,6 +5,7 @@ package actions
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/castai/cluster-controller/internal/castai"
@@ -15,6 +16,8 @@ const (
 	// This field is used in backend to detect actions ID in logs.
 	ActionIDLogField = "id"
 )
+
+var errAction = errors.New("not valid action")
 
 func newUnexpectedTypeErr(value, expectedType interface{}) error {
 	return fmt.Errorf("unexpected type %T, expected %T %w", value, expectedType, errAction)

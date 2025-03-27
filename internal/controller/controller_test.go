@@ -200,6 +200,35 @@ func TestController_Run(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "unknown action type, should surface ack action with error",
+			args: args{
+				ctx: func() context.Context {
+					ctx, _ := context.WithTimeout(context.Background(), time.Second)
+					return ctx
+				},
+			},
+			fields: fields{
+				cfg:             cfg,
+				k8sVersion:      "1.20.1",
+				tuneMockHandler: func(m *mock_actions.MockActionHandler) {},
+				tuneMockCastAIClient: func(m *mock_castai.MockCastAIClient) {
+					m.EXPECT().GetActions(gomock.Any(), gomock.Any()).Return([]*castai.ClusterAction{
+						{
+							ID:        "a1",
+							CreatedAt: time.Now(),
+						},
+					}, nil).Times(1).MinTimes(1)
+					m.EXPECT().AckAction(gomock.Any(), "a1", gomock.Any()).
+						DoAndReturn(func(ctx context.Context, actionID string, req *castai.AckClusterActionRequest) error {
+							require.NotNil(t, req.Error)
+							require.NotContains(t, *req.Error, "panic") // We don't want to rely on panic, error should be handled cleanly.
+							require.Contains(t, *req.Error, "invalid action")
+							return nil
+						}).MinTimes(1)
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		tt := tt

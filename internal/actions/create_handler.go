@@ -3,7 +3,6 @@ package actions
 import (
 	"context"
 	"fmt"
-	"reflect"
 
 	jsonpatch "github.com/evanphx/json-patch"
 	"github.com/sirupsen/logrus"
@@ -45,7 +44,7 @@ func (h *CreateHandler) Handle(ctx context.Context, action *castai.ClusterAction
 
 	log := h.log.WithFields(logrus.Fields{
 		ActionIDLogField: action.ID,
-		"action":         reflect.TypeOf(action.Data()).String(),
+		"action":         action.GetType(),
 		"gvr":            req.GroupVersionResource.String(),
 		"name":           newObj.GetName(),
 	})

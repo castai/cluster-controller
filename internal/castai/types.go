@@ -3,6 +3,7 @@ package castai
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -13,6 +14,9 @@ const (
 	LabelNodeID               = "provisioner.cast.ai/node-id"
 	LabelManagedBy            = "provisioner.cast.ai/managed-by"
 	LabelValueManagedByCASTAI = "cast.ai"
+
+	// UnknownActionType is returned by ClusterAction.GetType when the action is not recognized.
+	UnknownActionType = "Unknown"
 )
 
 type GetClusterActionsResponse struct {
@@ -92,6 +96,21 @@ func (c *ClusterAction) Data() interface{} {
 		return c.ActionDelete
 	}
 	return nil
+}
+
+// IsValid checks if the action is OK to use.
+// If this value is nil, most likely current version of cluster controller does not know about the action type and cannot execute it.
+// It can also be a case of invalid data from server, but we cannot distinguish between the two at the moment.
+func (c *ClusterAction) IsValid() bool {
+	return c.Data() != nil
+}
+
+// GetType tries to deduct the type of the action based on its data. In case this fails, UnknownActionType is returned.
+func (c *ClusterAction) GetType() string {
+	if c.Data() != nil {
+		return reflect.TypeOf(c.Data()).String()
+	}
+	return UnknownActionType
 }
 
 type LogEvent struct {
