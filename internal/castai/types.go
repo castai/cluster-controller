@@ -33,7 +33,6 @@ type ClusterAction struct {
 	ActionDrainNode         *ActionDrainNode         `json:"actionDrainNode,omitempty"`
 	ActionPatchNode         *ActionPatchNode         `json:"actionPatchNode,omitempty"`
 	ActionCreateEvent       *ActionCreateEvent       `json:"actionCreateEvent,omitempty"`
-	ActionApproveCSR        *ActionApproveCSR        `json:"actionApproveCsr,omitempty"`
 	ActionChartUpsert       *ActionChartUpsert       `json:"actionChartUpsert,omitempty"`
 	ActionChartUninstall    *ActionChartUninstall    `json:"actionChartUninstall,omitempty"`
 	ActionChartRollback     *ActionChartRollback     `json:"actionChartRollback,omitempty"`
@@ -61,9 +60,6 @@ func (c *ClusterAction) Data() interface{} {
 	}
 	if c.ActionCreateEvent != nil {
 		return c.ActionCreateEvent
-	}
-	if c.ActionApproveCSR != nil {
-		return c.ActionApproveCSR
 	}
 	if c.ActionChartUpsert != nil {
 		return c.ActionChartUpsert
@@ -166,13 +162,6 @@ type ActionDrainNode struct {
 type ActionEvictPod struct {
 	Namespace string `json:"namespace"`
 	PodName   string `json:"podName"`
-}
-
-// TODO clean up after proper handling unknown actions https://castai.atlassian.net/browse/KUBE-1036.
-type ActionApproveCSR struct {
-	NodeName         string `json:"nodeName"`
-	NodeID           string `json:"nodeId"`
-	AllowAutoApprove *bool  `json:"allowAutoApprove,omitempty"`
 }
 
 type ActionPatchNode struct {
