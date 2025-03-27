@@ -1,0 +1,11 @@
+resources:
+  - loadtest-components.yaml
+
+configMapGenerator:
+  - name: grafana-config
+    namespace: castai-agent
+    files:
+      - cluster-controller-dashboard.json=./grafana/cluster-controller-dashboard.json
+      - grafana.ini=./grafana/grafana.ini
+      - dashboards.yaml=./grafana/dashboards-config.yaml
+      - datasource.yaml=./grafana/prometheus-datasource.yaml

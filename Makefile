@@ -11,15 +11,24 @@ GOLANGCI_LINT_VER := v1.64.8
 GOLANGCI_LINT_BIN := golangci-lint
 GOLANGCI_LINT := $(TOOLS_GOBIN_DIR)/$(GOLANGCI_LINT_BIN)-$(GOLANGCI_LINT_VER)
 
+DOCKER_REPOSITORY ?= us-docker.pkg.dev/castai-hub/library/cluster-controller
+
+ARCH ?= $(shell uname -m)
+ifeq ($(ARCH),x86_64)
+	ARCH=amd64
+endif
+
+
 $(GOLANGCI_LINT):
 	GOBIN=$(TOOLS_GOBIN_DIR) $(GO_INSTALL) github.com/golangci/golangci-lint/cmd/golangci-lint $(GOLANGCI_LINT_BIN) $(GOLANGCI_LINT_VER)
 
+## build: Build the binary for the specified architecture and create a Docker image. Usually this means ARCH=amd64 should be set if running on an ARM machine. Use `go build .` for simple local build.
 build:
-	CGO_ENABLED=0 GOOS=linux go build -ldflags "-s -w" -o bin/castai-cluster-controller-amd64 .
-	docker build -t us-docker.pkg.dev/castai-hub/library/cluster-controller:$(VERSION) .
+	CGO_ENABLED=0 GOOS=linux GOARCH=$(ARCH) go build -ldflags "-s -w" -o bin/castai-cluster-controller-$(ARCH) .
+	docker build --platform=linux/$(ARCH) --build-arg TARGETARCH=$(ARCH) -t $(DOCKER_REPOSITORY):$(VERSION) .
 
 push:
-	docker push us-docker.pkg.dev/castai-hub/library/cluster-controller:$(VERSION)
+	docker push $(DOCKER_REPOSITORY):$(VERSION)
 
 release: build push
 
@@ -39,7 +48,5 @@ generate-e2e-client:
 	go generate ./e2e/client
 .PHONY: generate-e2e-client
 
-# TODO: Make this less simplistic
-run-loadtest:
-	# TODO: Required because of reusing config
-	API_KEY=dummy API_URL=http://example.com CLUSTER_ID=D30A163C-C5DF-4CC8-985C-D1449398295E KUBECONFIG=~/.kube/config LOG_LEVEL=4 go run . test-server
+deploy-loadtest: release
+	IMAGE_REPOSITORY=$(DOCKER_REPOSITORY) IMAGE_TAG=$(VERSION) ./hack/loadtest/deploy.sh
