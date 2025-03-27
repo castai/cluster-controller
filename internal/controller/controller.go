@@ -55,7 +55,6 @@ func NewService(
 			reflect.TypeOf(&castai.ActionDrainNode{}):         actions.NewDrainNodeHandler(log, clientset, cfg.Namespace),
 			reflect.TypeOf(&castai.ActionPatchNode{}):         actions.NewPatchNodeHandler(log, clientset),
 			reflect.TypeOf(&castai.ActionCreateEvent{}):       actions.NewCreateEventHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionApproveCSR{}):        actions.NewApproveCSRHandler(),
 			reflect.TypeOf(&castai.ActionChartUpsert{}):       actions.NewChartUpsertHandler(log, helmClient),
 			reflect.TypeOf(&castai.ActionChartUninstall{}):    actions.NewChartUninstallHandler(log, helmClient),
 			reflect.TypeOf(&castai.ActionChartRollback{}):     actions.NewChartRollbackHandler(log, helmClient, cfg.Version),
