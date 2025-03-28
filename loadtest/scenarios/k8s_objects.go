@@ -97,6 +97,8 @@ func DeploymentWithStuckPDB(deploymentName string) (*appsv1.Deployment, *policyv
 	labelApp := "appname"
 	labelValue := fmt.Sprintf("%s-stuck-pdb", deploymentName)
 
+	kwokAffinity, kwokToleration := kwokNodeAffinityAndToleration()
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      deploymentName,
@@ -123,29 +125,9 @@ func DeploymentWithStuckPDB(deploymentName string) (*appsv1.Deployment, *policyv
 						},
 					},
 					Affinity: &corev1.Affinity{
-						NodeAffinity: &corev1.NodeAffinity{
-							RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
-								NodeSelectorTerms: []corev1.NodeSelectorTerm{
-									{
-										MatchExpressions: []corev1.NodeSelectorRequirement{
-											{
-												Key:      DefaultKwokMarker,
-												Operator: corev1.NodeSelectorOpIn,
-												Values:   []string{KwokMarkerValue},
-											},
-										},
-									},
-								},
-							},
-						},
+						NodeAffinity: kwokAffinity,
 					},
-					Tolerations: []corev1.Toleration{
-						{
-							Key:      DefaultKwokMarker,
-							Operator: corev1.TolerationOpExists,
-							Effect:   corev1.TaintEffectNoSchedule,
-						},
-					},
+					Tolerations: []corev1.Toleration{kwokToleration},
 				},
 			},
 		},
@@ -166,4 +148,52 @@ func DeploymentWithStuckPDB(deploymentName string) (*appsv1.Deployment, *policyv
 	}
 
 	return deployment, pdb
+}
+
+// Pod returns a pod that can run on kwok nodes in the default namespace.
+func Pod(name string) *corev1.Pod {
+	kwokAffinity, kwokToleration := kwokNodeAffinityAndToleration()
+
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: metav1.NamespaceDefault,
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name:  "fake-container",
+					Image: "does-not-exist",
+				},
+			},
+			Affinity: &corev1.Affinity{
+				NodeAffinity: kwokAffinity,
+			},
+			Tolerations: []corev1.Toleration{
+				kwokToleration,
+			},
+		},
+	}
+}
+
+func kwokNodeAffinityAndToleration() (*corev1.NodeAffinity, corev1.Toleration) {
+	return &corev1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+				NodeSelectorTerms: []corev1.NodeSelectorTerm{
+					{
+						MatchExpressions: []corev1.NodeSelectorRequirement{
+							{
+								Key:      DefaultKwokMarker,
+								Operator: corev1.NodeSelectorOpIn,
+								Values:   []string{KwokMarkerValue},
+							},
+						},
+					},
+				},
+			},
+		}, corev1.Toleration{
+			Key:      DefaultKwokMarker,
+			Operator: corev1.TolerationOpExists,
+			Effect:   corev1.TaintEffectNoSchedule,
+		}
 }
