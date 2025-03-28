@@ -37,7 +37,7 @@ type drainNodeScenario struct {
 }
 
 func (s *drainNodeScenario) Name() string {
-	return "drain node with stuck pdb"
+	return "drain node"
 }
 
 func (s *drainNodeScenario) Preparation(ctx context.Context, namespace string, clientset kubernetes.Interface) error {
@@ -147,7 +147,7 @@ func (s *drainNodeScenario) Cleanup(ctx context.Context, namespace string, clien
 	}
 	wg.Wait()
 
-	s.log.Info("Finished up cleaning nodes for drain, deployments and PDBs.")
+	s.log.Info("Finished up cleaning nodes and deployments for drain.")
 	return nil
 }
 
