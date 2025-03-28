@@ -101,6 +101,7 @@ func RunScenario(
 
 	err = scenario.Preparation(ctx, namespaceForTest, clientset)
 	if err != nil {
+		logger.Warn("Preparation for scenario failed", "error", err)
 		return fmt.Errorf("failed to run preparation function: %w", err)
 	}
 
