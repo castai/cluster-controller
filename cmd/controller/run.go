@@ -60,8 +60,9 @@ func run(ctx context.Context) error {
 	logexporter.SetupLogExporter(logger, client)
 
 	return runController(ctx, client, logger.WithFields(logrus.Fields{
-		"cluster_id": cfg.ClusterID,
-		"version":    binVersion.String(),
+		"cluster_id":           cfg.ClusterID,
+		"version":              binVersion.String(),
+		"autoscaling_disabled": cfg.AutoscalingDisabled,
 	}), cfg, binVersion)
 }
 
@@ -209,7 +210,7 @@ func runController(
 
 		log.Infof("Running on GKE is: %v", isGKE)
 
-		if isGKE {
+		if isGKE && !cfg.AutoscalingDisabled {
 			csrMgr := csr.NewApprovalManager(log, clientset)
 			if err := csrMgr.Start(ctx); err != nil {
 				log.WithError(err).Fatal("failed to start approval manager")
