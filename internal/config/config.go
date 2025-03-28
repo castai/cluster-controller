@@ -27,6 +27,8 @@ type Config struct {
 	PprofPort      int
 	Metrics        Metrics
 	LeaderElection LeaderElection
+	// AutoscalingDisabled is a flag to disable approving csr.
+	AutoscalingDisabled bool `mapstructure:"autoscaling_disabled"`
 	// MaxActionsInProgress serves as a safeguard to limit the number of Goroutines in progress.
 	MaxActionsInProgress int
 
@@ -99,6 +101,7 @@ func Get() Config {
 	_ = viper.BindEnv("self_pod.name", "KUBERNETES_POD")
 	_ = viper.BindEnv("self_pod.namespace", "LEADER_ELECTION_NAMESPACE")
 	_ = viper.BindEnv("max_action_in_progress", "MAX_ACTIONS_IN_PROGRESS")
+	_ = viper.BindEnv("autoscaling_disabled", "AUTOSCALING_DISABLED")
 	_ = viper.BindEnv("metrics.port", "METRICS_PORT")
 
 	cfg = &Config{}
