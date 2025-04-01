@@ -7,14 +7,22 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 const (
 	DefaultKwokMarker = "kwok.x-k8s.io/node"
 	KwokMarkerValue   = "fake"
+
+	woopStubCRDName   = "recommendations.autoscaling.cast.ai"
+	woopStubCRDGroup  = "autoscaling.cast.ai"
+	woopStubCRDPlural = "recommendations"
+	woopStubCRDKind   = "Recommendation"
 )
 
 type KwokConfig struct {
@@ -94,14 +102,31 @@ func NewKwokNode(cfg KwokConfig, nodeName string) *corev1.Node {
 // Deployment cannot run in reality, it uses fake container.
 // Deployment deploys on kwok fake nodes by default.
 func DeploymentWithStuckPDB(deploymentName string) (*appsv1.Deployment, *policyv1.PodDisruptionBudget) {
+	deployment := Deployment(deploymentName)
+
+	pdb := &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: fmt.Sprintf("%s-pdb", deploymentName),
+		},
+		Spec: policyv1.PodDisruptionBudgetSpec{
+			Selector:       deployment.Spec.Selector,
+			MaxUnavailable: lo.ToPtr(intstr.FromInt32(0)),
+		},
+	}
+
+	return deployment, pdb
+}
+
+// Deployment creates a deployment that can run on kwok nodes in the default namespace.
+func Deployment(name string) *appsv1.Deployment {
 	labelApp := "appname"
-	labelValue := fmt.Sprintf("%s-stuck-pdb", deploymentName)
+	labelValue := fmt.Sprintf("%s-test-pod", name)
 
 	kwokAffinity, kwokToleration := kwokNodeAffinityAndToleration()
 
-	deployment := &appsv1.Deployment{
+	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      deploymentName,
+			Name:      name,
 			Namespace: metav1.NamespaceDefault,
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -132,22 +157,6 @@ func DeploymentWithStuckPDB(deploymentName string) (*appsv1.Deployment, *policyv
 			},
 		},
 	}
-
-	pdb := &policyv1.PodDisruptionBudget{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: fmt.Sprintf("%s-pdb", deploymentName),
-		},
-		Spec: policyv1.PodDisruptionBudgetSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					labelApp: labelValue,
-				},
-			},
-			MaxUnavailable: lo.ToPtr(intstr.FromInt32(0)),
-		},
-	}
-
-	return deployment, pdb
 }
 
 // Pod returns a pod that can run on kwok nodes in the default namespace.
@@ -173,6 +182,88 @@ func Pod(name string) *corev1.Pod {
 				kwokToleration,
 			},
 		},
+	}
+}
+
+// WoopCRD is a stub CRD similar to workload autoscaler's one.
+func WoopCRD() *apiextensionsv1.CustomResourceDefinition {
+	return &apiextensionsv1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: woopStubCRDName,
+		},
+		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
+			Group: woopStubCRDGroup,
+			Versions: []apiextensionsv1.CustomResourceDefinitionVersion{
+				{
+					Name:    "v1",
+					Served:  true,
+					Storage: true,
+					Schema: &apiextensionsv1.CustomResourceValidation{
+						OpenAPIV3Schema: &apiextensionsv1.JSONSchemaProps{
+							Type: "object",
+							Properties: map[string]apiextensionsv1.JSONSchemaProps{
+								"spec": {
+									Type: "object",
+									Properties: map[string]apiextensionsv1.JSONSchemaProps{
+										"replicas": {Type: "integer"},
+										"recommendation": {
+											Type: "array",
+											Items: &apiextensionsv1.JSONSchemaPropsOrArray{
+												Schema: &apiextensionsv1.JSONSchemaProps{
+													Type: "object",
+													Properties: map[string]apiextensionsv1.JSONSchemaProps{
+														"containerName": {Type: "string"},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			Scope: apiextensionsv1.NamespaceScoped,
+			Names: apiextensionsv1.CustomResourceDefinitionNames{
+				Plural:   woopStubCRDPlural,
+				Singular: "recommendation",
+				Kind:     woopStubCRDKind,
+				ListKind: "RecommendationList",
+			},
+		},
+	}
+}
+
+// WoopCR creates an instance of the CRD from WoopCRD.
+func WoopCR(namespace, name string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": fmt.Sprintf("%s/v1", woopStubCRDGroup),
+			"kind":       woopStubCRDKind,
+			"metadata": map[string]any{
+				"name":      name,
+				"namespace": namespace,
+			},
+			"spec": map[string]any{
+				"replicas": 10,
+				"recommendation": []map[string]any{
+					{
+						"containerName": "test",
+					},
+				},
+			},
+		},
+	}
+
+}
+
+// WoopGVR returns the GVR for the CRD from WoopCRD.
+func WoopGVR() *schema.GroupVersionResource {
+	return &schema.GroupVersionResource{
+		Group:    woopStubCRDGroup,
+		Version:  "v1",
+		Resource: woopStubCRDPlural,
 	}
 }
 
