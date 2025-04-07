@@ -2,10 +2,7 @@ package scenarios
 
 import (
 	"context"
-	"sync"
 	"time"
-
-	"github.com/samber/lo"
 )
 
 func WaitUntil(ctx context.Context, duration time.Duration, condition func(ctx context.Context) bool) bool {
