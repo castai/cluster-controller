@@ -143,7 +143,6 @@ func (s *drainNodeScenario) Cleanup(ctx context.Context, namespace string, clien
 				)
 			}
 		}()
-
 	}
 	wg.Wait()
 

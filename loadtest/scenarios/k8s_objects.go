@@ -255,7 +255,6 @@ func WoopCR(namespace, name string) *unstructured.Unstructured {
 			},
 		},
 	}
-
 }
 
 // WoopGVR returns the GVR for the CRD from WoopCRD.

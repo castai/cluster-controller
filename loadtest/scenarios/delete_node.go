@@ -142,7 +142,6 @@ func (s *deleteNodeScenario) Cleanup(ctx context.Context, namespace string, clie
 				)
 			}
 		}()
-
 	}
 	wg.Wait()
 
