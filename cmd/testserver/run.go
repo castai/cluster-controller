@@ -101,7 +101,6 @@ func createK8SClients(cfg loadtest.Config, logger *slog.Logger) (*kubernetes.Cli
 	switch {
 	case cfg.KubeConfig != "":
 		logger.Info(fmt.Sprintf("Using kubeconfig from %q", cfg.KubeConfig))
-		logger.Info(fmt.Sprintf("Using kubeconfig from %q", cfg.KubeConfig))
 		data, err := os.ReadFile(cfg.KubeConfig)
 		if err != nil {
 			return nil, nil, nil, nil, fmt.Errorf("reading kubeconfig at %s: %w", cfg.KubeConfig, err)
