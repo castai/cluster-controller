@@ -48,18 +48,9 @@ func run(ctx context.Context) error {
 		}
 	}()
 
+	// Choose scenarios below by adding/removing/etc. instances of scenarios.XXX()
+	// All scenarios in the list run in parallel (but not necessarily at the same time if preparation takes different time).
 	testScenarios := []scenarios.TestScenario{
-		//scenarios.PodEvents(5000, logger),
-		// scenarios.StuckDrain(100, 60, logger),
-		//scenarios.StuckDrain(10, 1, logger),
-		//scenarios.EvictPod(100, logger),
-		//scenarios.DrainNode(100, 5, logger),
-		//scenarios.DeleteNode(100, 5, logger),
-		//scenarios.PatchNode(500, logger),
-		//scenarios.CreateResource(1000, dynamicClient, apiExtClient, logger),
-		//scenarios.DeleteResource(1000, dynamicClient, apiExtClient, logger),
-		//scenarios.PatchResource(1, dynamicClient, apiExtClient, logger),
-		//scenarios.CheckNodeStatus(100, logger),
 		scenarios.CheckNodeDeletedStuck(300, logger),
 	}
 
