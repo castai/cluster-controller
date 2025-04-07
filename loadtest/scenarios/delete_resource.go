@@ -45,7 +45,7 @@ func (c *deleteResourceScenario) Preparation(ctx context.Context, namespace stri
 	c.log.Info("Creating CRD")
 	_, err := c.apiextensionsClient.ApiextensionsV1().CustomResourceDefinitions().Create(context.Background(), crd, v1.CreateOptions{})
 	if err != nil && !apierrors.IsAlreadyExists(err) {
-		return fmt.Errorf("failed to create CRD: %v", err)
+		return fmt.Errorf("failed to create CRD: %w", err)
 	}
 
 	// Sometimes it takes a few seconds for CRD to be fully consistent, depending on provider.
@@ -77,7 +77,7 @@ func (c *deleteResourceScenario) Cleanup(ctx context.Context, namespace string, 
 	c.log.Info("Deleting custom resource definition")
 	err := c.apiextensionsClient.ApiextensionsV1().CustomResourceDefinitions().Delete(ctx, woopStubCRDName, v1.DeleteOptions{})
 	if err != nil && !apierrors.IsNotFound(err) {
-		return fmt.Errorf("failed to delete CRD: %v", err)
+		return fmt.Errorf("failed to delete CRD: %w", err)
 	}
 
 	return nil

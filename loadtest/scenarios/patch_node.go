@@ -27,9 +27,8 @@ func PatchNode(nodeCount int, log *slog.Logger) TestScenario {
 }
 
 type patchNodeScenario struct {
-	nodeCount          int
-	deploymentReplicas int
-	log                *slog.Logger
+	nodeCount int
+	log       *slog.Logger
 
 	nodesToPatch []*corev1.Node
 }
