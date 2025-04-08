@@ -83,6 +83,8 @@ func (h *ApprovalManager) Start(ctx context.Context) error {
 	go startInformers(ctx, h.log, informerKubeletSignerFactory, informerKubeletServingFactory)
 	go h.runAutoApproveForCastAINodes(ctx, c)
 
+	cache.WaitForNamedCacheSync("cluster-controller/approval-manager", ctx.Done(), csrInformerKubeletSigner.HasSynced, csrInformerKubeletServing.HasSynced)
+
 	return nil
 }
 
