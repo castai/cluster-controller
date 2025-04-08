@@ -126,16 +126,6 @@ func createTLSConfig(ca string) (*tls.Config, error) {
 }
 
 func (c *Client) SendLog(ctx context.Context, e *LogEntry) error {
-	// Server expects fields values to be strings. If they're not it fails with BAD_REQUEST/400.
-	// Alternatively we could use "google/protobuf/any.proto" on server side but ATM it doesn't work.
-	for k, v := range e.Fields {
-		switch v.(type) {
-		case string:
-		// do nothing
-		default:
-			e.Fields[k] = fmt.Sprint(v) // Force into string
-		}
-	}
 	resp, err := c.rest.R().
 		SetBody(e).
 		SetContext(ctx).

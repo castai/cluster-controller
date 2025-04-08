@@ -73,10 +73,23 @@ func (e *LogExporter) Levels() []logrus.Level {
 func (e *LogExporter) Fire(entry *logrus.Entry) error {
 	e.wg.Add(1)
 
-	go func(entry *logrus.Entry) {
+	// logrus accesses fields of *Entry internally
+	// -> we create our own struct _before_ releasing the hook instead of inside the goroutine
+	// -> this avoids data races with logrus accessing the entry as well.
+	castLogEntry := &castai.LogEntry{
+		Level:   entry.Level.String(),
+		Time:    entry.Time,
+		Message: entry.Message,
+	}
+	castLogEntry.Fields = make(logrus.Fields, len(entry.Data))
+	for k, v := range entry.Data {
+		castLogEntry.Fields[k] = v
+	}
+
+	go func(entry *castai.LogEntry) {
 		defer e.wg.Done()
 		e.sendLogEvent(entry)
-	}(entry)
+	}(castLogEntry)
 
 	return nil
 }
@@ -86,20 +99,24 @@ func (e *LogExporter) Wait() {
 	e.wg.Wait()
 }
 
-func (e *LogExporter) sendLogEvent(log *logrus.Entry) {
+func (e *LogExporter) sendLogEvent(log *castai.LogEntry) {
 	ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
 	defer cancel()
 
-	logEntry := &castai.LogEntry{
-		Level:   log.Level.String(),
-		Time:    log.Time,
-		Message: log.Message,
-		Fields:  log.Data,
+	// Server expects fields values to be strings. If they're not it fails with BAD_REQUEST/400.
+	// Alternatively we could use "google/protobuf/any.proto" on server side but ATM it doesn't work.
+	for k, v := range log.Fields {
+		switch v.(type) {
+		case string:
+		// do nothing
+		default:
+			log.Fields[k] = fmt.Sprint(v) // Force into string
+		}
 	}
 
 	b := waitext.DefaultExponentialBackoff()
 	err := waitext.Retry(ctx, b, 3, func(ctx context.Context) (bool, error) {
-		return true, e.sender.SendLog(ctx, logEntry)
+		return true, e.sender.SendLog(ctx, log)
 	}, func(err error) {
 		e.logger.Debugf("failed to send logs, will retry: %s", err)
 	})
