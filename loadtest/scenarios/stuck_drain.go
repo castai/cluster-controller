@@ -72,7 +72,7 @@ func (s *stuckDrainScenario) Preparation(ctx context.Context, namespace string, 
 		}
 
 		// Wait for deployment to become ready, otherwise we might start draining before the pod is up.
-		progressed := WaitUntil(ctx, 30*time.Second, func() bool {
+		progressed := WaitUntil(ctx, 30*time.Second, func(ctx context.Context) bool {
 			d, err := clientset.AppsV1().Deployments(namespace).Get(ctx, deployment.Name, metav1.GetOptions{})
 			if err != nil {
 				s.log.Warn("failed to get deployment after creating", "err", err)

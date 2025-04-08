@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func WaitUntil(ctx context.Context, duration time.Duration, condition func() bool) bool {
+func WaitUntil(ctx context.Context, duration time.Duration, condition func(ctx context.Context) bool) bool {
 	start := time.Now()
 	for {
 		select {
@@ -16,7 +16,7 @@ func WaitUntil(ctx context.Context, duration time.Duration, condition func() boo
 		if time.Since(start) > duration {
 			return false
 		}
-		if condition() {
+		if condition(ctx) {
 			return true
 		}
 		time.Sleep(500 * time.Millisecond)
