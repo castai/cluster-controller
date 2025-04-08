@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/samber/lo"
+	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,53 +41,64 @@ func (s *stuckDrainScenario) Name() string {
 
 func (s *stuckDrainScenario) Preparation(ctx context.Context, namespace string, clientset kubernetes.Interface) error {
 	s.nodesToDrain = make([]*corev1.Node, 0, s.nodeCount)
+
+	var lock sync.Mutex
+	errGroup, ctx := errgroup.WithContext(ctx)
+
 	for i := range s.nodeCount {
-		nodeName := fmt.Sprintf("kwok-stuck-drain-%d", i)
-		s.log.Info(fmt.Sprintf("Creating node %s", nodeName))
-		node := NewKwokNode(KwokConfig{}, nodeName)
+		errGroup.Go(func() error {
+			nodeName := fmt.Sprintf("kwok-stuck-drain-%d", i)
+			s.log.Info(fmt.Sprintf("Creating node %s", nodeName))
+			node := NewKwokNode(KwokConfig{}, nodeName)
 
-		_, err := clientset.CoreV1().Nodes().Create(ctx, node, metav1.CreateOptions{})
-		if err != nil && !apierrors.IsAlreadyExists(err) {
-			return fmt.Errorf("failed to create fake node: %w", err)
-		}
-		if err != nil && apierrors.IsAlreadyExists(err) {
-			s.log.Warn("node already exists, will reuse but potential conflict between test runs", "nodeName", nodeName)
-		}
-		s.nodesToDrain = append(s.nodesToDrain, node)
-
-		s.log.Info(fmt.Sprintf("Creating deployment on node %s", nodeName))
-		deployment, pdb := DeploymentWithStuckPDB(fmt.Sprintf("fake-deployment-%s-%d", node.Name, i))
-		deployment.ObjectMeta.Namespace = namespace
-		//nolint:gosec // Not afraid of overflow here.
-		deployment.Spec.Replicas = lo.ToPtr(int32(s.deploymentReplicas))
-		deployment.Spec.Template.Spec.NodeName = nodeName
-		pdb.ObjectMeta.Namespace = namespace
-
-		_, err = clientset.AppsV1().Deployments(namespace).Create(ctx, deployment, metav1.CreateOptions{})
-		if err != nil {
-			return fmt.Errorf("failed to create fake deployment: %w", err)
-		}
-
-		_, err = clientset.PolicyV1().PodDisruptionBudgets(namespace).Create(ctx, pdb, metav1.CreateOptions{})
-		if err != nil {
-			return fmt.Errorf("failed to create fake pod disruption budget: %w", err)
-		}
-
-		// Wait for deployment to become ready, otherwise we might start draining before the pod is up.
-		progressed := WaitUntil(ctx, 30*time.Second, func(ctx context.Context) bool {
-			d, err := clientset.AppsV1().Deployments(namespace).Get(ctx, deployment.Name, metav1.GetOptions{})
-			if err != nil {
-				s.log.Warn("failed to get deployment after creating", "err", err)
-				return false
+			_, err := clientset.CoreV1().Nodes().Create(ctx, node, metav1.CreateOptions{})
+			if err != nil && !apierrors.IsAlreadyExists(err) {
+				return fmt.Errorf("failed to create fake node: %w", err)
 			}
-			return d.Status.ReadyReplicas == *d.Spec.Replicas
+			if err != nil && apierrors.IsAlreadyExists(err) {
+				s.log.Warn("node already exists, will reuse but potential conflict between test runs", "nodeName", nodeName)
+			}
+			lock.Lock()
+			s.nodesToDrain = append(s.nodesToDrain, node)
+			lock.Unlock()
+
+			s.log.Info(fmt.Sprintf("Creating deployment on node %s", nodeName))
+			deployment, pdb := DeploymentWithStuckPDB(fmt.Sprintf("fake-deployment-%s-%d", node.Name, i))
+			deployment.ObjectMeta.Namespace = namespace
+			//nolint:gosec // Not afraid of overflow here.
+			deployment.Spec.Replicas = lo.ToPtr(int32(s.deploymentReplicas))
+			deployment.Spec.Template.Spec.NodeName = nodeName
+			pdb.ObjectMeta.Namespace = namespace
+
+			_, err = clientset.AppsV1().Deployments(namespace).Create(ctx, deployment, metav1.CreateOptions{})
+			if err != nil {
+				return fmt.Errorf("failed to create fake deployment: %w", err)
+			}
+
+			_, err = clientset.PolicyV1().PodDisruptionBudgets(namespace).Create(ctx, pdb, metav1.CreateOptions{})
+			if err != nil {
+				return fmt.Errorf("failed to create fake pod disruption budget: %w", err)
+			}
+
+			// Wait for deployment to become ready, otherwise we might start draining before the pod is up.
+			progressed := WaitUntil(ctx, 120*time.Second, func(ctx context.Context) bool {
+				d, err := clientset.AppsV1().Deployments(namespace).Get(ctx, deployment.Name, metav1.GetOptions{})
+				if err != nil {
+					s.log.Warn("failed to get deployment after creating", "err", err)
+					return false
+				}
+				return d.Status.ReadyReplicas == *d.Spec.Replicas
+			})
+			if !progressed {
+				return fmt.Errorf("deployment %s did not progress to ready state in time", deployment.Name)
+			}
+
+			return nil
 		})
-		if !progressed {
-			return fmt.Errorf("deployment %s did not progress to ready state in time", deployment.Name)
-		}
+
 	}
 
-	return nil
+	return errGroup.Wait()
 }
 
 func (s *stuckDrainScenario) Cleanup(ctx context.Context, namespace string, clientset kubernetes.Interface) error {
