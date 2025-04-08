@@ -299,6 +299,7 @@ func processCSREvent(ctx context.Context, c chan<- *Certificate, csrObj interfac
 	if cert.Approved() ||
 		!cert.ForCASTAINode() ||
 		// approve only node bootstrap and kubelet CSR from node.
+		// TODO(furkhat@cast.ai): when is requesting user is a system node?
 		(!cert.isRequestedBySystemNode() && !cert.isRequestedByNodeBootstrap()) ||
 		cert.Outdated() {
 		return nil
@@ -393,6 +394,17 @@ func (c *Certificate) Usages() []string {
 	return nil
 }
 
+func (c *Certificate) Groups() []string {
+	if c.v1 != nil {
+		return c.v1.Spec.Groups
+	}
+	if c.v1Beta1 != nil {
+		return c.v1Beta1.Spec.Groups
+	}
+
+	return nil
+}
+
 func (c *Certificate) getSubjectCommonName(csrRequest []byte) (string, error) {
 	// node-csr prefix for bootstrap kubelet csr.
 	// csr- prefix for kubelet csr.
@@ -448,6 +460,16 @@ func (c *Certificate) validateCSR(csr *x509.CertificateRequest) error {
 
 	if len(c.Usages()) == 0 {
 		return fmt.Errorf("%w: CSR Usages is empty", errInvalidCSR)
+	}
+	var containsSystemNodeGroup bool
+	for _, group := range c.Groups() {
+		if group == "system:nodes" {
+			containsSystemNodeGroup = true
+			break
+		}
+	}
+	if !containsSystemNodeGroup {
+		return fmt.Errorf("%w: CSR groups must contain system:node group %v", errInvalidCSR, c.Groups())
 	}
 	usageServerAuthExisted := false
 	for _, u := range c.Usages() {
