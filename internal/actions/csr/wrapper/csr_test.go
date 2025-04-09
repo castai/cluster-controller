@@ -13,7 +13,9 @@ import (
 	certv1 "k8s.io/api/certificates/v1"
 	certv1beta1 "k8s.io/api/certificates/v1beta1"
 	v1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 
@@ -23,32 +25,25 @@ import (
 
 func TestNewCSR(t *testing.T) {
 	for _, testcase := range []struct {
-		name    string
-		v1      *certv1.CertificateSigningRequest
-		v1beta1 *certv1beta1.CertificateSigningRequest
-		err     error
+		name   string
+		csrObj runtime.Object
+		err    error
 	}{
 		{
 			name: "newCSRFacade() nil arguments",
 			err:  wrapper.ErrMalformedCSR,
 		},
 		{
-			name: "newCSRFacade() valid V1",
-			v1:   modifyValidV1(t, nil),
+			name:   "newCSRFacade() valid V1",
+			csrObj: modifyValidV1(t, nil),
 		},
 		{
-			name:    "newCSRFacade() valid V1Beta1",
-			v1beta1: modifyValidV1Beta1(t, nil),
-		},
-		{
-			name:    "newCSRFacade() both V1 and V1Beta1 not allowed",
-			v1:      modifyValidV1(t, nil),
-			v1beta1: modifyValidV1Beta1(t, nil),
-			err:     wrapper.ErrMalformedCSR,
+			name:   "newCSRFacade() valid V1Beta1",
+			csrObj: modifyValidV1Beta1(t, nil),
 		},
 		{
 			name: "newCSRFacade() V1 meta.Name=\"\"",
-			v1: modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
+			csrObj: modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
 				v1.Name = ""
 				return v1
 			}),
@@ -56,7 +51,7 @@ func TestNewCSR(t *testing.T) {
 		},
 		{
 			name: "newCSRFacade() V1 spec.Request=nil",
-			v1: modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
+			csrObj: modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
 				v1.Spec.Request = nil
 				return v1
 			}),
@@ -64,7 +59,7 @@ func TestNewCSR(t *testing.T) {
 		},
 		{
 			name: "newCSRFacade() V1 invalid spec.Request PEM encoding",
-			v1: modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
+			csrObj: modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
 				v1.Spec.Request = []byte("invalid certificate request")
 				return v1
 			}),
@@ -72,7 +67,7 @@ func TestNewCSR(t *testing.T) {
 		},
 		{
 			name: "newCSRFacade() V1 invalid spec.Request x509 encoding",
-			v1: modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
+			csrObj: modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
 				v1.Spec.Request = pem.EncodeToMemory(&pem.Block{
 					Type:  "CERTIFICATE REQUEST",
 					Bytes: []byte("invalid certificate request"),
@@ -83,7 +78,7 @@ func TestNewCSR(t *testing.T) {
 		},
 		{
 			name: "newCSRFacade() V1 spec.Usages=nil",
-			v1: modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
+			csrObj: modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
 				v1.Spec.Usages = nil
 				return v1
 			}),
@@ -91,7 +86,7 @@ func TestNewCSR(t *testing.T) {
 		},
 		{
 			name: "newCSRFacade() V1 spec.SignerName=\"\"",
-			v1: modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
+			csrObj: modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
 				v1.Spec.SignerName = ""
 				return v1
 			}),
@@ -99,7 +94,7 @@ func TestNewCSR(t *testing.T) {
 		},
 		{
 			name: "newCSRFacade() V1 spec.Username=\"\"",
-			v1: modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
+			csrObj: modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
 				v1.Spec.Username = ""
 				return v1
 			}),
@@ -107,7 +102,7 @@ func TestNewCSR(t *testing.T) {
 		},
 		{
 			name: "newCSRFacade() V1Beta1 meta.Name=\"\"",
-			v1beta1: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
+			csrObj: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
 				v1beta1.Name = ""
 				return v1beta1
 			}),
@@ -115,7 +110,7 @@ func TestNewCSR(t *testing.T) {
 		},
 		{
 			name: "newCSRFacade() V1Beta1 spec.Request=nil",
-			v1beta1: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
+			csrObj: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
 				v1beta1.Spec.Request = nil
 				return v1beta1
 			}),
@@ -123,7 +118,7 @@ func TestNewCSR(t *testing.T) {
 		},
 		{
 			name: "newCSRFacade() V1Beta1 invalid spec.Request",
-			v1beta1: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
+			csrObj: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
 				v1beta1.Spec.Request = []byte("invalid certificate request")
 				return v1beta1
 			}),
@@ -131,7 +126,7 @@ func TestNewCSR(t *testing.T) {
 		},
 		{
 			name: "newCSRFacade() V1Beta1 spec.Usages=nil",
-			v1beta1: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
+			csrObj: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
 				v1beta1.Spec.Usages = nil
 				return v1beta1
 			}),
@@ -139,7 +134,7 @@ func TestNewCSR(t *testing.T) {
 		},
 		{
 			name: "newCSRFacade() V1Beta1 spec.SignerName=nil",
-			v1beta1: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
+			csrObj: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
 				v1beta1.Spec.SignerName = nil
 				return v1beta1
 			}),
@@ -147,7 +142,7 @@ func TestNewCSR(t *testing.T) {
 		},
 		{
 			name: "newCSRFacade() V1Beta1 spec.SignerName=\"\"",
-			v1beta1: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
+			csrObj: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
 				v1beta1.Spec.SignerName = lo.ToPtr("")
 				return v1beta1
 			}),
@@ -155,7 +150,7 @@ func TestNewCSR(t *testing.T) {
 		},
 		{
 			name: "newCSRFacade() V1Beta1 spec.Username=\"\"",
-			v1beta1: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
+			csrObj: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
 				v1beta1.Spec.Username = ""
 				return v1beta1
 			}),
@@ -163,7 +158,7 @@ func TestNewCSR(t *testing.T) {
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
-			_, err := wrapper.NewCSR(fake.NewSimpleClientset(), testcase.v1, testcase.v1beta1)
+			_, err := wrapper.NewCSR(fake.NewClientset(), testcase.csrObj)
 			if (testcase.err == nil) != (err == nil) || !errors.Is(err, testcase.err) {
 				t.Fatalf("want: %v, got: %v", testcase.err, err)
 			}
@@ -172,7 +167,7 @@ func TestNewCSR(t *testing.T) {
 }
 
 func TestCSR_Approved(t *testing.T) {
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	for _, testcase := range []struct {
 		name   string
 		obj    *wrapper.CSR
@@ -227,7 +222,7 @@ func TestCSR_Approved(t *testing.T) {
 }
 
 func TestCSR_CreatedAt(t *testing.T) {
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	testTime := time.Now().Add(-time.Hour)
 	for _, testcase := range []struct {
 		name   string
@@ -256,14 +251,13 @@ func TestCSR_CreatedAt(t *testing.T) {
 
 func TestCSR_Name(t *testing.T) {
 	for _, testcase := range []struct {
-		name    string
-		v1      *certv1.CertificateSigningRequest
-		v1beta1 *certv1beta1.CertificateSigningRequest
-		result  string
+		name   string
+		csrObj runtime.Object
+		result string
 	}{
 		{
 			name: "name() V1",
-			v1: modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
+			csrObj: modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
 				v1.Name = "test valid v1 name"
 				return v1
 			}),
@@ -271,7 +265,7 @@ func TestCSR_Name(t *testing.T) {
 		},
 		{
 			name: "name() V1Beta1",
-			v1beta1: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
+			csrObj: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
 				v1beta1.Name = "test valid v1beta1 name"
 				return v1beta1
 			}),
@@ -279,7 +273,7 @@ func TestCSR_Name(t *testing.T) {
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
-			csr, err := wrapper.NewCSR(fake.NewClientset(), testcase.v1, testcase.v1beta1)
+			csr, err := wrapper.NewCSR(fake.NewClientset(), testcase.csrObj)
 			if err != nil {
 				t.Fatalf("failed to create CSR: %v", err)
 			}
@@ -292,14 +286,13 @@ func TestCSR_Name(t *testing.T) {
 
 func TestCSR_RequestingUser(t *testing.T) {
 	for _, testcase := range []struct {
-		name    string
-		v1      *certv1.CertificateSigningRequest
-		v1beta1 *certv1beta1.CertificateSigningRequest
-		result  string
+		name   string
+		csrObj runtime.Object
+		result string
 	}{
 		{
 			name: "requestingUser() V1",
-			v1: modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
+			csrObj: modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
 				v1.Spec.Username = "test valid v1 username"
 				return v1
 			}),
@@ -307,7 +300,7 @@ func TestCSR_RequestingUser(t *testing.T) {
 		},
 		{
 			name: "requestingUser() V1Beta1",
-			v1beta1: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
+			csrObj: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
 				v1beta1.Spec.Username = "test valid v1beta1 username"
 				return v1beta1
 			}),
@@ -315,7 +308,7 @@ func TestCSR_RequestingUser(t *testing.T) {
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
-			csr, err := wrapper.NewCSR(fake.NewClientset(), testcase.v1, testcase.v1beta1)
+			csr, err := wrapper.NewCSR(fake.NewClientset(), testcase.csrObj)
 			if err != nil {
 				t.Fatalf("failed to create CSR: %v", err)
 			}
@@ -328,14 +321,13 @@ func TestCSR_RequestingUser(t *testing.T) {
 
 func TestCSR_SignerName(t *testing.T) {
 	for _, testcase := range []struct {
-		name    string
-		v1      *certv1.CertificateSigningRequest
-		v1beta1 *certv1beta1.CertificateSigningRequest
-		result  string
+		name   string
+		csrObj runtime.Object
+		result string
 	}{
 		{
 			name: "signerName() V1",
-			v1: modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
+			csrObj: modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
 				v1.Spec.SignerName = "test valid v1 signer name"
 				return v1
 			}),
@@ -343,7 +335,7 @@ func TestCSR_SignerName(t *testing.T) {
 		},
 		{
 			name: "signerName() V1Beta1",
-			v1beta1: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
+			csrObj: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
 				v1beta1.Spec.SignerName = lo.ToPtr("test valid v1beta1 signer name")
 				return v1beta1
 			}),
@@ -351,7 +343,7 @@ func TestCSR_SignerName(t *testing.T) {
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
-			csr, err := wrapper.NewCSR(fake.NewClientset(), testcase.v1, testcase.v1beta1)
+			csr, err := wrapper.NewCSR(fake.NewClientset(), testcase.csrObj)
 			if err != nil {
 				t.Fatalf("failed to create CSR: %v", err)
 			}
@@ -364,14 +356,13 @@ func TestCSR_SignerName(t *testing.T) {
 
 func TestCSR_Usages(t *testing.T) {
 	for _, testcase := range []struct {
-		name    string
-		v1      *certv1.CertificateSigningRequest
-		v1beta1 *certv1beta1.CertificateSigningRequest
-		result  []string
+		name   string
+		csrObj runtime.Object
+		result []string
 	}{
 		{
 			name: "usages() V1",
-			v1: modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
+			csrObj: modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
 				v1.Spec.Usages = []certv1.KeyUsage{certv1.UsageClientAuth}
 				return v1
 			}),
@@ -379,7 +370,7 @@ func TestCSR_Usages(t *testing.T) {
 		},
 		{
 			name: "usages() V1Beta1",
-			v1beta1: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
+			csrObj: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
 				v1beta1.Spec.Usages = []certv1beta1.KeyUsage{certv1beta1.UsageClientAuth}
 				return v1beta1
 			}),
@@ -387,7 +378,7 @@ func TestCSR_Usages(t *testing.T) {
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
-			csr, err := wrapper.NewCSR(fake.NewClientset(), testcase.v1, testcase.v1beta1)
+			csr, err := wrapper.NewCSR(fake.NewClientset(), testcase.csrObj)
 			if err != nil {
 				t.Fatalf("failed to create CSR: %v", err)
 			}
@@ -403,6 +394,46 @@ func TestCSR_Usages(t *testing.T) {
 	}
 }
 
+func TestCSR_Groups(t *testing.T) {
+	for _, testcase := range []struct {
+		name   string
+		csrObj runtime.Object
+		result []string
+	}{
+		{
+			name: "groups() V1",
+			csrObj: modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
+				v1.Spec.Groups = []string{"test-group"}
+				return v1
+			}),
+			result: []string{"test-group"},
+		},
+		{
+			name: "groups() V1Beta1",
+			csrObj: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
+				v1beta1.Spec.Groups = []string{"test-group"}
+				return v1beta1
+			}),
+			result: []string{"test-group"},
+		},
+	} {
+		t.Run(testcase.name, func(t *testing.T) {
+			csr, err := wrapper.NewCSR(fake.NewClientset(), testcase.csrObj)
+			if err != nil {
+				t.Fatalf("failed to create CSR: %v", err)
+			}
+			if len(csr.Groups()) != len(testcase.result) {
+				t.Fatalf("Groups() length want: %v, got: %v", len(testcase.result), len(csr.Groups()))
+			}
+			for _, group := range csr.Groups() {
+				if !lo.Contains(testcase.result, group) {
+					t.Fatalf("Groups() contains unexpected: %v", group)
+				}
+			}
+		})
+	}
+}
+
 func TestCSR_ParsedCertificateRequest(t *testing.T) {
 	wantEncoded := csrtest.NewEncodedCertificateRequest(t, &x509.CertificateRequest{
 		Subject: pkix.Name{
@@ -410,27 +441,26 @@ func TestCSR_ParsedCertificateRequest(t *testing.T) {
 		},
 	})
 	for _, testcase := range []struct {
-		name    string
-		v1      *certv1.CertificateSigningRequest
-		v1beta1 *certv1beta1.CertificateSigningRequest
+		name   string
+		csrObj runtime.Object
 	}{
 		{
 			name: "parsedCertificateRequest() V1",
-			v1: modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
+			csrObj: modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
 				v1.Spec.Request = wantEncoded
 				return v1
 			}),
 		},
 		{
 			name: "parsedCertificateRequest() V1Beta1",
-			v1beta1: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
+			csrObj: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
 				v1beta1.Spec.Request = wantEncoded
 				return v1beta1
 			}),
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
-			csr, err := wrapper.NewCSR(fake.NewClientset(), testcase.v1, testcase.v1beta1)
+			csr, err := wrapper.NewCSR(fake.NewClientset(), testcase.csrObj)
 			if err != nil {
 				t.Fatalf("failed to create CSR: %v", err)
 			}
@@ -451,34 +481,28 @@ func TestCSR_ParsedCertificateRequest(t *testing.T) {
 
 func TestCSR_Approve(t *testing.T) {
 	for _, testcase := range []struct {
-		name    string
-		v1      *certv1.CertificateSigningRequest
-		v1beta1 *certv1beta1.CertificateSigningRequest
-		err     error
+		name   string
+		csrObj runtime.Object
+		err    error
 	}{
 		{
 			name: "Approve() V1 OK",
-			v1: modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
+			csrObj: modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
 				v1.Status.Conditions = nil
 				return v1
 			}),
 		},
 		{
 			name: "Approve() V1Beta1 OK",
-			v1beta1: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
+			csrObj: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
 				v1beta1.Status.Conditions = nil
 				return v1beta1
 			}),
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
-			var clientset kubernetes.Interface
-			if testcase.v1 != nil {
-				clientset = fake.NewSimpleClientset(testcase.v1)
-			} else if testcase.v1beta1 != nil {
-				clientset = fake.NewSimpleClientset(testcase.v1beta1)
-			}
-			csr, err := wrapper.NewCSR(clientset, testcase.v1, testcase.v1beta1)
+			clientset := fake.NewClientset(testcase.csrObj)
+			csr, err := wrapper.NewCSR(clientset, testcase.csrObj)
 			if err != nil {
 				t.Fatalf("failed to create CSR: %v", err)
 			}
@@ -493,10 +517,116 @@ func TestCSR_Approve(t *testing.T) {
 	}
 }
 
+func TestCSR_Delete(t *testing.T) {
+	t.Parallel()
+	for _, testcase := range []struct {
+		name   string
+		csrObj runtime.Object
+	}{
+		{
+			name:   "delete() V1",
+			csrObj: modifyValidV1(t, nil),
+		},
+		{
+			name:   "delete() V1Beta1",
+			csrObj: modifyValidV1Beta1(t, nil),
+		},
+	} {
+		t.Run(testcase.name, func(t *testing.T) {
+			clientset := fake.NewClientset(testcase.csrObj)
+			csr, err := wrapper.NewCSR(clientset, testcase.csrObj)
+			if err != nil {
+				t.Fatalf("failed to create CSR: %v", err)
+			}
+			err = csr.Delete(context.Background())
+			if err != nil {
+				t.Fatalf("failed to delete CSR: %v", err)
+			}
+			switch testcase.csrObj.GetObjectKind().GroupVersionKind() {
+			case certv1.SchemeGroupVersion.WithKind("CertificateSigningRequest"):
+				_, err := clientset.CertificatesV1().CertificateSigningRequests().Get(context.Background(), csr.Name(), metav1.GetOptions{})
+				if !k8serrors.IsNotFound(err) {
+					t.Fatalf("expected CSR to be deleted, but it still exists: %v", err)
+				}
+			case certv1beta1.SchemeGroupVersion.WithKind("CertificateSigningRequest"):
+				_, err := clientset.CertificatesV1beta1().CertificateSigningRequests().Get(context.Background(), csr.Name(), metav1.GetOptions{})
+				if !k8serrors.IsNotFound(err) {
+					t.Fatalf("expected CSR to be deleted, but it still exists: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestCSR_CreateOrRefresh(t *testing.T) {
+	t.Parallel()
+
+	for _, testcase := range []struct {
+		absent bool
+		name   string
+		csrObj runtime.Object
+	}{
+		{
+			name:   "createOrRefresh() V1 when exists",
+			csrObj: modifyValidV1(t, nil),
+		},
+		{
+			absent: true,
+			name:   "createOrRefresh() V1 when absent",
+			csrObj: modifyValidV1(t, nil),
+		},
+		{
+			name:   "createOrRefresh() V1Beta1 when exists",
+			csrObj: modifyValidV1Beta1(t, nil),
+		},
+		{
+			absent: true,
+			name:   "createOrRefresh() V1Beta1 when absent",
+			csrObj: modifyValidV1Beta1(t, nil),
+		},
+	} {
+		t.Run(testcase.name, func(t *testing.T) {
+			clientset := fake.NewClientset()
+			if !testcase.absent {
+				switch testcase.csrObj.GetObjectKind().GroupVersionKind() {
+				case certv1.SchemeGroupVersion.WithKind("CertificateSigningRequest"):
+					clientset.CertificatesV1().CertificateSigningRequests().Create(context.Background(), testcase.csrObj.(*certv1.CertificateSigningRequest), metav1.CreateOptions{})
+				case certv1beta1.SchemeGroupVersion.WithKind("CertificateSigningRequest"):
+					clientset.CertificatesV1beta1().CertificateSigningRequests().Create(context.Background(), testcase.csrObj.(*certv1beta1.CertificateSigningRequest), metav1.CreateOptions{})
+				}
+			}
+			csr, err := wrapper.NewCSR(clientset, testcase.csrObj)
+			if err != nil {
+				t.Fatalf("failed to create CSR: %v", err)
+			}
+			err = csr.CreateOrRefresh(context.Background())
+			if err != nil {
+				t.Fatalf("failed to createOrRefresh CSR: %v", err)
+			}
+			switch testcase.csrObj.GetObjectKind().GroupVersionKind() {
+			case certv1.SchemeGroupVersion.WithKind("CertificateSigningRequest"):
+				_, err := clientset.CertificatesV1().CertificateSigningRequests().Get(context.Background(), csr.Name(), metav1.GetOptions{})
+				if err != nil {
+					t.Fatalf("failed to get CSR: %v", err)
+				}
+			case certv1beta1.SchemeGroupVersion.WithKind("CertificateSigningRequest"):
+				_, err := clientset.CertificatesV1beta1().CertificateSigningRequests().Get(context.Background(), csr.Name(), metav1.GetOptions{})
+				if err != nil {
+					t.Fatalf("failed to get CSR: %v", err)
+				}
+			}
+		})
+	}
+}
+
 func modifyValidV1(t *testing.T, modify func(*certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
 	t.Helper()
 
 	result := &certv1.CertificateSigningRequest{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: certv1.SchemeGroupVersion.String(),
+			Kind:       "CertificateSigningRequest",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "test-csr",
 			CreationTimestamp: metav1.Now(),
@@ -521,6 +651,10 @@ func modifyValidV1(t *testing.T, modify func(*certv1.CertificateSigningRequest) 
 func modifyValidV1Beta1(t *testing.T, modify func(*certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
 	t.Helper()
 	result := &certv1beta1.CertificateSigningRequest{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: certv1beta1.SchemeGroupVersion.String(),
+			Kind:       "CertificateSigningRequest",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-csr",
 		},
@@ -546,7 +680,7 @@ func withConditionsV1(t *testing.T, clientset kubernetes.Interface, conditions [
 	result, err := wrapper.NewCSR(clientset, modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
 		v1.Status.Conditions = conditions
 		return v1
-	}), nil)
+	}))
 	if err != nil {
 		t.Fatalf("failed to create CSR: %v", err)
 	}
@@ -555,7 +689,7 @@ func withConditionsV1(t *testing.T, clientset kubernetes.Interface, conditions [
 
 func withConditionsV1Beta1(t *testing.T, clientset kubernetes.Interface, conditions []certv1beta1.CertificateSigningRequestCondition) *wrapper.CSR {
 	t.Helper()
-	result, err := wrapper.NewCSR(clientset, nil, modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
+	result, err := wrapper.NewCSR(clientset, modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
 		v1beta1.Status.Conditions = conditions
 		return v1beta1
 	}))
@@ -570,7 +704,7 @@ func v1WithCreationTimestamp(t *testing.T, clientset kubernetes.Interface, creat
 	result, err := wrapper.NewCSR(clientset, modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
 		v1.ObjectMeta.CreationTimestamp = metav1.NewTime(creationTime)
 		return v1
-	}), nil)
+	}))
 	if err != nil {
 		t.Fatalf("failed to create CSR: %v", err)
 	}
@@ -579,7 +713,7 @@ func v1WithCreationTimestamp(t *testing.T, clientset kubernetes.Interface, creat
 
 func v1beta1WithCreationTimestamp(t *testing.T, clientset kubernetes.Interface, creationTime time.Time) *wrapper.CSR {
 	t.Helper()
-	result, err := wrapper.NewCSR(clientset, nil, modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
+	result, err := wrapper.NewCSR(clientset, modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
 		v1beta1.ObjectMeta.CreationTimestamp = metav1.NewTime(creationTime)
 		return v1beta1
 	}))
