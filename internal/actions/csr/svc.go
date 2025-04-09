@@ -254,8 +254,7 @@ func managedCSRRequestingUser(s string) bool {
 }
 
 func managerSubjectCommonName(commonName string) bool {
-	// TODO: contains cast-pool
-	return strings.HasPrefix(commonName, "system:node:")
+	return strings.HasPrefix(commonName, "system:node:") && strings.Contains(commonName, "cast-pool")
 }
 
 func (m *ApprovalManager) validateCSRRequirements(ctx context.Context, csr *wrapper.CSR) error {
