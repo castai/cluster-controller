@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -21,8 +22,10 @@ type CastAITestServer struct {
 	actionsPushChannel chan castai.ClusterAction
 	cfg                TestServerConfig
 
-	logMx      sync.Mutex
-	actionsLog map[string]chan string
+	logMx       sync.Mutex
+	actionsLog  map[string]chan string
+	lockActions sync.Mutex
+	actions     map[string]*castai.ClusterAction
 }
 
 func NewTestServer(logger *slog.Logger, cfg TestServerConfig) *CastAITestServer {
@@ -31,6 +34,7 @@ func NewTestServer(logger *slog.Logger, cfg TestServerConfig) *CastAITestServer 
 		actionsPushChannel: make(chan castai.ClusterAction, 10000),
 		cfg:                cfg,
 		actionsLog:         make(map[string]chan string),
+		actions:            make(map[string]*castai.ClusterAction),
 	}
 }
 
@@ -44,9 +48,12 @@ func (c *CastAITestServer) ExecuteActions(ctx context.Context, actions []castai.
 		if action.ID == "" {
 			action.ID = uuid.NewString()
 		}
-		c.addActionToStore(action.ID, ownerChannel)
-		c.actionsPushChannel <- action
+		if action.CreatedAt == (time.Time{}) {
+			action.CreatedAt = time.Now()
+		}
+		c.addActionToStore(action.ID, action, ownerChannel)
 	}
+	c.log.Info(fmt.Sprintf("added %d actions to local DB", len(actions)))
 
 	// Read from owner channel until len(actions) times, then close and return.
 	finished := 0
@@ -55,8 +62,7 @@ func (c *CastAITestServer) ExecuteActions(ctx context.Context, actions []castai.
 		case <-ctx.Done():
 			c.log.Info(fmt.Sprintf("Received signal to stop finished with cause (%q) and err (%v). Closing executor.", context.Cause(ctx), ctx.Err()))
 			return
-		case finishedAction := <-ownerChannel:
-			c.removeActionFromStore(finishedAction)
+		case <-ownerChannel:
 			finished++
 			if finished == len(actions) {
 				close(ownerChannel)
@@ -69,44 +75,30 @@ func (c *CastAITestServer) ExecuteActions(ctx context.Context, actions []castai.
 /* Start Cluster-hub mock implementation */
 
 func (c *CastAITestServer) GetActions(ctx context.Context, _ string) ([]*castai.ClusterAction, error) {
-	c.log.Info(fmt.Sprintf("GetActions called, have %d items in buffer", len(c.actionsPushChannel)))
-	actionsToReturn := make([]*castai.ClusterAction, 0)
+	c.log.Info("GetActions called")
+	c.logMx.Lock()
+	actions := lo.MapToSlice(c.actions, func(_ string, value *castai.ClusterAction) *castai.ClusterAction {
+		return value
+	})
+	c.logMx.Unlock()
 
-	// Wait for at least one action to arrive from whoever is pushing them.
-	// If none arrive, we simulate the "empty poll" case of cluster-hub and return empty list.
-	select {
-	case x := <-c.actionsPushChannel:
-		actionsToReturn = append(actionsToReturn, &x)
-	case <-time.After(c.cfg.TimeoutWaitingForActions):
-		c.log.Info(fmt.Sprintf("No actions to return in %v", c.cfg.TimeoutWaitingForActions))
-		return nil, nil
-	case <-ctx.Done():
-		return nil, fmt.Errorf("context done with cause (%w), err (%w)", context.Cause(ctx), ctx.Err())
+	slices.SortStableFunc(actions, func(a, b *castai.ClusterAction) int {
+		return a.CreatedAt.Compare(b.CreatedAt)
+	})
+	totalActionsInDB := len(actions)
+	if totalActionsInDB > c.cfg.MaxActionsPerCall {
+		actions = actions[:c.cfg.MaxActionsPerCall]
 	}
 
-	// Attempt to drain up to max items from the channel.
-	for len(actionsToReturn) < c.cfg.MaxActionsPerCall {
-		select {
-		case x := <-c.actionsPushChannel:
-			actionsToReturn = append(actionsToReturn, &x)
-		case <-time.After(50 * time.Millisecond):
-			c.log.Info(fmt.Sprintf("Returning %d actions for processing", len(actionsToReturn)))
-			// If we haven't received enough items, just flush.
-			return actionsToReturn, nil
-		case <-ctx.Done():
-			return nil, fmt.Errorf("context done with cause (%w), err (%w)", context.Cause(ctx), ctx.Err())
-		}
-	}
-
-	c.log.Info(fmt.Sprintf("Returning %d actions for processing", len(actionsToReturn)))
-	return actionsToReturn, nil
+	c.log.Info(fmt.Sprintf("Returning %d actions for processing out of %d", len(actions), totalActionsInDB))
+	return actions, nil
 }
 
 func (c *CastAITestServer) AckAction(ctx context.Context, actionID string, req *castai.AckClusterActionRequest) error {
 	errMsg := lo.FromPtr(req.Error)
 	c.log.DebugContext(ctx, fmt.Sprintf("action %q acknowledged; has error: %v; error: %v", actionID, req.Error != nil, errMsg))
 
-	receiver := c.getActionReceiver(actionID)
+	receiver := c.removeActionFromStore(actionID)
 	if receiver == nil {
 		return fmt.Errorf("action %q does not have a receiver", actionID)
 	}
@@ -123,28 +115,26 @@ func (c *CastAITestServer) SendLog(ctx context.Context, e *castai.LogEntry) erro
 
 /* End Cluster-hub mock implementation */
 
-func (c *CastAITestServer) addActionToStore(actionID string, receiver chan string) {
+func (c *CastAITestServer) addActionToStore(actionID string, action castai.ClusterAction, receiver chan string) {
 	c.logMx.Lock()
 	defer c.logMx.Unlock()
 
 	c.actionsLog[actionID] = receiver
+	c.actions[actionID] = &action
 }
 
-func (c *CastAITestServer) removeActionFromStore(actionID string) {
-	c.logMx.Lock()
-	defer c.logMx.Unlock()
-
-	delete(c.actionsLog, actionID)
-}
-
-func (c *CastAITestServer) getActionReceiver(actionID string) chan string {
+func (c *CastAITestServer) removeActionFromStore(actionID string) chan string {
 	c.logMx.Lock()
 	defer c.logMx.Unlock()
 
 	receiver, ok := c.actionsLog[actionID]
 	if !ok {
-		c.log.Error(fmt.Sprintf("Receiver for action %s is no longer there, possibly shutting down", actionID))
-		return nil
+		c.log.Error(fmt.Sprintf("Receiver for action %s is no longer there, possibly shutting down or CC got restarted", actionID))
+		receiver = nil
 	}
+
+	delete(c.actionsLog, actionID)
+	delete(c.actions, actionID)
+
 	return receiver
 }
