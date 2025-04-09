@@ -2,10 +2,10 @@ package csr_test
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"io"
+	"net"
 	"net/url"
 	"testing"
 	"time"
@@ -43,6 +43,8 @@ func TestIntegration(t *testing.T) {
 		uris                  []*url.URL
 		usages                []certv1.KeyUsage
 		username              string
+		ips                   []net.IP
+		dns                   []string
 	}{
 		{
 			description:       "[client-kubelet] outdated",
@@ -111,34 +113,179 @@ func TestIntegration(t *testing.T) {
 			usages:      []certv1.KeyUsage{certv1.UsageClientAuth, certv1.UsageDigitalSignature, certv1.UsageKeyEncipherment},
 			username:    "kubelet-bootstrap",
 		},
-		// TODO(furkhat@cast.ai)
-		// {
-		// 	description: "with not allowed key usages [" + certv1.KubeAPIServerClientKubeletSignerName + "]",
-		// 	node:        "csr-cast-pool-9",
-		// 	notApproved: true,
-		// 	signer:      certv1.KubeAPIServerClientKubeletSignerName,
-		// 	usages:      []certv1.KeyUsage{certv1.UsageClientAuth, certv1.UsageServerAuth},
-		// 	username:    "kubelet-bootstrap",
-		// },
-		//
-		// TODO(furkhat@cast.ai): const system:nodes and system:node:
-		// {
-		// 	description: "[kubelet-serving] no matching node",
-		// 	groups:      []string{"system:nodes"},
-		// 	nodeName:    "node-csr-cast-pool-10",
-		// 	notApproved: true,
-		// 	signer:      certv1.KubeletServingSignerName,
-		// 	usages:      []certv1.KeyUsage{certv1.UsageServerAuth},
-		// 	username:    "system:node:node-csr-cast-pool-10",
-		// },
+		{
+			description: "[client-kubelet] with not allowed key usages",
+			nodeName:    "csr-cast-pool-9",
+			notApproved: true,
+			signer:      certv1.KubeAPIServerClientKubeletSignerName,
+			usages:      []certv1.KeyUsage{certv1.UsageClientAuth, certv1.UsageServerAuth},
+			username:    "kubelet-bootstrap",
+		},
 		{
 			description:           "[kubelet-serving] with prefix node-csr",
 			groups:                []string{"system:nodes"},
 			nodeCreatedWithStatus: &corev1.NodeStatus{},
-			nodeName:              "node-csr-cast-pool-10a",
+			nodeName:              "node-csr-cast-pool-10",
 			signer:                certv1.KubeletServingSignerName,
 			usages:                []certv1.KeyUsage{certv1.UsageServerAuth},
-			username:              "system:node:node-csr-cast-pool-10a",
+			username:              "system:node:node-csr-cast-pool-10",
+		},
+		{
+			description: "[kubelet-serving] without matching node",
+			groups:      []string{"system:nodes"},
+			nodeName:    "node-csr-cast-pool-10a",
+			notApproved: true,
+			signer:      certv1.KubeletServingSignerName,
+			usages:      []certv1.KeyUsage{certv1.UsageServerAuth},
+			username:    "system:node:node-csr-cast-pool-10a",
+		},
+		{
+			description: "[kubelet-serving] with matching Internal IP",
+			groups:      []string{"system:nodes"},
+			nodeCreatedWithStatus: &corev1.NodeStatus{
+				Addresses: []corev1.NodeAddress{
+					{
+						Type:    corev1.NodeInternalIP,
+						Address: "10.0.0.123",
+					},
+				},
+			},
+			nodeName: "node-csr-cast-pool-10b",
+			signer:   certv1.KubeletServingSignerName,
+			usages:   []certv1.KeyUsage{certv1.UsageServerAuth},
+			username: "system:node:node-csr-cast-pool-10b",
+			ips: []net.IP{
+				net.IPv4(10, 0, 0, 123),
+			},
+		},
+		{
+			description: "[kubelet-serving] with mismatching Internal IP",
+			groups:      []string{"system:nodes"},
+			nodeCreatedWithStatus: &corev1.NodeStatus{
+				Addresses: []corev1.NodeAddress{
+					{
+						Type:    corev1.NodeInternalIP,
+						Address: "10.0.0.1",
+					},
+				},
+			},
+			nodeName:    "node-csr-cast-pool-10c",
+			notApproved: true,
+			signer:      certv1.KubeletServingSignerName,
+			usages:      []certv1.KeyUsage{certv1.UsageServerAuth},
+			username:    "system:node:node-csr-cast-pool-10c",
+			ips: []net.IP{
+				net.IPv4(10, 0, 0, 123),
+			},
+		},
+		{
+			description: "[kubelet-serving] with matching External IP",
+			groups:      []string{"system:nodes"},
+			nodeCreatedWithStatus: &corev1.NodeStatus{
+				Addresses: []corev1.NodeAddress{
+					{
+						Type:    corev1.NodeExternalIP,
+						Address: "10.0.0.123",
+					},
+				},
+			},
+			nodeName: "node-csr-cast-pool-10d",
+			signer:   certv1.KubeletServingSignerName,
+			usages:   []certv1.KeyUsage{certv1.UsageServerAuth},
+			username: "system:node:node-csr-cast-pool-10d",
+			ips: []net.IP{
+				net.IPv4(10, 0, 0, 123),
+			},
+		},
+		{
+			description: "[kubelet-serving] with mismatching External IP",
+			groups:      []string{"system:nodes"},
+			nodeCreatedWithStatus: &corev1.NodeStatus{
+				Addresses: []corev1.NodeAddress{
+					{
+						Type:    corev1.NodeExternalIP,
+						Address: "10.0.0.1",
+					},
+				},
+			},
+			nodeName:    "node-csr-cast-pool-10e",
+			notApproved: true,
+			signer:      certv1.KubeletServingSignerName,
+			usages:      []certv1.KeyUsage{certv1.UsageServerAuth},
+			username:    "system:node:node-csr-cast-pool-10e",
+			ips: []net.IP{
+				net.IPv4(10, 0, 0, 123),
+			},
+		},
+		{
+			description: "[kubelet-serving] with matching Internal DNS",
+			groups:      []string{"system:nodes"},
+			nodeCreatedWithStatus: &corev1.NodeStatus{
+				Addresses: []corev1.NodeAddress{
+					{
+						Type:    corev1.NodeInternalDNS,
+						Address: "foo.bar",
+					},
+				},
+			},
+			nodeName: "node-csr-cast-pool-10f",
+			signer:   certv1.KubeletServingSignerName,
+			usages:   []certv1.KeyUsage{certv1.UsageServerAuth},
+			username: "system:node:node-csr-cast-pool-10f",
+			dns:      []string{"foo.bar"},
+		},
+		{
+			description: "[kubelet-serving] with mismatching Internal DNS",
+			groups:      []string{"system:nodes"},
+			nodeCreatedWithStatus: &corev1.NodeStatus{
+				Addresses: []corev1.NodeAddress{
+					{
+						Type:    corev1.NodeInternalDNS,
+						Address: "some.text",
+					},
+				},
+			},
+			nodeName:    "node-csr-cast-pool-10g",
+			notApproved: true,
+			signer:      certv1.KubeletServingSignerName,
+			usages:      []certv1.KeyUsage{certv1.UsageServerAuth},
+			username:    "system:node:node-csr-cast-pool-10g",
+			dns:         []string{"foo.bar"},
+		},
+		{
+			description: "[kubelet-serving] with matching External DNS",
+			groups:      []string{"system:nodes"},
+			nodeCreatedWithStatus: &corev1.NodeStatus{
+				Addresses: []corev1.NodeAddress{
+					{
+						Type:    corev1.NodeExternalDNS,
+						Address: "foo.bar",
+					},
+				},
+			},
+			nodeName: "node-csr-cast-pool-10h",
+			signer:   certv1.KubeletServingSignerName,
+			usages:   []certv1.KeyUsage{certv1.UsageServerAuth},
+			username: "system:node:node-csr-cast-pool-10h",
+			dns:      []string{"foo.bar"},
+		},
+		{
+			description: "[kubelet-serving] with mismatching External DNS",
+			groups:      []string{"system:nodes"},
+			nodeCreatedWithStatus: &corev1.NodeStatus{
+				Addresses: []corev1.NodeAddress{
+					{
+						Type:    corev1.NodeExternalDNS,
+						Address: "some.text",
+					},
+				},
+			},
+			nodeName:    "node-csr-cast-pool-10i",
+			notApproved: true,
+			signer:      certv1.KubeletServingSignerName,
+			usages:      []certv1.KeyUsage{certv1.UsageServerAuth},
+			username:    "system:node:node-csr-cast-pool-10i",
+			dns:         []string{"foo.bar"},
 		},
 		{
 			description:           "[kubelet-serving] with prefix csr",
@@ -241,7 +388,7 @@ func TestIntegration(t *testing.T) {
 		},
 	} {
 		t.Run(testcase.description, func(t *testing.T) {
-			// t.Parallel()
+			t.Parallel()
 			if testcase.creationTimestamp.IsZero() {
 				testcase.creationTimestamp = metav1.Now()
 			}
@@ -262,17 +409,19 @@ func TestIntegration(t *testing.T) {
 					CreationTimestamp: testcase.creationTimestamp,
 				},
 				Spec: certv1.CertificateSigningRequestSpec{
+					Groups: testcase.groups,
 					Request: csrtest.NewEncodedCertificateRequest(t, &x509.CertificateRequest{
+						EmailAddresses: testcase.emails,
+						IPAddresses:    testcase.ips,
+						DNSNames:       testcase.dns,
 						Subject: pkix.Name{
 							CommonName: "system:node:" + testcase.nodeName,
 						},
-						EmailAddresses: testcase.emails,
-						URIs:           testcase.uris,
+						URIs: testcase.uris,
 					}),
 					SignerName: testcase.signer,
-					Username:   testcase.username,
 					Usages:     testcase.usages,
-					Groups:     testcase.groups,
+					Username:   testcase.username,
 				},
 			}
 			_, err := clientset.CertificatesV1().CertificateSigningRequests().Create(ctx, csr, metav1.CreateOptions{})
@@ -282,9 +431,9 @@ func TestIntegration(t *testing.T) {
 			r.NoError(err, "failed to get CSR")
 			approved := approvedCSR(csr)
 			if testcase.notApproved {
-				r.Falsef(approved, "%s should not be approved", testcase.description)
+				r.Falsef(approved, "%s - must not be approved", testcase.description)
 			} else {
-				r.Truef(approved, "%s should be approved", testcase.description)
+				r.Truef(approved, "%s - must be approved", testcase.description)
 			}
 		})
 	}
@@ -335,15 +484,4 @@ func newManagerAndClientset(t *testing.T) (*csr.ApprovalManager, *fake.Clientset
 	<-watcherStarted
 	<-watcherStarted
 	return manager, client
-}
-
-func alphanumeric(n int) string {
-	nums := make([]byte, n)
-	rand.Read(nums)
-	alphanumerals := []byte("0123456789abcdefghijklmnoprstuvwxyz")
-	var result []byte
-	for _, v := range nums {
-		result = append(result, alphanumerals[int(v)%len(alphanumerals)])
-	}
-	return string(result)
 }
