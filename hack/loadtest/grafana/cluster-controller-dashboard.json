@@ -322,10 +322,10 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(rest_client_rate_limiter_duration_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.9, sum(rate(rest_client_rate_limiter_duration_seconds_bucket[1m])) by (le))",
           "hide": false,
           "instant": false,
-          "legendFormat": "p95",
+          "legendFormat": "p90",
           "range": true,
           "refId": "B"
         },
@@ -335,10 +335,10 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.9, sum(rate(rest_client_rate_limiter_duration_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.5, sum(rate(rest_client_rate_limiter_duration_seconds_bucket[1m])) by (le))",
           "hide": false,
           "instant": false,
-          "legendFormat": "p90",
+          "legendFormat": "p50",
           "range": true,
           "refId": "C"
         }
@@ -441,12 +441,12 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(rest_client_request_duration_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.9, sum(rate(rest_client_request_duration_seconds_bucket[1m])) by (le))",
           "hide": false,
           "instant": false,
-          "legendFormat": "p95",
+          "legendFormat": "p90",
           "range": true,
-          "refId": "B"
+          "refId": "C"
         },
         {
           "datasource": {
@@ -454,12 +454,12 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.9, sum(rate(rest_client_request_duration_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.5, sum(rate(rest_client_request_duration_seconds_bucket[1m])) by (le))",
           "hide": false,
           "instant": false,
-          "legendFormat": "p90",
+          "legendFormat": "p50",
           "range": true,
-          "refId": "C"
+          "refId": "B"
         }
       ],
       "title": "apiserver latency",
