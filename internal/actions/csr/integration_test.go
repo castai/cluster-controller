@@ -78,6 +78,14 @@ func TestIntegration(t *testing.T) {
 			username:    "kubelet-bootstrap",
 		},
 		{
+			description: "[client-kubelet] without cast-pool in subject CN",
+			nodeName:    "node-csr-some-text",
+			notApproved: true,
+			signer:      certv1.KubeAPIServerClientKubeletSignerName,
+			usages:      []certv1.KeyUsage{certv1.UsageClientAuth},
+			username:    "kubelet-bootstrap",
+		},
+		{
 			description: "[client-kubelet] with username kubelet-bootstrap",
 			nodeName:    "csr-cast-pool-4",
 			signer:      certv1.KubeAPIServerClientKubeletSignerName,
