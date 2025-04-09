@@ -12,7 +12,9 @@ import (
 	"github.com/sirupsen/logrus"
 	certv1 "k8s.io/api/certificates/v1"
 	certv1beta1 "k8s.io/api/certificates/v1beta1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
@@ -23,7 +25,12 @@ import (
 )
 
 const (
-	approveCSRTimeout = 4 * time.Minute
+	approveCSRTimeout              = 4 * time.Minute
+	groupSystemNodesName           = "system:nodes"
+	kubeletBootstrapRequestingUser = "kubelet-bootstrap"
+	clusterControllerSAName        = "system:serviceaccount:castai-agent:castai-cluster-controller"
+	approvedMessage                = "This CSR was approved by CAST AI"
+	csrOutdatedAfter               = time.Hour
 )
 
 func NewApprovalManager(log logrus.FieldLogger, clientset kubernetes.Interface) *ApprovalManager {
@@ -46,8 +53,8 @@ func (m *ApprovalManager) Start(ctx context.Context) error {
 	informerKubeletSignerFactory, csrInformerKubeletSigner, err := createInformer(
 		ctx,
 		m.clientset,
-		getOptions(certv1.KubeAPIServerClientKubeletSignerName).FieldSelector,
-		getOptions(certv1beta1.KubeAPIServerClientKubeletSignerName).FieldSelector)
+		listOptionsWithSigner(certv1.KubeAPIServerClientKubeletSignerName).FieldSelector,
+		listOptionsWithSigner(certv1beta1.KubeAPIServerClientKubeletSignerName).FieldSelector)
 	if err != nil {
 		return fmt.Errorf("while creating informer for %v: %w", certv1.KubeAPIServerClientKubeletSignerName, err)
 	}
@@ -55,8 +62,8 @@ func (m *ApprovalManager) Start(ctx context.Context) error {
 	informerKubeletServingFactory, csrInformerKubeletServing, err := createInformer(
 		ctx,
 		m.clientset,
-		getOptions(certv1.KubeletServingSignerName).FieldSelector,
-		getOptions(certv1beta1.KubeletServingSignerName).FieldSelector)
+		listOptionsWithSigner(certv1.KubeletServingSignerName).FieldSelector,
+		listOptionsWithSigner(certv1beta1.KubeletServingSignerName).FieldSelector)
 	if err != nil {
 		return fmt.Errorf("while creating informer for %v: %w", certv1.KubeletServingSignerName, err)
 	}
@@ -75,7 +82,11 @@ func (m *ApprovalManager) Start(ctx context.Context) error {
 				m.log.WithError(err).Warn("creating csr wrapper")
 				return
 			}
-			c <- csr
+			select {
+			case c <- csr:
+			case <-ctx.Done():
+				return
+			}
 		},
 	}
 
@@ -187,7 +198,7 @@ func (m *ApprovalManager) handle(ctx context.Context, log logrus.FieldLogger, cs
 
 	log = log.WithField("csr_name", csr.Name)
 
-	if err := m.validateCSRRequirements(csr); err != nil {
+	if err := m.validateCSRRequirements(ctx, csr); err != nil {
 		return fmt.Errorf("validating csr: %w", err)
 	}
 
@@ -222,7 +233,7 @@ func (m *ApprovalManager) handle(ctx context.Context, log logrus.FieldLogger, cs
 }
 
 func shouldManage(csr *wrapper.CSR) bool {
-	if csr.Approved() || time.Since(csr.CreatedAt()) > csrTTL {
+	if csr.Approved() || time.Since(csr.CreatedAt()) > csrOutdatedAfter {
 		return false
 	}
 
@@ -239,7 +250,7 @@ func managedCSRNamePrefix(n string) bool {
 }
 
 func managedCSRRequestingUser(s string) bool {
-	return s == "kubelet-bootstrap" || s == "system:serviceaccount:castai-agent:castai-cluster-controller" || strings.HasPrefix(s, "system:node:")
+	return s == kubeletBootstrapRequestingUser || s == clusterControllerSAName || strings.HasPrefix(s, "system:node:")
 }
 
 func managerSubjectCommonName(commonName string) bool {
@@ -247,27 +258,35 @@ func managerSubjectCommonName(commonName string) bool {
 	return strings.HasPrefix(commonName, "system:node:")
 }
 
-func (m *ApprovalManager) validateCSRRequirements(csr *wrapper.CSR) error {
+func (m *ApprovalManager) validateCSRRequirements(ctx context.Context, csr *wrapper.CSR) error {
 	switch csr.SignerName() {
 	case certv1.KubeAPIServerClientKubeletSignerName:
 		return m.validateKubeletClientCSR(csr)
 	case certv1.KubeletServingSignerName:
-		return m.validateKubeletServingCSR(csr)
+		return m.validateKubeletServingCSR(ctx, csr)
 	default:
 		return fmt.Errorf("unsupported signer name: %s", csr.SignerName())
 	}
 }
 
 func (m *ApprovalManager) validateKubeletClientCSR(csr *wrapper.CSR) error {
+	permitted := []string{
+		string(certv1.UsageClientAuth),
+		string(certv1.UsageKeyEncipherment),
+		string(certv1.UsageDigitalSignature),
+	}
+	if notPermitted := lo.Without(csr.Usages(), permitted...); len(notPermitted) > 0 {
+		return fmt.Errorf("CSR contains not permitted usages: %s", strings.Join(notPermitted, ", "))
+	}
 	return nil
 }
 
-func (m *ApprovalManager) validateKubeletServingCSR(csr *wrapper.CSR) error {
+func (m *ApprovalManager) validateKubeletServingCSR(ctx context.Context, csr *wrapper.CSR) error {
 	// Implement validation suggested from https://kubernetes.io/docs/reference/access-authn-authz/kubelet-tls-bootstrapping/#certificate-rotation
 
 	// Check for required group.
-	if g := "system:nodes"; !lo.Contains(csr.Groups(), g) {
-		return fmt.Errorf("CSR does not contain group %s", g)
+	if !lo.Contains(csr.Groups(), groupSystemNodesName) {
+		return fmt.Errorf("CSR does not contain group %s", groupSystemNodesName)
 	}
 	// Check for required key usage.
 	if !lo.Contains(csr.Usages(), string(certv1.UsageServerAuth)) {
@@ -290,6 +309,31 @@ func (m *ApprovalManager) validateKubeletServingCSR(csr *wrapper.CSR) error {
 			slice[i] = u.String()
 		}
 		return fmt.Errorf("CSR contains URIs: %s", strings.Join(slice, ", "))
+	}
+
+	// Check with actual node the last to avoid unnecessary API calls.
+	nodeName := strings.TrimPrefix(x509CSR.Subject.CommonName, "system:node:")
+	node, err := m.clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("getting node %s: %w", nodeName, err)
+	}
+	if len(x509CSR.IPAddresses) > 0 {
+		for _, ip := range x509CSR.IPAddresses {
+			if !lo.ContainsBy(node.Status.Addresses, func(addr corev1.NodeAddress) bool {
+				return (addr.Type == corev1.NodeInternalIP || addr.Type == corev1.NodeExternalIP) && addr.Address == ip.String()
+			}) {
+				return fmt.Errorf("CSR contains IP address %s not in node %s", ip.String(), nodeName)
+			}
+		}
+	}
+	if len(x509CSR.DNSNames) > 0 {
+		for _, dns := range x509CSR.DNSNames {
+			if !lo.ContainsBy(node.Status.Addresses, func(addr corev1.NodeAddress) bool {
+				return (addr.Type == corev1.NodeInternalDNS || addr.Type == corev1.NodeExternalDNS) && addr.Address == dns
+			}) {
+				return fmt.Errorf("CSR contains DNS name %s not in node %s", dns, nodeName)
+			}
+		}
 	}
 	return nil
 }

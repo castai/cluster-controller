@@ -2,15 +2,10 @@ package csr
 
 import (
 	"context"
-	"crypto/x509"
-	"encoding/pem"
 	"fmt"
 	"time"
 
-	"github.com/castai/cluster-controller/internal/actions/csr/wrapper"
 	"github.com/sirupsen/logrus"
-	certv1 "k8s.io/api/certificates/v1"
-	certv1beta1 "k8s.io/api/certificates/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/informers"
@@ -19,9 +14,6 @@ import (
 )
 
 const (
-	approvedMessage = "This CSR was approved by CAST AI"
-	csrTTL          = time.Hour
-
 	// We should approve CSRs, when they are created, so resync can be high.
 	// Resync plays back all events (create, update, delete), which are in informer cache.
 	// This does not involve talking to API server, it is not relist.
@@ -69,44 +61,11 @@ func createInformer(ctx context.Context, client kubernetes.Interface, fieldSelec
 	return nil, nil, fmt.Errorf("failed to create informer: v1: %w, v1beta1: %w", errv1, errv1beta1)
 }
 
-func sendCertificate(ctx context.Context, c chan<- *wrapper.CSR, csr *wrapper.CSR) {
-	select {
-	case c <- csr:
-	case <-ctx.Done():
-		return
-	}
-}
-
-// parseCSR is mostly needed to extract node name from cert subject common name.
-func parseCSR(pemData []byte) (*x509.CertificateRequest, error) {
-	block, _ := pem.Decode(pemData)
-	if block == nil || block.Type != "CERTIFICATE REQUEST" {
-		return nil, fmt.Errorf("PEM block type must be CERTIFICATE REQUEST")
-	}
-	csr, err := x509.ParseCertificateRequest(block.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("parse certificate request: %w", err)
-	}
-	// TODO: validate must be outside
-	// if err := validateCSR(csr); err != nil {
-	// 	return nil, fmt.Errorf("validate CSR: %w", err)
-	// }
-	return csr, nil
-}
-
 //nolint:unparam
-func getOptions(signer string) metav1.ListOptions {
+func listOptionsWithSigner(signer string) metav1.ListOptions {
 	return metav1.ListOptions{
 		FieldSelector: fields.SelectorFromSet(fields.Set{
 			"spec.signerName": signer,
 		}).String(),
 	}
-}
-
-func toKeyUsage[T certv1.KeyUsage | certv1beta1.KeyUsage](usages []T) []string {
-	u := make([]string, 0, len(usages))
-	for _, usage := range usages {
-		u = append(u, string(usage))
-	}
-	return u
 }
