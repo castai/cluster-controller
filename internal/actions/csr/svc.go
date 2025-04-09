@@ -4,17 +4,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	certv1 "k8s.io/api/certificates/v1"
 	certv1beta1 "k8s.io/api/certificates/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 
+	"github.com/castai/cluster-controller/internal/actions/csr/wrapper"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
 
@@ -35,13 +39,13 @@ type ApprovalManager struct {
 	cancelAutoApprove context.CancelFunc
 
 	inProgress map[string]struct{} // one handler per csr/certificate Name.
-	m          sync.Mutex          // Used to make sure there is just one watcher running.
+	mu         sync.Mutex          // Used to make sure there is just one watcher running.
 }
 
-func (h *ApprovalManager) Start(ctx context.Context) error {
+func (m *ApprovalManager) Start(ctx context.Context) error {
 	informerKubeletSignerFactory, csrInformerKubeletSigner, err := createInformer(
 		ctx,
-		h.clientset,
+		m.clientset,
 		getOptions(certv1.KubeAPIServerClientKubeletSignerName).FieldSelector,
 		getOptions(certv1beta1.KubeAPIServerClientKubeletSignerName).FieldSelector)
 	if err != nil {
@@ -50,20 +54,28 @@ func (h *ApprovalManager) Start(ctx context.Context) error {
 
 	informerKubeletServingFactory, csrInformerKubeletServing, err := createInformer(
 		ctx,
-		h.clientset,
+		m.clientset,
 		getOptions(certv1.KubeletServingSignerName).FieldSelector,
 		getOptions(certv1beta1.KubeletServingSignerName).FieldSelector)
 	if err != nil {
 		return fmt.Errorf("while creating informer for %v: %w", certv1.KubeletServingSignerName, err)
 	}
 
-	c := make(chan *Certificate, 1)
+	c := make(chan *wrapper.CSR, 1)
 
 	handlerFuncs := cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			if err := processCSREvent(ctx, c, obj); err != nil {
-				h.log.WithError(err).Warn("failed to process csr add event")
+			csrObj, ok := obj.(runtime.Object)
+			if !ok {
+				m.log.WithField("object", obj).Warn("object is not a runtime.Object")
+				return
 			}
+			csr, err := wrapper.NewCSR(m.clientset, csrObj)
+			if err != nil {
+				m.log.WithError(err).Warn("creating csr wrapper")
+				return
+			}
+			c <- csr
 		},
 	}
 
@@ -76,23 +88,75 @@ func (h *ApprovalManager) Start(ctx context.Context) error {
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
-	if !h.startAutoApprove(cancel) {
+	if !m.startAutoApprove(cancel) {
 		return nil
 	}
 
-	go startInformers(ctx, h.log, informerKubeletSignerFactory, informerKubeletServingFactory)
-	go h.runAutoApproveForCastAINodes(ctx, c)
+	go startInformers(ctx, m.log, informerKubeletSignerFactory, informerKubeletServingFactory)
+	go m.runAutoApproveForCastAINodes(ctx, c)
 
-	cache.WaitForNamedCacheSync("cluster-controller/approval-manager", ctx.Done(), csrInformerKubeletSigner.HasSynced, csrInformerKubeletServing.HasSynced)
+	if !cache.WaitForNamedCacheSync("cluster-controller/approval-manager", ctx.Done(), csrInformerKubeletSigner.HasSynced, csrInformerKubeletServing.HasSynced) {
+		m.log.WithField("context", ctx.Err()).Info("stopping auto approve csr")
+		return nil
+	}
 
 	return nil
 }
 
-func (h *ApprovalManager) Stop() {
-	h.stopAutoApproveForCastAINodes()
+func (m *ApprovalManager) Stop() {
+	m.stopAutoApproveForCastAINodes()
 }
 
-func (h *ApprovalManager) handleWithRetry(ctx context.Context, log *logrus.Entry, cert *Certificate) error {
+func (m *ApprovalManager) startAutoApprove(cancelFunc context.CancelFunc) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.cancelAutoApprove != nil {
+		return false
+	}
+
+	m.log.Info("starting auto approve CSRs for managed by CAST AI nodes")
+	m.cancelAutoApprove = cancelFunc
+
+	return true
+}
+
+func (m *ApprovalManager) runAutoApproveForCastAINodes(ctx context.Context, c <-chan *wrapper.CSR) {
+	defer m.stopAutoApproveForCastAINodes()
+
+	log := m.log.WithField("RunAutoApprove", "auto-approve-csr")
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.WithError(ctx.Err()).Errorf("auto approve csr finished")
+			return
+		case csr := <-c:
+			if csr == nil {
+				continue
+			}
+			// prevent starting goroutine for the same node certificate
+			if !m.addInProgress(csr.ParsedCertificateRequest().Subject.CommonName, csr.SignerName()) {
+				continue
+			}
+			go func(csr *wrapper.CSR) {
+				defer m.removeInProgress(csr.ParsedCertificateRequest().Subject.CommonName, csr.SignerName())
+
+				log := log.WithFields(logrus.Fields{
+					"csr_name":          csr.Name,
+					"signer":            csr.SignerName(),
+					"original_csr_name": csr.Name(),
+				})
+				log.Info("auto approving csr")
+				err := m.handleWithRetry(ctx, log, csr)
+				if err != nil {
+					log.WithError(err).Errorf("failed to approve csr: %+v", csr)
+				}
+			}(csr)
+		}
+	}
+}
+
+func (m *ApprovalManager) handleWithRetry(ctx context.Context, log *logrus.Entry, csr *wrapper.CSR) error {
 	ctx, cancel := context.WithTimeout(ctx, approveCSRTimeout)
 	defer cancel()
 
@@ -102,112 +166,12 @@ func (h *ApprovalManager) handleWithRetry(ctx context.Context, log *logrus.Entry
 		b,
 		waitext.Forever,
 		func(ctx context.Context) (bool, error) {
-			return true, h.handle(ctx, log, cert)
+			return true, m.handle(ctx, log, csr)
 		},
 		func(err error) {
 			log.Warnf("csr approval failed, will retry: %v", err)
 		},
 	)
-}
-
-var errCSRNotApproved = errors.New("certificate signing request was not approved")
-
-func (h *ApprovalManager) handle(ctx context.Context, log logrus.FieldLogger, cert *Certificate) (reterr error) {
-	if cert.Approved() {
-		return nil
-	}
-	log = log.WithField("csr_name", cert.Name)
-
-	// Create a new CSR with the same request data as the original one,
-	// since the old csr maybe denied.
-	log.Info("requesting new csr")
-	newCert, err := cert.NewCSR(ctx, h.clientset)
-	if err != nil {
-		return fmt.Errorf("requesting new csr: %w", err)
-	}
-
-	// Approve new csr.
-	log.Info("approving new csr")
-	resp, err := newCert.ApproveCSRCertificate(ctx, h.clientset)
-	if err != nil {
-		return fmt.Errorf("approving csr: %w", err)
-	}
-	if resp.Approved() {
-		return nil
-	}
-
-	// clean original csr. should be the last step for having the possibility.
-	// continue approving csr: old deleted-> restart-> node never join.
-	log.Info("deleting old csr")
-	if err := cert.DeleteCSR(ctx, h.clientset); err != nil {
-		if !apierrors.IsNotFound(err) {
-			return fmt.Errorf("deleting csr: %w", err)
-		}
-	}
-
-	return errCSRNotApproved
-}
-
-func (h *ApprovalManager) runAutoApproveForCastAINodes(ctx context.Context, c <-chan *Certificate) {
-	defer h.stopAutoApproveForCastAINodes()
-
-	log := h.log.WithField("RunAutoApprove", "auto-approve-csr")
-
-	for {
-		select {
-		case <-ctx.Done():
-			log.WithError(ctx.Err()).Errorf("auto approve csr finished")
-			return
-		case cert := <-c:
-			if cert == nil {
-				continue
-			}
-			// prevent starting goroutine for the same node certificate
-			if !h.addInProgress(cert.Name, cert.SignerName()) {
-				continue
-			}
-			go func(cert *Certificate) {
-				defer h.removeInProgress(cert.Name, cert.SignerName())
-
-				log := log.WithFields(logrus.Fields{
-					"csr_name":          cert.Name,
-					"signer":            cert.SignerName(),
-					"original_csr_name": cert.OriginalCSRName(),
-				})
-				log.Info("auto approving csr")
-				err := h.handleWithRetry(ctx, log, cert)
-				if err != nil {
-					log.WithError(err).Errorf("failed to approve csr: %+v", cert)
-				}
-			}(cert)
-		}
-	}
-}
-
-func (h *ApprovalManager) startAutoApprove(cancelFunc context.CancelFunc) bool {
-	h.m.Lock()
-	defer h.m.Unlock()
-	if h.cancelAutoApprove != nil {
-		return false
-	}
-
-	h.log.Info("starting auto approve CSRs for managed by CAST AI nodes")
-	h.cancelAutoApprove = cancelFunc
-
-	return true
-}
-
-func (h *ApprovalManager) stopAutoApproveForCastAINodes() {
-	h.m.Lock()
-	defer h.m.Unlock()
-
-	if h.cancelAutoApprove == nil {
-		return
-	}
-
-	h.log.Info("stopping auto approve CSRs for managed by CAST AI nodes")
-	h.cancelAutoApprove()
-	h.cancelAutoApprove = nil
 }
 
 func newApproveCSRExponentialBackoff() wait.Backoff {
@@ -216,9 +180,136 @@ func newApproveCSRExponentialBackoff() wait.Backoff {
 	return b
 }
 
+func (m *ApprovalManager) handle(ctx context.Context, log logrus.FieldLogger, csr *wrapper.CSR) (reterr error) {
+	if csr == nil || !shouldManage(csr) {
+		return nil
+	}
+
+	log = log.WithField("csr_name", csr.Name)
+
+	if err := m.validateCSRRequirements(csr); err != nil {
+		return fmt.Errorf("validating csr: %w", err)
+	}
+
+	// Create a new CSR with the same request data as the original one,
+	// since the old csr maybe denied.
+	log.Info("requesting new csr if doesn't exist")
+	err := csr.CreateOrRefresh(ctx)
+	if err != nil {
+		return fmt.Errorf("requesting new csr if doesn't exist: %w", err)
+	}
+
+	// Approve csr.
+	log.Info("approving csr")
+	err = csr.Approve(ctx, approvedMessage)
+	if err != nil {
+		return fmt.Errorf("approving csr: %w", err)
+	}
+	if csr.Approved() {
+		return nil
+	}
+
+	// clean original csr. should be the last step for having the possibility.
+	// continue approving csr: old deleted-> restart-> node never join.
+	log.Info("deleting old csr")
+	if err := csr.Delete(ctx); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("deleting csr: %w", err)
+		}
+	}
+
+	return errors.New("certificate signing request was not approved")
+}
+
+func shouldManage(csr *wrapper.CSR) bool {
+	if csr.Approved() || time.Since(csr.CreatedAt()) > csrTTL {
+		return false
+	}
+
+	return managedSigner(csr.SignerName()) && managedCSRNamePrefix(csr.Name()) && managedCSRRequestingUser(csr.RequestingUser()) && managerSubjectCommonName(csr.ParsedCertificateRequest().Subject.CommonName)
+}
+
+func managedSigner(signerName string) bool {
+	return signerName == certv1.KubeAPIServerClientKubeletSignerName ||
+		signerName == certv1.KubeletServingSignerName
+}
+
+func managedCSRNamePrefix(n string) bool {
+	return strings.HasPrefix(n, "node-csr-") || strings.HasPrefix(n, "csr-")
+}
+
+func managedCSRRequestingUser(s string) bool {
+	return s == "kubelet-bootstrap" || s == "system:serviceaccount:castai-agent:castai-cluster-controller" || strings.HasPrefix(s, "system:node:")
+}
+
+func managerSubjectCommonName(commonName string) bool {
+	// TODO: contains cast-pool
+	return strings.HasPrefix(commonName, "system:node:")
+}
+
+func (m *ApprovalManager) validateCSRRequirements(csr *wrapper.CSR) error {
+	switch csr.SignerName() {
+	case certv1.KubeAPIServerClientKubeletSignerName:
+		return m.validateKubeletClientCSR(csr)
+	case certv1.KubeletServingSignerName:
+		return m.validateKubeletServingCSR(csr)
+	default:
+		return fmt.Errorf("unsupported signer name: %s", csr.SignerName())
+	}
+}
+
+func (m *ApprovalManager) validateKubeletClientCSR(csr *wrapper.CSR) error {
+	return nil
+}
+
+func (m *ApprovalManager) validateKubeletServingCSR(csr *wrapper.CSR) error {
+	// Implement validation suggested from https://kubernetes.io/docs/reference/access-authn-authz/kubelet-tls-bootstrapping/#certificate-rotation
+
+	// Check for required group.
+	if g := "system:nodes"; !lo.Contains(csr.Groups(), g) {
+		return fmt.Errorf("CSR does not contain group %s", g)
+	}
+	// Check for required key usage.
+	if !lo.Contains(csr.Usages(), string(certv1.UsageServerAuth)) {
+		return fmt.Errorf("CSR does not contain usage %s", certv1.UsageServerAuth)
+	}
+	// Check for not permitted key usages.
+	permitted := []string{string(certv1.UsageKeyEncipherment), string(certv1.UsageDigitalSignature), string(certv1.UsageServerAuth)}
+	if notPermitted := lo.Without(csr.Usages(), permitted...); len(notPermitted) > 0 {
+		return fmt.Errorf("CSR contains not permitted usages: %s", strings.Join(notPermitted, ", "))
+	}
+	x509CSR := csr.ParsedCertificateRequest()
+	// Check no email addresses.
+	if len(x509CSR.EmailAddresses) > 0 {
+		return fmt.Errorf("CSR contains email addresses: %s", strings.Join(x509CSR.EmailAddresses, ", "))
+	}
+	// Check no URIs.
+	if len(x509CSR.URIs) > 0 {
+		slice := make([]string, len(x509CSR.URIs))
+		for i, u := range x509CSR.URIs {
+			slice[i] = u.String()
+		}
+		return fmt.Errorf("CSR contains URIs: %s", strings.Join(slice, ", "))
+	}
+	return nil
+}
+
+func (m *ApprovalManager) stopAutoApproveForCastAINodes() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.cancelAutoApprove == nil {
+		return
+	}
+
+	m.log.Info("stopping auto approve CSRs for managed by CAST AI nodes")
+	m.cancelAutoApprove()
+	m.cancelAutoApprove = nil
+}
+
 func (h *ApprovalManager) addInProgress(certName, signerName string) bool {
-	h.m.Lock()
-	defer h.m.Unlock()
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	if h.inProgress == nil {
 		h.inProgress = make(map[string]struct{})
 	}
@@ -232,8 +323,8 @@ func (h *ApprovalManager) addInProgress(certName, signerName string) bool {
 }
 
 func (h *ApprovalManager) removeInProgress(certName, signerName string) {
-	h.m.Lock()
-	defer h.m.Unlock()
+	h.mu.Lock()
+	defer h.mu.Unlock()
 
 	delete(h.inProgress, createKey(certName, signerName))
 }

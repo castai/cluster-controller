@@ -13,6 +13,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	certv1 "k8s.io/api/certificates/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/fake"
@@ -31,34 +32,44 @@ func TestIntegration(t *testing.T) {
 	// TODO either use manager or don't return it
 	_, clientset := newManagerAndClientset(t)
 	for _, testcase := range []struct {
-		creationTimestamp metav1.Time
-		description       string
-		emails            []string
-		groups            []string
-		node              string
-		notApproved       bool
-		signer            string
-		uris              []*url.URL
-		usages            []certv1.KeyUsage
-		username          string
+		creationTimestamp     metav1.Time
+		description           string
+		emails                []string
+		groups                []string
+		nodeCreatedWithStatus *corev1.NodeStatus
+		nodeName              string
+		notApproved           bool
+		signer                string
+		uris                  []*url.URL
+		usages                []certv1.KeyUsage
+		username              string
 	}{
 		{
+			description:       "[client-kubelet] outdated",
+			nodeName:          "node-csr-cast-pool-0",
+			signer:            certv1.KubeAPIServerClientKubeletSignerName,
+			usages:            []certv1.KeyUsage{certv1.UsageClientAuth},
+			username:          "kubelet-bootstrap",
+			creationTimestamp: metav1.NewTime(time.Now().Add(-time.Hour - 1*time.Minute)),
+			notApproved:       true,
+		},
+		{
 			description: "[client-kubelet] with prefix node-csr",
-			node:        "node-csr-cast-pool-1",
+			nodeName:    "node-csr-cast-pool-1",
 			signer:      certv1.KubeAPIServerClientKubeletSignerName,
 			usages:      []certv1.KeyUsage{certv1.UsageClientAuth},
 			username:    "kubelet-bootstrap",
 		},
 		{
 			description: "[client-kubelet] with prefix csr",
-			node:        "csr-cast-pool-2",
+			nodeName:    "csr-cast-pool-2",
 			signer:      certv1.KubeAPIServerClientKubeletSignerName,
 			usages:      []certv1.KeyUsage{certv1.UsageClientAuth},
 			username:    "kubelet-bootstrap",
 		},
 		{
 			description: "[client-kubelet] unknown prefix",
-			node:        "unknown-cast-pool-3",
+			nodeName:    "unknown-cast-pool-3",
 			notApproved: true,
 			signer:      certv1.KubeAPIServerClientKubeletSignerName,
 			usages:      []certv1.KeyUsage{certv1.UsageClientAuth},
@@ -66,28 +77,28 @@ func TestIntegration(t *testing.T) {
 		},
 		{
 			description: "[client-kubelet] with username kubelet-bootstrap",
-			node:        "csr-cast-pool-4",
+			nodeName:    "csr-cast-pool-4",
 			signer:      certv1.KubeAPIServerClientKubeletSignerName,
 			usages:      []certv1.KeyUsage{certv1.UsageClientAuth},
 			username:    "kubelet-bootstrap",
 		},
 		{
 			description: "[client-kubelet] with username serviceaccount",
-			node:        "csr-cast-pool-5",
+			nodeName:    "csr-cast-pool-5",
 			signer:      certv1.KubeAPIServerClientKubeletSignerName,
 			usages:      []certv1.KeyUsage{certv1.UsageClientAuth},
 			username:    "system:serviceaccount:castai-agent:castai-cluster-controller",
 		},
 		{
 			description: "[client-kubelet] with username prefix sytem:node",
-			node:        "csr-cast-pool-6",
+			nodeName:    "csr-cast-pool-6",
 			signer:      certv1.KubeAPIServerClientKubeletSignerName,
 			usages:      []certv1.KeyUsage{certv1.UsageClientAuth},
 			username:    "system:node:some-text",
 		},
 		{
 			description: "[client-kubelet] with unknown username",
-			node:        "csr-cast-pool-7",
+			nodeName:    "csr-cast-pool-7",
 			notApproved: true,
 			signer:      certv1.KubeAPIServerClientKubeletSignerName,
 			usages:      []certv1.KeyUsage{certv1.UsageClientAuth},
@@ -95,7 +106,7 @@ func TestIntegration(t *testing.T) {
 		},
 		{
 			description: "[client-kubelet] with all allowed key usages",
-			node:        "csr-cast-pool-8",
+			nodeName:    "csr-cast-pool-8",
 			signer:      certv1.KubeAPIServerClientKubeletSignerName,
 			usages:      []certv1.KeyUsage{certv1.UsageClientAuth, certv1.UsageDigitalSignature, certv1.UsageKeyEncipherment},
 			username:    "kubelet-bootstrap",
@@ -109,135 +120,151 @@ func TestIntegration(t *testing.T) {
 		// 	usages:      []certv1.KeyUsage{certv1.UsageClientAuth, certv1.UsageServerAuth},
 		// 	username:    "kubelet-bootstrap",
 		// },
+		//
 		// TODO(furkhat@cast.ai): const system:nodes and system:node:
+		// {
+		// 	description: "[kubelet-serving] no matching node",
+		// 	groups:      []string{"system:nodes"},
+		// 	nodeName:    "node-csr-cast-pool-10",
+		// 	notApproved: true,
+		// 	signer:      certv1.KubeletServingSignerName,
+		// 	usages:      []certv1.KeyUsage{certv1.UsageServerAuth},
+		// 	username:    "system:node:node-csr-cast-pool-10",
+		// },
 		{
-			description: "[kubelet-serving] with prefix node-csr",
-			groups:      []string{"system:nodes"},
-			node:        "node-csr-cast-pool-10",
-			signer:      certv1.KubeletServingSignerName,
-			usages:      []certv1.KeyUsage{certv1.UsageServerAuth},
-			username:    "system:node:node-csr-cast-pool-10",
+			description:           "[kubelet-serving] with prefix node-csr",
+			groups:                []string{"system:nodes"},
+			nodeCreatedWithStatus: &corev1.NodeStatus{},
+			nodeName:              "node-csr-cast-pool-10a",
+			signer:                certv1.KubeletServingSignerName,
+			usages:                []certv1.KeyUsage{certv1.UsageServerAuth},
+			username:              "system:node:node-csr-cast-pool-10a",
 		},
 		{
-			description: "[kubelet-serving] with prefix csr",
-			groups:      []string{"system:nodes"},
-			node:        "csr-cast-pool-11",
-			signer:      certv1.KubeletServingSignerName,
-			usages:      []certv1.KeyUsage{certv1.UsageServerAuth},
-			username:    "system:node:csr-cast-pool-11",
+			description:           "[kubelet-serving] with prefix csr",
+			groups:                []string{"system:nodes"},
+			nodeCreatedWithStatus: &corev1.NodeStatus{},
+			nodeName:              "csr-cast-pool-11",
+			signer:                certv1.KubeletServingSignerName,
+			usages:                []certv1.KeyUsage{certv1.UsageServerAuth},
+			username:              "system:node:csr-cast-pool-11",
 		},
 		{
-			description: "[kubelet-serving] unknown prefix",
-			groups:      []string{"system:nodes"},
-			node:        "unknown-cast-pool-12",
-			notApproved: true,
-			signer:      certv1.KubeletServingSignerName,
-			usages:      []certv1.KeyUsage{certv1.UsageServerAuth},
-			username:    "system:node:unknown-cast-pool-12",
+			description:           "[kubelet-serving] unknown prefix",
+			groups:                []string{"system:nodes"},
+			nodeCreatedWithStatus: &corev1.NodeStatus{},
+			nodeName:              "unknown-cast-pool-12",
+			notApproved:           true,
+			signer:                certv1.KubeletServingSignerName,
+			usages:                []certv1.KeyUsage{certv1.UsageServerAuth},
+			username:              "system:node:unknown-cast-pool-12",
 		},
 		{
-			description: "[kubelet-serving] with unknown username",
-			groups:      []string{"system:nodes"},
-			node:        "csr-cast-pool-13",
-			notApproved: true,
-			signer:      certv1.KubeletServingSignerName,
-			usages:      []certv1.KeyUsage{certv1.UsageServerAuth},
-			username:    "unknown-username-text",
+			description:           "[kubelet-serving] with unknown username",
+			groups:                []string{"system:nodes"},
+			nodeCreatedWithStatus: &corev1.NodeStatus{},
+			nodeName:              "csr-cast-pool-13",
+			notApproved:           true,
+			signer:                certv1.KubeletServingSignerName,
+			usages:                []certv1.KeyUsage{certv1.UsageServerAuth},
+			username:              "unknown-username-text",
 		},
 		{
-			description: "[kubelet-serving] with groups system:nodes",
-			groups:      []string{"system:nodes"},
-			node:        "csr-cast-pool-13a",
-			signer:      certv1.KubeletServingSignerName,
-			usages:      []certv1.KeyUsage{certv1.UsageServerAuth},
-			username:    "system:node:csr-cast-pool-13a",
+			description:           "[kubelet-serving] with groups system:nodes",
+			groups:                []string{"system:nodes"},
+			nodeCreatedWithStatus: &corev1.NodeStatus{},
+			nodeName:              "csr-cast-pool-13a",
+			signer:                certv1.KubeletServingSignerName,
+			usages:                []certv1.KeyUsage{certv1.UsageServerAuth},
+			username:              "system:node:csr-cast-pool-13a",
 		},
 		{
-			description: "[kubelet-serving] without required groups system:nodes",
-			groups:      []string{"unknown-group"},
-			node:        "csr-cast-pool-13b",
-			notApproved: true,
-			signer:      certv1.KubeletServingSignerName,
-			usages:      []certv1.KeyUsage{certv1.UsageServerAuth},
-			username:    "system:node:csr-cast-pool-13b",
+			description:           "[kubelet-serving] without required groups system:nodes",
+			groups:                []string{"unknown-group"},
+			nodeCreatedWithStatus: &corev1.NodeStatus{},
+			nodeName:              "csr-cast-pool-13b",
+			notApproved:           true,
+			signer:                certv1.KubeletServingSignerName,
+			usages:                []certv1.KeyUsage{certv1.UsageServerAuth},
+			username:              "system:node:csr-cast-pool-13b",
 		},
 		{
-			description: "[kubelet-serving] with all allowed key usages",
-			groups:      []string{"system:nodes"},
-			node:        "csr-cast-pool-14",
-			signer:      certv1.KubeletServingSignerName,
-			usages:      []certv1.KeyUsage{certv1.UsageServerAuth, certv1.UsageDigitalSignature, certv1.UsageKeyEncipherment},
-			username:    "system:node:csr-cast-pool-14",
+			description:           "[kubelet-serving] with all allowed key usages",
+			groups:                []string{"system:nodes"},
+			nodeCreatedWithStatus: &corev1.NodeStatus{},
+			nodeName:              "csr-cast-pool-14",
+			signer:                certv1.KubeletServingSignerName,
+			usages:                []certv1.KeyUsage{certv1.UsageServerAuth, certv1.UsageDigitalSignature, certv1.UsageKeyEncipherment},
+			username:              "system:node:csr-cast-pool-14",
 		},
 		{
-			description: "[kubelet-serving] without required server auth key usage",
-			groups:      []string{"system:nodes"},
-			node:        "csr-cast-pool-15",
-			notApproved: true,
-			signer:      certv1.KubeletServingSignerName,
-			usages:      []certv1.KeyUsage{certv1.UsageClientAuth},
-			username:    "system:node:csr-cast-pool-15",
+			description:           "[kubelet-serving] without required server auth key usage",
+			groups:                []string{"system:nodes"},
+			nodeCreatedWithStatus: &corev1.NodeStatus{},
+			nodeName:              "csr-cast-pool-15",
+			notApproved:           true,
+			signer:                certv1.KubeletServingSignerName,
+			usages:                []certv1.KeyUsage{certv1.UsageClientAuth},
+			username:              "system:node:csr-cast-pool-15",
 		},
 		{
-			description: "[kubelet-serving] with not allowed key usages",
-			groups:      []string{"system:nodes"},
-			node:        "csr-cast-pool-16",
-			notApproved: true,
-			signer:      certv1.KubeletServingSignerName,
-			usages:      []certv1.KeyUsage{certv1.UsageClientAuth, certv1.UsageServerAuth},
-			username:    "system:node:csr-cast-pool-16",
+			description:           "[kubelet-serving] with not allowed key usages",
+			groups:                []string{"system:nodes"},
+			nodeCreatedWithStatus: &corev1.NodeStatus{},
+			nodeName:              "csr-cast-pool-16",
+			notApproved:           true,
+			signer:                certv1.KubeletServingSignerName,
+			usages:                []certv1.KeyUsage{certv1.UsageClientAuth, certv1.UsageServerAuth},
+			username:              "system:node:csr-cast-pool-16",
 		},
 		{
-			description: "[kubelet-serving] without email",
-			groups:      []string{"system:nodes"},
-			node:        "csr-cast-pool-17",
-			signer:      certv1.KubeletServingSignerName,
-			usages:      []certv1.KeyUsage{certv1.UsageServerAuth},
-			username:    "system:node:csr-cast-pool-17",
+			description:           "[kubelet-serving] with emails",
+			emails:                []string{"csr-cast-pool-18@some.org"},
+			groups:                []string{"system:nodes"},
+			nodeCreatedWithStatus: &corev1.NodeStatus{},
+			nodeName:              "csr-cast-pool-18",
+			notApproved:           true,
+			signer:                certv1.KubeletServingSignerName,
+			usages:                []certv1.KeyUsage{certv1.UsageServerAuth},
+			username:              "system:node:csr-cast-pool-18",
 		},
 		{
-			description: "[kubelet-serving] with emails",
-			emails:      []string{"csr-cast-pool-18@some.org"},
-			groups:      []string{"system:nodes"},
-			node:        "csr-cast-pool-18",
-			notApproved: true,
-			signer:      certv1.KubeletServingSignerName,
-			usages:      []certv1.KeyUsage{certv1.UsageServerAuth},
-			username:    "system:node:csr-cast-pool-18",
-		},
-		{
-			description: "[kubelet-serving] without uris",
-			groups:      []string{"system:nodes"},
-			node:        "csr-cast-pool-19",
-			signer:      certv1.KubeletServingSignerName,
-			usages:      []certv1.KeyUsage{certv1.UsageServerAuth},
-			username:    "system:node:csr-cast-pool-19",
-		},
-		{
-			description: "[kubelet-serving] with uris",
-			groups:      []string{"system:nodes"},
-			node:        "csr-cast-pool-20",
-			notApproved: true,
-			signer:      certv1.KubeletServingSignerName,
-			uris:        []*url.URL{&url.URL{Path: "https://example.com"}},
-			usages:      []certv1.KeyUsage{certv1.UsageServerAuth},
-			username:    "system:node:csr-cast-pool-20",
+			description:           "[kubelet-serving] with uris",
+			groups:                []string{"system:nodes"},
+			nodeCreatedWithStatus: &corev1.NodeStatus{},
+			nodeName:              "csr-cast-pool-20",
+			notApproved:           true,
+			signer:                certv1.KubeletServingSignerName,
+			uris:                  []*url.URL{{Path: "https://example.com"}},
+			usages:                []certv1.KeyUsage{certv1.UsageServerAuth},
+			username:              "system:node:csr-cast-pool-20",
 		},
 	} {
 		t.Run(testcase.description, func(t *testing.T) {
-			t.Parallel()
+			// t.Parallel()
 			if testcase.creationTimestamp.IsZero() {
 				testcase.creationTimestamp = metav1.Now()
 			}
+			if testcase.nodeCreatedWithStatus != nil {
+				node := &corev1.Node{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              testcase.nodeName,
+						CreationTimestamp: testcase.creationTimestamp,
+					},
+					Status: *testcase.nodeCreatedWithStatus,
+				}
+				_, err := clientset.CoreV1().Nodes().Create(ctx, node, metav1.CreateOptions{})
+				r.NoError(err, "failed to create node")
+			}
 			csr := &certv1.CertificateSigningRequest{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:              testcase.node,
+					Name:              testcase.nodeName,
 					CreationTimestamp: testcase.creationTimestamp,
 				},
 				Spec: certv1.CertificateSigningRequestSpec{
 					Request: csrtest.NewEncodedCertificateRequest(t, &x509.CertificateRequest{
 						Subject: pkix.Name{
-							CommonName: "system:node:" + testcase.node,
+							CommonName: "system:node:" + testcase.nodeName,
 						},
 						EmailAddresses: testcase.emails,
 						URIs:           testcase.uris,
@@ -255,9 +282,9 @@ func TestIntegration(t *testing.T) {
 			r.NoError(err, "failed to get CSR")
 			approved := approvedCSR(csr)
 			if testcase.notApproved {
-				r.False(approved, "CSR should not be approved")
+				r.Falsef(approved, "%s should not be approved", testcase.description)
 			} else {
-				r.True(approved, "CSR should be approved")
+				r.Truef(approved, "%s should be approved", testcase.description)
 			}
 		})
 	}
