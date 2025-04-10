@@ -12,7 +12,6 @@ import (
 )
 
 func TestNewConstantBackoff(t *testing.T) {
-	t.Parallel()
 	r := require.New(t)
 	expectedSleepDuration := 10 * time.Second
 	backoff := NewConstantBackoff(expectedSleepDuration)
@@ -23,7 +22,6 @@ func TestNewConstantBackoff(t *testing.T) {
 }
 
 func TestDefaultExponentialBackoff(t *testing.T) {
-	t.Parallel()
 	r := require.New(t)
 
 	val := DefaultExponentialBackoff()
@@ -35,13 +33,10 @@ func TestDefaultExponentialBackoff(t *testing.T) {
 }
 
 func TestRetry(t *testing.T) {
-	t.Parallel()
 	r := require.New(t)
 
 	t.Run("Retrying logic tests", func(t *testing.T) {
-		t.Parallel()
 		t.Run("Called at least once, even if retries or steps is 0", func(t *testing.T) {
-			t.Parallel()
 			called := false
 			err := Retry(context.Background(), wait.Backoff{Steps: 0}, 0, func(_ context.Context) (bool, error) {
 				called = true
@@ -53,7 +48,6 @@ func TestRetry(t *testing.T) {
 		})
 
 		t.Run("Respects backoff and retry count", func(t *testing.T) {
-			t.Parallel()
 			retries := 4
 			expectedTotalExecutions := 1 + retries
 			backoff := DefaultExponentialBackoff()
@@ -94,7 +88,6 @@ func TestRetry(t *testing.T) {
 		})
 
 		t.Run("Returns last encountered error", func(t *testing.T) {
-			t.Parallel()
 			timesCalled := 0
 			expectedErrMessage := "boom 3"
 
@@ -108,7 +101,6 @@ func TestRetry(t *testing.T) {
 		})
 
 		t.Run("Does not retry if false is returned as first parameter", func(t *testing.T) {
-			t.Parallel()
 			expectedErr := errors.New("dummy")
 			called := false
 			err := Retry(context.Background(), NewConstantBackoff(10*time.Millisecond), 10,
@@ -123,9 +115,7 @@ func TestRetry(t *testing.T) {
 	})
 
 	t.Run("Notify callback tests", func(t *testing.T) {
-		t.Parallel()
 		t.Run("Notify is passed and called", func(t *testing.T) {
-			t.Parallel()
 			err := Retry(
 				context.Background(),
 				NewConstantBackoff(10*time.Millisecond),
@@ -141,7 +131,6 @@ func TestRetry(t *testing.T) {
 		})
 
 		t.Run("Notify is not passed, no panic", func(t *testing.T) {
-			t.Parallel()
 			err := Retry(
 				context.Background(),
 				NewConstantBackoff(10*time.Millisecond),
@@ -156,9 +145,7 @@ func TestRetry(t *testing.T) {
 	})
 
 	t.Run("Context tests", func(t *testing.T) {
-		t.Parallel()
 		t.Run("On context cancel, stops", func(t *testing.T) {
-			t.Parallel()
 			ctx, cancel := context.WithCancelCause(context.Background())
 
 			innerError := errors.New("from operation")
@@ -181,7 +168,6 @@ func TestRetry(t *testing.T) {
 		})
 
 		t.Run("Operation is called at least once, even if context is cancelled", func(t *testing.T) {
-			t.Parallel()
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
 

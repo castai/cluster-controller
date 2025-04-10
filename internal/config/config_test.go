@@ -11,7 +11,6 @@ import (
 )
 
 func TestConfig(t *testing.T) {
-	t.Parallel()
 	clusterId := uuid.New().String()
 	require.NoError(t, os.Setenv("API_KEY", "abc"))
 	require.NoError(t, os.Setenv("API_URL", "api.cast.ai"))
