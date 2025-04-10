@@ -549,7 +549,8 @@ func setupManagerAndClientset(t *testing.T, csrVersion schema.GroupVersion) *fak
 	logger := logrus.New()
 	logger.SetOutput(io.Discard)
 	manager := csr.NewApprovalManager(logger, client)
-	manager.Start(context.TODO())
+	err := manager.Start(context.TODO())
+	require.NoError(t, err, "failed to start approval manager")
 
 	// The fake client doesn't support resource version. Any writes to the client
 	// after the informer's initial LIST and before the informer establishing the
