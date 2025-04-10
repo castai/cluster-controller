@@ -12,10 +12,11 @@ import (
 
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/helm"
-	"github.com/castai/cluster-controller/internal/helm/mock"
+	mock_helm "github.com/castai/cluster-controller/internal/helm/mock"
 )
 
 func TestChartUninstallHandler(t *testing.T) {
+	t.Parallel()
 	r := require.New(t)
 	ctrl := gomock.NewController(t)
 	helmMock := mock_helm.NewMockClient(ctrl)

@@ -23,6 +23,7 @@ import (
 )
 
 func TestCreateEvent(t *testing.T) {
+	t.Parallel()
 	r := require.New(t)
 	id := k8s_types.UID(uuid.New().String())
 

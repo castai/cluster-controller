@@ -16,6 +16,7 @@ import (
 )
 
 func TestDisconnectClusterHandler(t *testing.T) {
+	t.Parallel()
 	r := require.New(t)
 	ctx := context.Background()
 
