@@ -18,7 +18,6 @@ import (
 )
 
 func Test_newDeleteHandler(t *testing.T) {
-	t.Parallel()
 	scheme := runtime.NewScheme()
 	_ = appsv1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)

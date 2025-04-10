@@ -17,7 +17,6 @@ import (
 )
 
 func TestPatchNodeHandler(t *testing.T) {
-	t.Parallel()
 	r := require.New(t)
 
 	log := logrus.New()

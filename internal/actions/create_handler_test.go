@@ -20,7 +20,6 @@ import (
 )
 
 func Test_newCreateHandler(t *testing.T) {
-	t.Parallel()
 	scheme := runtime.NewScheme()
 	_ = appsv1.AddToScheme(scheme)
 	_ = v1.AddToScheme(scheme)
