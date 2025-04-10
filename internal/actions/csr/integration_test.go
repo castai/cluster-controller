@@ -490,7 +490,7 @@ func testIntegration(t *testing.T, csrVersion schema.GroupVersion) {
 				}
 				_, err := clientset.CertificatesV1beta1().CertificateSigningRequests().Create(ctx, csr, metav1.CreateOptions{})
 				r.NoError(err, "failed to create CSR")
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(10 * time.Millisecond)
 				csr, err = clientset.CertificatesV1beta1().CertificateSigningRequests().Get(ctx, csr.Name, metav1.GetOptions{})
 				r.NoError(err, "failed to get CSR")
 				approved := approvedCSRV1beta1(csr)
