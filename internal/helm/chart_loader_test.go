@@ -12,6 +12,7 @@ import (
 )
 
 func TestIntegration_ChartLoader(t *testing.T) {
+	t.Parallel()
 	r := require.New(t)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
