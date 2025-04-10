@@ -153,9 +153,9 @@ func (m *ApprovalManager) runAutoApproveForCastAINodes(ctx context.Context, c <-
 				defer m.removeInProgress(csr.ParsedCertificateRequest().Subject.CommonName, csr.SignerName())
 
 				log := log.WithFields(logrus.Fields{
-					"csr_name":          csr.Name,
-					"signer":            csr.SignerName(),
-					"original_csr_name": csr.Name(),
+					"CN":     csr.ParsedCertificateRequest().Subject.CommonName,
+					"signer": csr.SignerName(),
+					"csr":    csr.Name(),
 				})
 				log.Info("auto approving csr")
 				err := m.handleWithRetry(ctx, log, csr)
@@ -192,11 +192,10 @@ func newApproveCSRExponentialBackoff() wait.Backoff {
 }
 
 func (m *ApprovalManager) handle(ctx context.Context, log logrus.FieldLogger, csr *wrapper.CSR) (reterr error) {
-	if csr == nil || !shouldManage(csr) {
+	if shouldSkip(log, csr) {
+		log.Debug("skipping csr")
 		return nil
 	}
-
-	log = log.WithField("csr_name", csr.Name)
 
 	if err := m.validateCSRRequirements(ctx, csr); err != nil {
 		return fmt.Errorf("validating csr: %w", err)
@@ -232,12 +231,32 @@ func (m *ApprovalManager) handle(ctx context.Context, log logrus.FieldLogger, cs
 	return errors.New("certificate signing request was not approved")
 }
 
-func shouldManage(csr *wrapper.CSR) bool {
-	if csr.Approved() || time.Since(csr.CreatedAt()) > csrOutdatedAfter {
-		return false
+func shouldSkip(log logrus.FieldLogger, csr *wrapper.CSR) bool {
+	if csr.Approved() {
+		log.Debug("csr already approved")
+		return true
 	}
-
-	return managedSigner(csr.SignerName()) && managedCSRNamePrefix(csr.Name()) && managedCSRRequestingUser(csr.RequestingUser()) && managerSubjectCommonName(csr.ParsedCertificateRequest().Subject.CommonName)
+	if time.Since(csr.CreatedAt()) > csrOutdatedAfter {
+		log.Debug("csr is outdated")
+		return true
+	}
+	if !managedSigner(csr.SignerName()) {
+		log.Debug("csr unknown signer")
+		return true
+	}
+	if !managedCSRNamePrefix(csr.Name()) {
+		log.Debug("csr name not managed by CAST AI: ", csr.Name())
+		return true
+	}
+	if !managedCSRRequestingUser(csr.RequestingUser()) {
+		log.Debug("csr requesting user is not managed by CAST AI")
+		return true
+	}
+	if !managerSubjectCommonName(csr.ParsedCertificateRequest().Subject.CommonName) {
+		log.Debug("csr common name is not managed by CAST AI")
+		return true
+	}
+	return false
 }
 
 func managedSigner(signerName string) bool {
@@ -264,6 +283,7 @@ func (m *ApprovalManager) validateCSRRequirements(ctx context.Context, csr *wrap
 	case certv1.KubeletServingSignerName:
 		return m.validateKubeletServingCSR(ctx, csr)
 	default:
+		// Unless logic changes this never returns because unknown signer csr's are skipped.
 		return fmt.Errorf("unsupported signer name: %s", csr.SignerName())
 	}
 }
