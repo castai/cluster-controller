@@ -18,6 +18,7 @@ import (
 
 //nolint:goconst
 func TestDeleteNodeHandler(t *testing.T) {
+	t.Parallel()
 	log := logrus.New()
 	log.SetLevel(logrus.DebugLevel)
 

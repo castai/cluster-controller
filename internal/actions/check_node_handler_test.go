@@ -16,6 +16,7 @@ import (
 
 //nolint:goconst
 func TestCheckNodeDeletedHandler(t *testing.T) {
+	t.Parallel()
 	r := require.New(t)
 
 	log := logrus.New()
