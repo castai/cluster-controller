@@ -28,9 +28,13 @@ import (
 	csrtest "github.com/castai/cluster-controller/internal/actions/csr/test"
 )
 
-func TestIntegration(t *testing.T) {
+func TestIntegrationV1(t *testing.T) {
 	t.Parallel()
 	testIntegration(t, certv1.SchemeGroupVersion)
+}
+
+func TestIntegrationV1beta1(t *testing.T) {
+	t.Parallel()
 	testIntegration(t, certv1beta1.SchemeGroupVersion)
 }
 
@@ -411,7 +415,6 @@ func testIntegration(t *testing.T, csrVersion schema.GroupVersion) {
 		},
 	} {
 		t.Run(csrVersion.Version+" "+testcase.description, func(t *testing.T) {
-			t.Parallel()
 			if testcase.creationTimestamp.IsZero() {
 				testcase.creationTimestamp = metav1.Now()
 			}
