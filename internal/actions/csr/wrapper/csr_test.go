@@ -5,11 +5,11 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/samber/lo"
+	"github.com/stretchr/testify/require"
 	certv1 "k8s.io/api/certificates/v1"
 	certv1beta1 "k8s.io/api/certificates/v1beta1"
 	v1 "k8s.io/api/core/v1"
@@ -159,8 +159,10 @@ func TestNewCSR(t *testing.T) {
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
 			_, err := wrapper.NewCSR(fake.NewClientset(), testcase.csrObj)
-			if testcase.notOK && err == nil {
-				t.Fatalf("want an error, got none")
+			if testcase.notOK {
+				require.Error(t, err, "expected an error but got none")
+			} else {
+				require.NoError(t, err, "unexpected error")
 			}
 		})
 	}
@@ -214,9 +216,7 @@ func TestCSR_Approved(t *testing.T) {
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
 			v := testcase.obj.Approved()
-			if v != testcase.result {
-				t.Fatalf("approved() want: %v, got: %v", testcase.result, v)
-			}
+			require.Equal(t, testcase.result, v, "approved() mismatch")
 		})
 	}
 }
@@ -242,9 +242,7 @@ func TestCSR_CreatedAt(t *testing.T) {
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
 			v := testcase.obj.CreatedAt()
-			if v != testcase.result {
-				t.Fatalf("CreatedAt() want: %v, got: %v", testcase.result, v)
-			}
+			require.Equal(t, testcase.result, v, "CreatedAt() mismatch")
 		})
 	}
 }
@@ -274,12 +272,8 @@ func TestCSR_Name(t *testing.T) {
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
 			csr, err := wrapper.NewCSR(fake.NewClientset(), testcase.csrObj)
-			if err != nil {
-				t.Fatalf("failed to create CSR: %v", err)
-			}
-			if csr.Name() != testcase.result {
-				t.Fatalf("Name() want: %v, got: %v", testcase.result, csr.Name())
-			}
+			require.NoError(t, err, "failed to create CSR")
+			require.Equal(t, testcase.result, csr.Name(), "Name() mismatch")
 		})
 	}
 }
@@ -309,12 +303,8 @@ func TestCSR_RequestingUser(t *testing.T) {
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
 			csr, err := wrapper.NewCSR(fake.NewClientset(), testcase.csrObj)
-			if err != nil {
-				t.Fatalf("failed to create CSR: %v", err)
-			}
-			if csr.RequestingUser() != testcase.result {
-				t.Fatalf("RequestingUser() want: %v, got: %v", testcase.result, csr.RequestingUser())
-			}
+			require.NoError(t, err, "failed to create CSR")
+			require.Equal(t, testcase.result, csr.RequestingUser(), "RequestingUser() mismatch")
 		})
 	}
 }
@@ -344,12 +334,8 @@ func TestCSR_SignerName(t *testing.T) {
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
 			csr, err := wrapper.NewCSR(fake.NewClientset(), testcase.csrObj)
-			if err != nil {
-				t.Fatalf("failed to create CSR: %v", err)
-			}
-			if csr.SignerName() != testcase.result {
-				t.Fatalf("SignerName() want: %v, got: %v", testcase.result, csr.SignerName())
-			}
+			require.NoError(t, err, "failed to create CSR")
+			require.Equal(t, testcase.result, csr.SignerName(), "SignerName() mismatch")
 		})
 	}
 }
@@ -379,17 +365,8 @@ func TestCSR_Usages(t *testing.T) {
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
 			csr, err := wrapper.NewCSR(fake.NewClientset(), testcase.csrObj)
-			if err != nil {
-				t.Fatalf("failed to create CSR: %v", err)
-			}
-			if len(csr.Usages()) != len(testcase.result) {
-				t.Fatalf("Usages() length want: %v, got: %v", len(testcase.result), len(csr.Usages()))
-			}
-			for _, usage := range csr.Usages() {
-				if !lo.Contains(testcase.result, usage) {
-					t.Fatalf("Usages() contains unexpected: %v", usage)
-				}
-			}
+			require.NoError(t, err, "failed to create CSR")
+			require.ElementsMatch(t, testcase.result, csr.Usages(), "Usages() mismatch")
 		})
 	}
 }
@@ -419,17 +396,8 @@ func TestCSR_Groups(t *testing.T) {
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
 			csr, err := wrapper.NewCSR(fake.NewClientset(), testcase.csrObj)
-			if err != nil {
-				t.Fatalf("failed to create CSR: %v", err)
-			}
-			if len(csr.Groups()) != len(testcase.result) {
-				t.Fatalf("Groups() length want: %v, got: %v", len(testcase.result), len(csr.Groups()))
-			}
-			for _, group := range csr.Groups() {
-				if !lo.Contains(testcase.result, group) {
-					t.Fatalf("Groups() contains unexpected: %v", group)
-				}
-			}
+			require.NoError(t, err, "failed to create CSR")
+			require.ElementsMatch(t, testcase.result, csr.Groups(), "Groups() mismatch")
 		})
 	}
 }
@@ -461,20 +429,14 @@ func TestCSR_ParsedCertificateRequest(t *testing.T) {
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
 			csr, err := wrapper.NewCSR(fake.NewClientset(), testcase.csrObj)
-			if err != nil {
-				t.Fatalf("failed to create CSR: %v", err)
-			}
+			require.NoError(t, err, "failed to create CSR")
 			got := csr.ParsedCertificateRequest()
-			if got == nil {
-				t.Fatalf("ParsedCertificateRequest() is nil")
-			}
+			require.NotNil(t, got, "ParsedCertificateRequest() is nil")
 			gotEncoded := pem.EncodeToMemory(&pem.Block{
 				Type:  "CERTIFICATE REQUEST",
 				Bytes: got.Raw,
 			})
-			if string(wantEncoded) != string(gotEncoded) {
-				t.Fatalf("ParsedCertificateRequest() want: %v, got: %v", string(wantEncoded), string(gotEncoded))
-			}
+			require.Equal(t, string(wantEncoded), string(gotEncoded), "ParsedCertificateRequest() mismatch")
 		})
 	}
 }
@@ -483,7 +445,6 @@ func TestCSR_Approve(t *testing.T) {
 	for _, testcase := range []struct {
 		name   string
 		csrObj runtime.Object
-		err    error
 	}{
 		{
 			name: "Approve() V1 OK",
@@ -503,16 +464,10 @@ func TestCSR_Approve(t *testing.T) {
 		t.Run(testcase.name, func(t *testing.T) {
 			clientset := fake.NewClientset(testcase.csrObj)
 			csr, err := wrapper.NewCSR(clientset, testcase.csrObj)
-			if err != nil {
-				t.Fatalf("failed to create CSR: %v", err)
-			}
+			require.NoError(t, err, "failed to create CSR")
 			err = csr.Approve(context.Background(), "test message")
-			if (testcase.err == nil) != (err == nil) || !errors.Is(err, testcase.err) {
-				t.Fatalf("Approve() want: %v, got: %v", testcase.err, err)
-			}
-			if testcase.err == nil && !csr.Approved() {
-				t.Fatal("Approved()!=true")
-			}
+			require.NoError(t, err, "unexpected error in Approve()")
+			require.True(t, csr.Approved(), "Approved() should return true")
 		})
 	}
 }
@@ -535,24 +490,16 @@ func TestCSR_Delete(t *testing.T) {
 		t.Run(testcase.name, func(t *testing.T) {
 			clientset := fake.NewClientset(testcase.csrObj)
 			csr, err := wrapper.NewCSR(clientset, testcase.csrObj)
-			if err != nil {
-				t.Fatalf("failed to create CSR: %v", err)
-			}
+			require.NoError(t, err, "failed to create CSR")
 			err = csr.Delete(context.Background())
-			if err != nil {
-				t.Fatalf("failed to delete CSR: %v", err)
-			}
+			require.NoError(t, err, "failed to delete CSR")
 			switch testcase.csrObj.GetObjectKind().GroupVersionKind() {
 			case certv1.SchemeGroupVersion.WithKind("CertificateSigningRequest"):
 				_, err := clientset.CertificatesV1().CertificateSigningRequests().Get(context.Background(), csr.Name(), metav1.GetOptions{})
-				if !k8serrors.IsNotFound(err) {
-					t.Fatalf("expected CSR to be deleted, but it still exists: %v", err)
-				}
+				require.True(t, k8serrors.IsNotFound(err), "expected CSR to be deleted")
 			case certv1beta1.SchemeGroupVersion.WithKind("CertificateSigningRequest"):
 				_, err := clientset.CertificatesV1beta1().CertificateSigningRequests().Get(context.Background(), csr.Name(), metav1.GetOptions{})
-				if !k8serrors.IsNotFound(err) {
-					t.Fatalf("expected CSR to be deleted, but it still exists: %v", err)
-				}
+				require.True(t, k8serrors.IsNotFound(err), "expected CSR to be deleted")
 			}
 		})
 	}
@@ -590,30 +537,24 @@ func TestCSR_CreateOrRefresh(t *testing.T) {
 			if !testcase.absent {
 				switch testcase.csrObj.GetObjectKind().GroupVersionKind() {
 				case certv1.SchemeGroupVersion.WithKind("CertificateSigningRequest"):
-					clientset.CertificatesV1().CertificateSigningRequests().Create(context.Background(), testcase.csrObj.(*certv1.CertificateSigningRequest), metav1.CreateOptions{})
+					_, err := clientset.CertificatesV1().CertificateSigningRequests().Create(context.Background(), testcase.csrObj.(*certv1.CertificateSigningRequest), metav1.CreateOptions{})
+					require.NoError(t, err, "failed to create CSR")
 				case certv1beta1.SchemeGroupVersion.WithKind("CertificateSigningRequest"):
-					clientset.CertificatesV1beta1().CertificateSigningRequests().Create(context.Background(), testcase.csrObj.(*certv1beta1.CertificateSigningRequest), metav1.CreateOptions{})
+					_, err := clientset.CertificatesV1beta1().CertificateSigningRequests().Create(context.Background(), testcase.csrObj.(*certv1beta1.CertificateSigningRequest), metav1.CreateOptions{})
+					require.NoError(t, err, "failed to create CSR")
 				}
 			}
 			csr, err := wrapper.NewCSR(clientset, testcase.csrObj)
-			if err != nil {
-				t.Fatalf("failed to create CSR: %v", err)
-			}
+			require.NoError(t, err, "failed to create CSR")
 			err = csr.CreateOrRefresh(context.Background())
-			if err != nil {
-				t.Fatalf("failed to createOrRefresh CSR: %v", err)
-			}
+			require.NoError(t, err, "failed to createOrRefresh CSR")
 			switch testcase.csrObj.GetObjectKind().GroupVersionKind() {
 			case certv1.SchemeGroupVersion.WithKind("CertificateSigningRequest"):
 				_, err := clientset.CertificatesV1().CertificateSigningRequests().Get(context.Background(), csr.Name(), metav1.GetOptions{})
-				if err != nil {
-					t.Fatalf("failed to get CSR: %v", err)
-				}
+				require.NoError(t, err, "failed to get CSR")
 			case certv1beta1.SchemeGroupVersion.WithKind("CertificateSigningRequest"):
 				_, err := clientset.CertificatesV1beta1().CertificateSigningRequests().Get(context.Background(), csr.Name(), metav1.GetOptions{})
-				if err != nil {
-					t.Fatalf("failed to get CSR: %v", err)
-				}
+				require.NoError(t, err, "failed to get CSR")
 			}
 		})
 	}
@@ -681,9 +622,7 @@ func withConditionsV1(t *testing.T, clientset kubernetes.Interface, conditions [
 		v1.Status.Conditions = conditions
 		return v1
 	}))
-	if err != nil {
-		t.Fatalf("failed to create CSR: %v", err)
-	}
+	require.NoError(t, err, "failed to create CSR")
 	return result
 }
 
@@ -693,9 +632,7 @@ func withConditionsV1Beta1(t *testing.T, clientset kubernetes.Interface, conditi
 		v1beta1.Status.Conditions = conditions
 		return v1beta1
 	}))
-	if err != nil {
-		t.Fatalf("failed to create CSR: %v", err)
-	}
+	require.NoError(t, err, "failed to create CSR")
 	return result
 }
 
@@ -705,9 +642,7 @@ func v1WithCreationTimestamp(t *testing.T, clientset kubernetes.Interface, creat
 		v1.ObjectMeta.CreationTimestamp = metav1.NewTime(creationTime)
 		return v1
 	}))
-	if err != nil {
-		t.Fatalf("failed to create CSR: %v", err)
-	}
+	require.NoError(t, err, "failed to create CSR")
 	return result
 }
 
@@ -717,8 +652,6 @@ func v1beta1WithCreationTimestamp(t *testing.T, clientset kubernetes.Interface, 
 		v1beta1.ObjectMeta.CreationTimestamp = metav1.NewTime(creationTime)
 		return v1beta1
 	}))
-	if err != nil {
-		t.Fatalf("failed to create CSR: %v", err)
-	}
+	require.NoError(t, err, "failed to create CSR")
 	return result
 }
