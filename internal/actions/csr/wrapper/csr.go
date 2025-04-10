@@ -13,7 +13,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	certificatesv1 "k8s.io/client-go/kubernetes/typed/certificates/v1"
 	certificatesv1beta1 "k8s.io/client-go/kubernetes/typed/certificates/v1beta1"
@@ -35,7 +34,7 @@ type CSR struct {
 }
 
 // NewCSR validates and creates new certificateRequestFacade.
-func NewCSR(clientset kubernetes.Interface, csrObj runtime.Object) (*CSR, error) {
+func NewCSR(clientset kubernetes.Interface, csrObj interface{}) (*CSR, error) {
 	var (
 		v1   *certv1.CertificateSigningRequest
 		v1b1 *certv1beta1.CertificateSigningRequest
@@ -43,13 +42,13 @@ func NewCSR(clientset kubernetes.Interface, csrObj runtime.Object) (*CSR, error)
 	if csrObj == nil {
 		return nil, fmt.Errorf("either v1 or v1beta1 CertificateSigningRequests expected but got none")
 	}
-	switch csrObj.DeepCopyObject().GetObjectKind().GroupVersionKind() {
-	case certv1.SchemeGroupVersion.WithKind("CertificateSigningRequest"):
-		v1 = csrObj.(*certv1.CertificateSigningRequest)
-	case certv1beta1.SchemeGroupVersion.WithKind("CertificateSigningRequest"):
-		v1b1 = csrObj.(*certv1beta1.CertificateSigningRequest)
+	switch csr := csrObj.(type) {
+	case *certv1.CertificateSigningRequest:
+		v1 = csr
+	case *certv1beta1.CertificateSigningRequest:
+		v1b1 = csr
 	default:
-		return nil, fmt.Errorf("either v1 or v1beta1 CertificateSigningRequests expected but got %s", csrObj.DeepCopyObject().GetObjectKind().GroupVersionKind())
+		return nil, fmt.Errorf("either v1 or v1beta1 CertificateSigningRequests expected but got %T", csrObj)
 	}
 	var result CSR
 	var err error

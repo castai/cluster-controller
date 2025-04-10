@@ -27,7 +27,7 @@ func TestNewCSR(t *testing.T) {
 	t.Parallel()
 	for _, testcase := range []struct {
 		name   string
-		csrObj runtime.Object
+		csrObj interface{}
 		notOK  bool
 	}{
 		{

@@ -15,7 +15,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
@@ -72,12 +71,7 @@ func (m *ApprovalManager) Start(ctx context.Context) error {
 
 	handlerFuncs := cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			csrObj, ok := obj.(runtime.Object)
-			if !ok {
-				m.log.WithField("object", obj).Warn("object is not a runtime.Object")
-				return
-			}
-			csr, err := wrapper.NewCSR(m.clientset, csrObj)
+			csr, err := wrapper.NewCSR(m.clientset, obj)
 			if err != nil {
 				m.log.WithError(err).Warn("creating csr wrapper")
 				return
