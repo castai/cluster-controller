@@ -533,14 +533,12 @@ func setupManagerAndClientset(t *testing.T, csrVersion schema.GroupVersion) *fak
 	// A catch-all watch reactor that allows us to inject the watcherStarted channel.
 	client.PrependWatchReactor("*", func(action clienttesting.Action) (handled bool, ret watch.Interface, err error) {
 		gvr := action.GetResource()
-		defer func() {
-			watcherStarted <- struct{}{}
-		}()
 		ns := action.GetNamespace()
 		watch, err := client.Tracker().Watch(gvr, ns)
 		if err != nil {
 			return false, nil, err
 		}
+		watcherStarted <- struct{}{}
 		return true, watch, nil
 	})
 	client.PrependReactor("*", "*", func(action clienttesting.Action) (handled bool, ret runtime.Object, err error) {
