@@ -142,9 +142,6 @@ func (m *ApprovalManager) runAutoApproveForCastAINodes(ctx context.Context, c <-
 			log.WithError(ctx.Err()).Errorf("auto approve csr finished")
 			return
 		case csr := <-c:
-			if csr == nil {
-				continue
-			}
 			// prevent starting goroutine for the same node certificate
 			if !m.addInProgress(csr.ParsedCertificateRequest().Subject.CommonName, csr.SignerName()) {
 				continue
@@ -157,6 +154,10 @@ func (m *ApprovalManager) runAutoApproveForCastAINodes(ctx context.Context, c <-
 					"signer": csr.SignerName(),
 					"csr":    csr.Name(),
 				})
+				if shouldSkip(log, csr) {
+					log.Debug("skipping csr")
+					return
+				}
 				log.Info("auto approving csr")
 				err := m.handleWithRetry(ctx, log, csr)
 				if err != nil {
@@ -192,11 +193,6 @@ func newApproveCSRExponentialBackoff() wait.Backoff {
 }
 
 func (m *ApprovalManager) handle(ctx context.Context, log logrus.FieldLogger, csr *wrapper.CSR) (reterr error) {
-	if shouldSkip(log, csr) {
-		log.Debug("skipping csr")
-		return nil
-	}
-
 	if err := m.validateCSRRequirements(ctx, csr); err != nil {
 		return fmt.Errorf("validating csr: %w", err)
 	}
@@ -239,6 +235,8 @@ func shouldSkip(log logrus.FieldLogger, csr *wrapper.CSR) bool {
 	if time.Since(csr.CreatedAt()) > csrOutdatedAfter {
 		log.Debug("csr is outdated")
 		return true
+	} else {
+		fmt.Println("not outdated ", csr.CreatedAt())
 	}
 	if !managedSigner(csr.SignerName()) {
 		log.Debug("csr unknown signer")

@@ -400,6 +400,14 @@ func testIntegration(t *testing.T, csrVersion schema.GroupVersion) {
 			usages:                []string{string(certv1.UsageServerAuth)},
 			username:              "system:node:csr-cast-pool-20",
 		},
+		{
+			description:           "with unmanaged signer",
+			nodeCreatedWithStatus: &corev1.NodeStatus{},
+			nodeName:              "csr-cast-pool-21",
+			notApproved:           true,
+			signer:                certv1.KubeAPIServerClientKubeletSignerName,
+			username:              "system:nodes:csr-cast-pool-21",
+		},
 	} {
 		t.Run(csrVersion.Version+" "+testcase.description, func(t *testing.T) {
 			t.Parallel()
