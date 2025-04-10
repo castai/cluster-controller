@@ -13,7 +13,6 @@ import (
 )
 
 func Test(t *testing.T) {
-	t.Parallel()
 	v := version.Info{
 		Major:     "1",
 		Minor:     "21+",

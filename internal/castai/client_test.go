@@ -7,7 +7,6 @@ import (
 )
 
 func TestNewRestryClient_TLS(t *testing.T) {
-	t.Parallel()
 	t.Run("should populate tls.Config RootCAs when valid certificate presented", func(t *testing.T) {
 		r := require.New(t)
 
