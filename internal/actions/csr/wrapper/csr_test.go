@@ -24,6 +24,7 @@ import (
 )
 
 func TestNewCSR(t *testing.T) {
+	t.Parallel()
 	for _, testcase := range []struct {
 		name   string
 		csrObj runtime.Object
@@ -158,6 +159,7 @@ func TestNewCSR(t *testing.T) {
 		},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
+			t.Parallel()
 			_, err := wrapper.NewCSR(fake.NewClientset(), testcase.csrObj)
 			if testcase.notOK {
 				require.Error(t, err, "expected an error but got none")
@@ -169,6 +171,7 @@ func TestNewCSR(t *testing.T) {
 }
 
 func TestCSR_Approved(t *testing.T) {
+	t.Parallel()
 	clientset := fake.NewClientset()
 	for _, testcase := range []struct {
 		name   string
@@ -222,6 +225,7 @@ func TestCSR_Approved(t *testing.T) {
 }
 
 func TestCSR_CreatedAt(t *testing.T) {
+	t.Parallel()
 	clientset := fake.NewClientset()
 	testTime := time.Now().Add(-time.Hour)
 	for _, testcase := range []struct {
@@ -248,6 +252,7 @@ func TestCSR_CreatedAt(t *testing.T) {
 }
 
 func TestCSR_Name(t *testing.T) {
+	t.Parallel()
 	for _, testcase := range []struct {
 		name   string
 		csrObj runtime.Object
@@ -279,6 +284,7 @@ func TestCSR_Name(t *testing.T) {
 }
 
 func TestCSR_RequestingUser(t *testing.T) {
+	t.Parallel()
 	for _, testcase := range []struct {
 		name   string
 		csrObj runtime.Object
@@ -310,6 +316,7 @@ func TestCSR_RequestingUser(t *testing.T) {
 }
 
 func TestCSR_SignerName(t *testing.T) {
+	t.Parallel()
 	for _, testcase := range []struct {
 		name   string
 		csrObj runtime.Object
@@ -341,6 +348,7 @@ func TestCSR_SignerName(t *testing.T) {
 }
 
 func TestCSR_Usages(t *testing.T) {
+	t.Parallel()
 	for _, testcase := range []struct {
 		name   string
 		csrObj runtime.Object
@@ -372,6 +380,7 @@ func TestCSR_Usages(t *testing.T) {
 }
 
 func TestCSR_Groups(t *testing.T) {
+	t.Parallel()
 	for _, testcase := range []struct {
 		name   string
 		csrObj runtime.Object
@@ -403,6 +412,7 @@ func TestCSR_Groups(t *testing.T) {
 }
 
 func TestCSR_ParsedCertificateRequest(t *testing.T) {
+	t.Parallel()
 	wantEncoded := csrtest.NewEncodedCertificateRequest(t, &x509.CertificateRequest{
 		Subject: pkix.Name{
 			CommonName: "test-subject-common-name",
@@ -442,6 +452,7 @@ func TestCSR_ParsedCertificateRequest(t *testing.T) {
 }
 
 func TestCSR_Approve(t *testing.T) {
+	t.Parallel()
 	for _, testcase := range []struct {
 		name   string
 		csrObj runtime.Object
