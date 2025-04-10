@@ -2,6 +2,8 @@ package csr
 
 import (
 	"context"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"errors"
 	"testing"
 
@@ -17,6 +19,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	ktest "k8s.io/client-go/testing"
 
+	"github.com/castai/cluster-controller/internal/actions/csr/test"
 	"github.com/castai/cluster-controller/internal/actions/csr/wrapper"
 )
 
@@ -76,17 +79,19 @@ func TestApproveCSRHandler(t *testing.T) {
 				APIVersion: certv1beta1.SchemeGroupVersion.String(),
 				Kind:       "CertificateSigningRequest",
 			},
-			ObjectMeta: metav1.ObjectMeta{Name: "node-csr-123"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "node-csr-123",
+				CreationTimestamp: metav1.Now(),
+			},
 			Spec: certv1beta1.CertificateSigningRequestSpec{
-				Request: []byte(`-----BEGIN CERTIFICATE REQUEST-----
-	MIIBADCBqAIBADBGMRUwEwYDVQQKEwxzeXN0ZW06bm9kZXMxLTArBgNVBAMTJHN5
-	c3RlbTpub2RlOmdrZS1hbS1nY3AtY2FzdC01ZGM0ZjRlYzBZMBMGByqGSM49AgEG
-	CCqGSM49AwEHA0IABF/9p5y4t09Y6yAlhF0OthexpL0CEyNHVnVmmbB4jridyJzW
-	vrcLKbFat0qvJftODQhEA/lqByJepB4YGqQGhregADAKBggqhkjOPQQDAgNHADBE
-	AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
-	39zKjbxU1t82BlrW9/NrmaadNHQ=
-	-----END CERTIFICATE REQUEST-----`),
-				Username:   "kubelet",
+				Request: test.NewEncodedCertificateRequest(t, &x509.CertificateRequest{
+					Subject: pkix.Name{
+						CommonName:   "system:node:gke-am-gcp-cast-pool-5dc4f4ec",
+						Organization: []string{"system:nodes"},
+					},
+				}),
+				Username:   "kubelet-bootstrap",
+				Usages:     []certv1beta1.KeyUsage{certv1beta1.UsageClientAuth},
 				SignerName: &signer,
 			},
 		}
@@ -118,6 +123,7 @@ func TestApproveCSRHandler(t *testing.T) {
 		r.NoError(err)
 		err = am.handle(context.Background(), log, csr)
 		r.NoError(err)
+		r.True(csr.Approved())
 	})
 
 	t.Run("approve v1beta1 csr failed", func(t *testing.T) {
@@ -129,17 +135,19 @@ func TestApproveCSRHandler(t *testing.T) {
 				APIVersion: certv1beta1.SchemeGroupVersion.String(),
 				Kind:       "CertificateSigningRequest",
 			},
-			ObjectMeta: metav1.ObjectMeta{Name: "node-csr-123"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "node-csr-123",
+				CreationTimestamp: metav1.Now(),
+			},
 			Spec: certv1beta1.CertificateSigningRequestSpec{
-				Request: []byte(`-----BEGIN CERTIFICATE REQUEST-----
-	MIIBADCBqAIBADBGMRUwEwYDVQQKEwxzeXN0ZW06bm9kZXMxLTArBgNVBAMTJHN5
-	c3RlbTpub2RlOmdrZS1hbS1nY3AtY2FzdC01ZGM0ZjRlYzBZMBMGByqGSM49AgEG
-	CCqGSM49AwEHA0IABF/9p5y4t09Y6yAlhF0OthexpL0CEyNHVnVmmbB4jridyJzW
-	vrcLKbFat0qvJftODQhEA/lqByJepB4YGqQGhregADAKBggqhkjOPQQDAgNHADBE
-	AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
-	39zKjbxU1t82BlrW9/NrmaadNHQ=
-	-----END CERTIFICATE REQUEST-----`),
-				Username:   "kubelet",
+				Request: test.NewEncodedCertificateRequest(t, &x509.CertificateRequest{
+					Subject: pkix.Name{
+						CommonName:   "system:node:gke-am-gcp-cast-pool-5dc4f4ec",
+						Organization: []string{"system:nodes"},
+					},
+				}),
+				Username:   "kubelet-bootstrap",
+				Usages:     []certv1beta1.KeyUsage{certv1beta1.UsageClientAuth},
 				SignerName: &signer,
 			},
 		}
@@ -167,9 +175,10 @@ func TestApproveCSRHandler(t *testing.T) {
 
 		am := NewApprovalManager(log, client)
 		csr, err := wrapper.NewCSR(client, csrRes)
-		r.Error(err)
+		r.NoError(err)
 		err = am.handle(context.Background(), log, csr)
 		r.Error(err)
+		r.False(csr.Approved())
 	})
 }
 
@@ -190,7 +199,7 @@ AiAHVYZXHxxspoV0hcfn2Pdsl89fIPCOFy/K1PqSUR6QNAIgYdt51ZbQt9rgM2BD
 39zKjbxU1t82BlrW9/NrmaadNHQ=
 -----END CERTIFICATE REQUEST-----`),
 			SignerName: certv1.KubeAPIServerClientKubeletSignerName,
-			Usages:     []certv1.KeyUsage{"kubelet"},
+			Usages:     []certv1.KeyUsage{certv1.UsageClientAuth},
 			Username:   "kubelet-bootstrap",
 		},
 		// Status: certv1.CertificateSigningRequestStatus{},.
