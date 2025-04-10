@@ -20,6 +20,7 @@ import (
 )
 
 func TestClientInstall(t *testing.T) {
+	t.Parallel()
 	r := require.New(t)
 
 	client := &client{
@@ -47,6 +48,7 @@ func TestClientInstall(t *testing.T) {
 }
 
 func TestClientUpdate(t *testing.T) {
+	t.Parallel()
 	r := require.New(t)
 
 	currentRelease := buildNginxIngressRelease(release.StatusDeployed)
@@ -76,6 +78,7 @@ func TestClientUpdate(t *testing.T) {
 }
 
 func TestClientUpdateResetThenReuseValue(t *testing.T) {
+	t.Parallel()
 	r := require.New(t)
 
 	currentRelease := buildNginxIngressRelease(release.StatusDeployed)
@@ -106,6 +109,7 @@ func TestClientUpdateResetThenReuseValue(t *testing.T) {
 }
 
 func TestClientUninstall(t *testing.T) {
+	t.Parallel()
 	r := require.New(t)
 
 	currentRelease := buildNginxIngressRelease(release.StatusDeployed)

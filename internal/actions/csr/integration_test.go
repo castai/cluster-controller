@@ -29,6 +29,7 @@ import (
 )
 
 func TestIntegration(t *testing.T) {
+	t.Parallel()
 	testIntegration(t, certv1.SchemeGroupVersion)
 	testIntegration(t, certv1beta1.SchemeGroupVersion)
 }

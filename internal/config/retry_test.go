@@ -13,6 +13,7 @@ import (
 )
 
 func TestKubeRetryTransport(t *testing.T) {
+	t.Parallel()
 	log := logrus.New()
 	log.SetLevel(logrus.DebugLevel)
 
