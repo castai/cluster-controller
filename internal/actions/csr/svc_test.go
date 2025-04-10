@@ -70,7 +70,7 @@ func TestCSRApprove(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			watcher.Add(getCSRv1(csrName, userName))
-			time.Sleep(1000 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 			s.Stop()
 		}()
 
