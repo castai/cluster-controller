@@ -235,8 +235,6 @@ func shouldSkip(log logrus.FieldLogger, csr *wrapper.CSR) bool {
 	if time.Since(csr.CreatedAt()) > csrOutdatedAfter {
 		log.Debug("csr is outdated")
 		return true
-	} else {
-		fmt.Println("not outdated ", csr.CreatedAt())
 	}
 	if !managedSigner(csr.SignerName()) {
 		log.Debug("csr unknown signer")
