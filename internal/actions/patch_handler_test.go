@@ -19,7 +19,6 @@ import (
 )
 
 func TestPatchHandler(t *testing.T) {
-	t.Parallel()
 	tests := map[string]struct {
 		objs   []runtime.Object
 		action *castai.ClusterAction

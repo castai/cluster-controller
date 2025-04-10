@@ -20,7 +20,6 @@ import (
 )
 
 func TestCheckStatus_Deleted(t *testing.T) {
-	t.Parallel()
 	log := logrus.New()
 	log.SetLevel(logrus.DebugLevel)
 
@@ -137,7 +136,6 @@ func TestCheckStatus_Deleted(t *testing.T) {
 }
 
 func TestCheckStatus_Ready(t *testing.T) {
-	t.Parallel()
 	log := logrus.New()
 	log.SetLevel(logrus.DebugLevel)
 
