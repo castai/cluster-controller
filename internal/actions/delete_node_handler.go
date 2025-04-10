@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -158,7 +159,12 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 			if err != nil {
 				return true, fmt.Errorf("unable to list pods for node %q err: %w", req.NodeName, err)
 			}
-			if len(pods.Items) > 0 {
+
+			runningPods := lo.Filter(pods.Items, func(p v1.Pod, _ int) bool {
+				// We don't care about non-running pods, node is being deleted anyway.
+				return p.Status.Phase == v1.PodRunning
+			})
+			if len(runningPods) > 0 {
 				return true, fmt.Errorf("waiting for %d pods to be terminated on node %v", len(pods.Items), req.NodeName)
 			}
 			// Check if there are any volume attachments left for the node, but don't block on waiting for them.
