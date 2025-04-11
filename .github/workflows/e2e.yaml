@@ -56,5 +56,5 @@ jobs:
           CASTAI_API_TOKEN: ${{ secrets.CASTAI_API_TOKEN }}
           GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
         run: |
-          go test -timeout 30m ./e2e
+          go test -timeout 30m -parallel=10 ./e2e
 
