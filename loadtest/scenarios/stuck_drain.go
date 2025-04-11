@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"sync"
 	"time"
 
@@ -19,16 +20,18 @@ import (
 	"github.com/castai/cluster-controller/internal/castai"
 )
 
-func StuckDrain(nodeCount, deploymentReplicas int, log *slog.Logger) TestScenario {
+// StuckDrain tests a scenario where DrainNode gets stuck due to PDB and has to put continuous load on the system.
+// Note: It reuses nodes to make setup for high action count easier.
+func StuckDrain(actionCount, deploymentReplicas int, log *slog.Logger) TestScenario {
 	return &stuckDrainScenario{
-		nodeCount:          nodeCount,
+		actionCount:        actionCount,
 		deploymentReplicas: deploymentReplicas,
 		log:                log,
 	}
 }
 
 type stuckDrainScenario struct {
-	nodeCount          int
+	actionCount        int
 	deploymentReplicas int
 	log                *slog.Logger
 
@@ -40,12 +43,16 @@ func (s *stuckDrainScenario) Name() string {
 }
 
 func (s *stuckDrainScenario) Preparation(ctx context.Context, namespace string, clientset kubernetes.Interface) error {
-	s.nodesToDrain = make([]*corev1.Node, 0, s.nodeCount)
+	s.nodesToDrain = make([]*corev1.Node, 0, s.actionCount)
 
 	var lock sync.Mutex
 	errGroup, ctx := errgroup.WithContext(ctx)
 
-	for i := range s.nodeCount {
+	// We create 1/10 of the nodes only to optimize setup performance.
+	// Since the Drain will be stuck; nothing will change on the nodes, and we can just reuse the same node.
+	nodeCount := int(math.Ceil(float64(s.actionCount) / nodeTestsCountOptimizeFactor))
+
+	for i := range nodeCount {
 		errGroup.Go(func() error {
 			nodeName := fmt.Sprintf("kwok-stuck-drain-%d", i)
 			s.log.Info(fmt.Sprintf("Creating node %s", nodeName))
@@ -81,7 +88,7 @@ func (s *stuckDrainScenario) Preparation(ctx context.Context, namespace string, 
 			}
 
 			// Wait for deployment to become ready, otherwise we might start draining before the pod is up.
-			progressed := WaitUntil(ctx, 120*time.Second, func(ctx context.Context) bool {
+			progressed := WaitUntil(ctx, 300*time.Second, func(ctx context.Context) bool {
 				d, err := clientset.AppsV1().Deployments(namespace).Get(ctx, deployment.Name, metav1.GetOptions{})
 				if err != nil {
 					s.log.Warn("failed to get deployment after creating", "err", err)
@@ -150,15 +157,16 @@ func (s *stuckDrainScenario) Cleanup(ctx context.Context, namespace string, clie
 func (s *stuckDrainScenario) Run(ctx context.Context, _ string, _ kubernetes.Interface, executor ActionExecutor) error {
 	s.log.Info(fmt.Sprintf("Starting drain action creation with %d nodes", len(s.nodesToDrain)))
 
-	actions := make([]castai.ClusterAction, 0, len(s.nodesToDrain))
-	for _, node := range s.nodesToDrain {
+	actions := make([]castai.ClusterAction, 0, s.actionCount)
+	for i := range s.actionCount {
+		node := s.nodesToDrain[i%len(s.nodesToDrain)]
 		actions = append(actions, castai.ClusterAction{
 			ID:        uuid.NewString(),
 			CreatedAt: time.Now().UTC(),
 			ActionDrainNode: &castai.ActionDrainNode{
 				NodeName:            node.Name,
 				NodeID:              "",
-				DrainTimeoutSeconds: 60,
+				DrainTimeoutSeconds: 65,
 				Force:               false,
 			},
 		})
