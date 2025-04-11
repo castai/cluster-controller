@@ -538,7 +538,7 @@ func setupManagerAndClientset(t *testing.T, csrVersion schema.GroupVersion) *fak
 		if err != nil {
 			return false, nil, err
 		}
-		watcherStarted <- struct{}{}
+		go func() { watcherStarted <- struct{}{} }()
 		return true, watch, nil
 	})
 	client.PrependReactor("*", "*", func(action clienttesting.Action) (handled bool, ret runtime.Object, err error) {
