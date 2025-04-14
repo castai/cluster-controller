@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"sync"
 	"time"
 
@@ -19,16 +20,16 @@ import (
 )
 
 // CheckNodeDeletedStuck simulates a case where the node is not deleted so the checker gets stuck.
-func CheckNodeDeletedStuck(nodeCount int, log *slog.Logger) TestScenario {
+func CheckNodeDeletedStuck(actionCount int, log *slog.Logger) TestScenario {
 	return &checkNodeDeletedStuckScenario{
-		nodeCount: nodeCount,
-		log:       log,
+		actionCount: actionCount,
+		log:         log,
 	}
 }
 
 type checkNodeDeletedStuckScenario struct {
-	nodeCount int
-	log       *slog.Logger
+	actionCount int
+	log         *slog.Logger
 
 	nodes []*corev1.Node
 }
@@ -38,12 +39,14 @@ func (s *checkNodeDeletedStuckScenario) Name() string {
 }
 
 func (s *checkNodeDeletedStuckScenario) Preparation(ctx context.Context, namespace string, clientset kubernetes.Interface) error {
-	s.nodes = make([]*corev1.Node, 0, s.nodeCount)
+	s.nodes = make([]*corev1.Node, 0, s.actionCount)
 
 	var lock sync.Mutex
 	errGroup, ctx := errgroup.WithContext(ctx)
 
-	for i := range s.nodeCount {
+	nodeCount := int(math.Ceil(float64(s.actionCount) / nodeTestsCountOptimizeFactor))
+
+	for i := range nodeCount {
 		errGroup.Go(func() error {
 			nodeName := fmt.Sprintf("kwok-check-deleted-%d", i)
 			s.log.Info(fmt.Sprintf("Creating node %s", nodeName))
@@ -102,10 +105,11 @@ func (s *checkNodeDeletedStuckScenario) Cleanup(ctx context.Context, namespace s
 func (s *checkNodeDeletedStuckScenario) Run(ctx context.Context, _ string, _ kubernetes.Interface, executor ActionExecutor) error {
 	s.log.Info(fmt.Sprintf("Starting check node deleted action with %d nodes", len(s.nodes)))
 
-	actions := make([]castai.ClusterAction, 0, len(s.nodes))
 	// Note: there is no code that should delete the node so each action should fail with timeout
 	// -> this puts more load than "expected" to simulate such edge case.
-	for _, node := range s.nodes {
+	actions := make([]castai.ClusterAction, 0, s.actionCount)
+	for i := range s.actionCount {
+		node := s.nodes[i%len(s.nodes)]
 		actions = append(actions, castai.ClusterAction{
 			ID:        uuid.NewString(),
 			CreatedAt: time.Now().UTC(),

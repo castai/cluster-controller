@@ -5,10 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/samber/lo"
+	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,16 +20,18 @@ import (
 	"github.com/castai/cluster-controller/internal/castai"
 )
 
-func StuckDrain(nodeCount, deploymentReplicas int, log *slog.Logger) TestScenario {
+// StuckDrain tests a scenario where DrainNode gets stuck due to PDB and has to put continuous load on the system.
+// Note: It reuses nodes to make setup for high action count easier.
+func StuckDrain(actionCount, deploymentReplicas int, log *slog.Logger) TestScenario {
 	return &stuckDrainScenario{
-		nodeCount:          nodeCount,
+		actionCount:        actionCount,
 		deploymentReplicas: deploymentReplicas,
 		log:                log,
 	}
 }
 
 type stuckDrainScenario struct {
-	nodeCount          int
+	actionCount        int
 	deploymentReplicas int
 	log                *slog.Logger
 
@@ -38,54 +43,68 @@ func (s *stuckDrainScenario) Name() string {
 }
 
 func (s *stuckDrainScenario) Preparation(ctx context.Context, namespace string, clientset kubernetes.Interface) error {
-	s.nodesToDrain = make([]*corev1.Node, 0, s.nodeCount)
-	for i := range s.nodeCount {
-		nodeName := fmt.Sprintf("kwok-stuck-drain-%d", i)
-		s.log.Info(fmt.Sprintf("Creating node %s", nodeName))
-		node := NewKwokNode(KwokConfig{}, nodeName)
+	s.nodesToDrain = make([]*corev1.Node, 0, s.actionCount)
 
-		_, err := clientset.CoreV1().Nodes().Create(ctx, node, metav1.CreateOptions{})
-		if err != nil && !apierrors.IsAlreadyExists(err) {
-			return fmt.Errorf("failed to create fake node: %w", err)
-		}
-		if err != nil && apierrors.IsAlreadyExists(err) {
-			s.log.Warn("node already exists, will reuse but potential conflict between test runs", "nodeName", nodeName)
-		}
-		s.nodesToDrain = append(s.nodesToDrain, node)
+	var lock sync.Mutex
+	errGroup, ctx := errgroup.WithContext(ctx)
 
-		s.log.Info(fmt.Sprintf("Creating deployment on node %s", nodeName))
-		deployment, pdb := DeploymentWithStuckPDB(fmt.Sprintf("fake-deployment-%s-%d", node.Name, i))
-		deployment.ObjectMeta.Namespace = namespace
-		//nolint:gosec // Not afraid of overflow here.
-		deployment.Spec.Replicas = lo.ToPtr(int32(s.deploymentReplicas))
-		deployment.Spec.Template.Spec.NodeName = nodeName
-		pdb.ObjectMeta.Namespace = namespace
+	// We create 1/10 of the nodes only to optimize setup performance.
+	// Since the Drain will be stuck; nothing will change on the nodes, and we can just reuse the same node.
+	nodeCount := int(math.Ceil(float64(s.actionCount) / nodeTestsCountOptimizeFactor))
 
-		_, err = clientset.AppsV1().Deployments(namespace).Create(ctx, deployment, metav1.CreateOptions{})
-		if err != nil {
-			return fmt.Errorf("failed to create fake deployment: %w", err)
-		}
+	for i := range nodeCount {
+		errGroup.Go(func() error {
+			nodeName := fmt.Sprintf("kwok-stuck-drain-%d", i)
+			s.log.Info(fmt.Sprintf("Creating node %s", nodeName))
+			node := NewKwokNode(KwokConfig{}, nodeName)
 
-		_, err = clientset.PolicyV1().PodDisruptionBudgets(namespace).Create(ctx, pdb, metav1.CreateOptions{})
-		if err != nil {
-			return fmt.Errorf("failed to create fake pod disruption budget: %w", err)
-		}
-
-		// Wait for deployment to become ready, otherwise we might start draining before the pod is up.
-		progressed := WaitUntil(ctx, 30*time.Second, func(ctx context.Context) bool {
-			d, err := clientset.AppsV1().Deployments(namespace).Get(ctx, deployment.Name, metav1.GetOptions{})
-			if err != nil {
-				s.log.Warn("failed to get deployment after creating", "err", err)
-				return false
+			_, err := clientset.CoreV1().Nodes().Create(ctx, node, metav1.CreateOptions{})
+			if err != nil && !apierrors.IsAlreadyExists(err) {
+				return fmt.Errorf("failed to create fake node: %w", err)
 			}
-			return d.Status.ReadyReplicas == *d.Spec.Replicas
+			if err != nil && apierrors.IsAlreadyExists(err) {
+				s.log.Warn("node already exists, will reuse but potential conflict between test runs", "nodeName", nodeName)
+			}
+			lock.Lock()
+			s.nodesToDrain = append(s.nodesToDrain, node)
+			lock.Unlock()
+
+			s.log.Info(fmt.Sprintf("Creating deployment on node %s", nodeName))
+			deployment, pdb := DeploymentWithStuckPDB(fmt.Sprintf("fake-deployment-%s-%d", node.Name, i))
+			deployment.ObjectMeta.Namespace = namespace
+			//nolint:gosec // Not afraid of overflow here.
+			deployment.Spec.Replicas = lo.ToPtr(int32(s.deploymentReplicas))
+			deployment.Spec.Template.Spec.NodeName = nodeName
+			pdb.ObjectMeta.Namespace = namespace
+
+			_, err = clientset.AppsV1().Deployments(namespace).Create(ctx, deployment, metav1.CreateOptions{})
+			if err != nil {
+				return fmt.Errorf("failed to create fake deployment: %w", err)
+			}
+
+			_, err = clientset.PolicyV1().PodDisruptionBudgets(namespace).Create(ctx, pdb, metav1.CreateOptions{})
+			if err != nil {
+				return fmt.Errorf("failed to create fake pod disruption budget: %w", err)
+			}
+
+			// Wait for deployment to become ready, otherwise we might start draining before the pod is up.
+			progressed := WaitUntil(ctx, 300*time.Second, func(ctx context.Context) bool {
+				d, err := clientset.AppsV1().Deployments(namespace).Get(ctx, deployment.Name, metav1.GetOptions{})
+				if err != nil {
+					s.log.Warn("failed to get deployment after creating", "err", err)
+					return false
+				}
+				return d.Status.ReadyReplicas == *d.Spec.Replicas
+			})
+			if !progressed {
+				return fmt.Errorf("deployment %s did not progress to ready state in time", deployment.Name)
+			}
+
+			return nil
 		})
-		if !progressed {
-			return fmt.Errorf("deployment %s did not progress to ready state in time", deployment.Name)
-		}
 	}
 
-	return nil
+	return errGroup.Wait()
 }
 
 func (s *stuckDrainScenario) Cleanup(ctx context.Context, namespace string, clientset kubernetes.Interface) error {
@@ -137,15 +156,16 @@ func (s *stuckDrainScenario) Cleanup(ctx context.Context, namespace string, clie
 func (s *stuckDrainScenario) Run(ctx context.Context, _ string, _ kubernetes.Interface, executor ActionExecutor) error {
 	s.log.Info(fmt.Sprintf("Starting drain action creation with %d nodes", len(s.nodesToDrain)))
 
-	actions := make([]castai.ClusterAction, 0, len(s.nodesToDrain))
-	for _, node := range s.nodesToDrain {
+	actions := make([]castai.ClusterAction, 0, s.actionCount)
+	for i := range s.actionCount {
+		node := s.nodesToDrain[i%len(s.nodesToDrain)]
 		actions = append(actions, castai.ClusterAction{
 			ID:        uuid.NewString(),
 			CreatedAt: time.Now().UTC(),
 			ActionDrainNode: &castai.ActionDrainNode{
 				NodeName:            node.Name,
 				NodeID:              "",
-				DrainTimeoutSeconds: 60,
+				DrainTimeoutSeconds: 65,
 				Force:               false,
 			},
 		})

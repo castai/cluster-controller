@@ -84,7 +84,7 @@ func run(ctx context.Context) error {
 }
 
 func createK8SClients(cfg loadtest.Config, logger *slog.Logger) (*kubernetes.Clientset, *dynamic.DynamicClient, *apiextensionsclientset.Clientset, helm.Client, error) {
-	rateLimiter := flowcontrol.NewTokenBucketRateLimiter(20, 50)
+	rateLimiter := flowcontrol.NewTokenBucketRateLimiter(100, 200)
 
 	var restConfig *rest.Config
 	var err error

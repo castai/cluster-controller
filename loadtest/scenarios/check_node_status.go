@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"sync"
 	"time"
 
@@ -18,16 +19,16 @@ import (
 	"github.com/castai/cluster-controller/internal/castai"
 )
 
-func CheckNodeStatus(nodeCount int, log *slog.Logger) TestScenario {
+func CheckNodeStatus(actionCount int, log *slog.Logger) TestScenario {
 	return &checkNodeStatusScenario{
-		nodeCount: nodeCount,
-		log:       log,
+		actionCount: actionCount,
+		log:         log,
 	}
 }
 
 type checkNodeStatusScenario struct {
-	nodeCount int
-	log       *slog.Logger
+	actionCount int
+	log         *slog.Logger
 
 	nodes []*corev1.Node
 }
@@ -37,12 +38,14 @@ func (s *checkNodeStatusScenario) Name() string {
 }
 
 func (s *checkNodeStatusScenario) Preparation(ctx context.Context, namespace string, clientset kubernetes.Interface) error {
-	s.nodes = make([]*corev1.Node, 0, s.nodeCount)
+	s.nodes = make([]*corev1.Node, 0, s.actionCount)
 
 	var lock sync.Mutex
 	errGroup, ctx := errgroup.WithContext(ctx)
 
-	for i := range s.nodeCount {
+	nodeCount := int(math.Ceil(float64(s.actionCount) / nodeTestsCountOptimizeFactor))
+
+	for i := range nodeCount {
 		errGroup.Go(func() error {
 			nodeName := fmt.Sprintf("kwok-check-status-%d", i)
 			s.log.Info(fmt.Sprintf("Creating node %s", nodeName))
@@ -101,8 +104,9 @@ func (s *checkNodeStatusScenario) Cleanup(ctx context.Context, namespace string,
 func (s *checkNodeStatusScenario) Run(ctx context.Context, _ string, _ kubernetes.Interface, executor ActionExecutor) error {
 	s.log.Info(fmt.Sprintf("Starting check node status action with %d nodes", len(s.nodes)))
 
-	actions := make([]castai.ClusterAction, 0, len(s.nodes))
-	for _, node := range s.nodes {
+	actions := make([]castai.ClusterAction, 0, s.actionCount)
+	for i := range s.actionCount {
+		node := s.nodes[i%len(s.nodes)]
 		actions = append(actions, castai.ClusterAction{
 			ID:        uuid.NewString(),
 			CreatedAt: time.Now().UTC(),

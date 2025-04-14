@@ -8,7 +8,6 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
-// registry = metrics.NewKubeRegistry()
 var registry = prometheus.NewRegistry()
 
 func NewMetricsMux() *http.ServeMux {

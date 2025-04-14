@@ -35,7 +35,18 @@ func (e *evictPodScenario) Name() string {
 }
 
 func (e *evictPodScenario) Preparation(ctx context.Context, namespace string, clientset kubernetes.Interface) error {
-	// Create N pods; store in state
+	// create a kwok node for the pods
+	nodeName := fmt.Sprintf("kwok-evict-pods-%s", namespace)
+	node := NewKwokNode(KwokConfig{}, nodeName)
+
+	_, err := clientset.CoreV1().Nodes().Create(ctx, node, metav1.CreateOptions{})
+	if err != nil && !apierrors.IsAlreadyExists(err) {
+		return fmt.Errorf("failed to create fake node: %w", err)
+	}
+	if err != nil && apierrors.IsAlreadyExists(err) {
+		e.log.Warn("node already exists, will reuse but potential conflict between test runs", "nodeName", nodeName)
+	}
+
 	for i := range e.totalPods {
 		select {
 		case <-ctx.Done():
@@ -45,6 +56,7 @@ func (e *evictPodScenario) Preparation(ctx context.Context, namespace string, cl
 
 		pod := Pod(fmt.Sprintf("evict-pod-%d", i))
 		pod.ObjectMeta.Namespace = namespace
+		pod.Spec.NodeName = nodeName
 
 		e.log.Info(fmt.Sprintf("Creating pod %s", pod.Name))
 		_, err := clientset.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{})

@@ -22,6 +22,7 @@ type TestServerConfig struct {
 	MaxActionsPerCall int
 	// TimeoutWaitingForActions controls how long to wait for at least 1 action to appear on server side.
 	// This mimics CH behavior of not returning early if there are no pending actions and keeping the request "running".
+	// Note: Currently not implemented
 	TimeoutWaitingForActions time.Duration
 }
 
