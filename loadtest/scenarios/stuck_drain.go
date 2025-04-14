@@ -102,7 +102,6 @@ func (s *stuckDrainScenario) Preparation(ctx context.Context, namespace string, 
 
 			return nil
 		})
-
 	}
 
 	return errGroup.Wait()

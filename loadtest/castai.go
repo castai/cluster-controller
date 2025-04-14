@@ -22,10 +22,9 @@ type CastAITestServer struct {
 	actionsPushChannel chan castai.ClusterAction
 	cfg                TestServerConfig
 
-	logMx       sync.Mutex
-	actionsLog  map[string]chan string
-	lockActions sync.Mutex
-	actions     map[string]*castai.ClusterAction
+	logMx      sync.Mutex
+	actionsLog map[string]chan string
+	actions    map[string]*castai.ClusterAction
 }
 
 func NewTestServer(logger *slog.Logger, cfg TestServerConfig) *CastAITestServer {
