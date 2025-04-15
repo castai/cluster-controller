@@ -25,14 +25,11 @@ jobs:
           api-key:  ${{ secrets.FOSSA_API_KEY }}
           run-tests: true
 
-      - name: Get release tag
-        run: echo "RELEASE_TAG=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
-
       - name: Docker pull for fossa main
-        run: docker pull us-docker.pkg.dev/castai-hub/library/cluster-controller:${{ env.RELEASE_TAG }}
+        run: docker pull us-docker.pkg.dev/castai-hub/library/cluster-controller
 
       - name: FOSSA scan docker image
         uses: fossas/fossa-action@main
         with:
           api-key: ${{ secrets.FOSSA_API_KEY }}
-          container: us-docker.pkg.dev/castai-hub/library/cluster-controller:${{ env.RELEASE_TAG }}
+          container: us-docker.pkg.dev/castai-hub/library/cluster-controller
