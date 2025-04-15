@@ -13,7 +13,26 @@ jobs:
   fossa-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: fossas/fossa-action@v1
+      - name: "Checkout Code"
+        uses: actions/checkout@v3
+      - name: "Run FOSSA Scan"
+        uses: fossas/fossa-action@main # Use a specific version if locking is preferred
         with:
           api-key: ${{ secrets.FOSSA_API_KEY }}
+      - name: "Run FOSSA Test"
+        uses: fossas/fossa-action@main # Use a specific version if locking is preferred
+        with:
+          api-key:  ${{ secrets.FOSSA_API_KEY }}
+          run-tests: true
+
+      - name: Get release tag
+        run: echo "RELEASE_TAG=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+
+      - name: Docker pull for fossa main
+        run: docker pull us-docker.pkg.dev/castai-hub/library/cluster-controller:${{ env.RELEASE_TAG }}
+
+      - name: FOSSA scan docker image
+        uses: fossas/fossa-action@main
+        with:
+          api-key: ${{ secrets.FOSSA_API_KEY }}
+          container: us-docker.pkg.dev/castai-hub/library/cluster-controller:${{ env.RELEASE_TAG }}
