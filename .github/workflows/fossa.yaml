@@ -33,3 +33,5 @@ jobs:
         with:
           api-key: ${{ secrets.FOSSA_API_KEY }}
           container: us-docker.pkg.dev/castai-hub/library/cluster-controller
+          run-tests: true
+          debug: true
