@@ -13,25 +13,7 @@ jobs:
   fossa-scan:
     runs-on: ubuntu-latest
     steps:
-      - name: "Checkout Code"
-        uses: actions/checkout@v3
-      - name: "Run FOSSA Scan"
-        uses: fossas/fossa-action@main # Use a specific version if locking is preferred
+      - uses: actions/checkout@v2
+      - uses: fossas/fossa-action@v1
         with:
           api-key: ${{ secrets.FOSSA_API_KEY }}
-      - name: "Run FOSSA Test"
-        uses: fossas/fossa-action@main # Use a specific version if locking is preferred
-        with:
-          api-key:  ${{ secrets.FOSSA_API_KEY }}
-          run-tests: true
-
-      - name: Docker pull for fossa main
-        run: docker pull us-docker.pkg.dev/castai-hub/library/cluster-controller:v0.57.2
-
-      - name: FOSSA scan docker image
-        uses: fossas/fossa-action@main
-        with:
-          api-key: ${{ secrets.FOSSA_API_KEY }}
-          container: us-docker.pkg.dev/castai-hub/library/cluster-controller:v0.57.2
-          project:  https://github.com/castai/cluster-controller:v0.57.2
-          debug: true
