@@ -26,12 +26,12 @@ jobs:
           run-tests: true
 
       - name: Docker pull for fossa main
-        run: docker pull us-docker.pkg.dev/castai-hub/library/cluster-controller:v0.57.2
+        run: docker pull us-docker.pkg.dev/castai-hub/library/cluster-controller:$(git describe --tags)
 
       - name: FOSSA scan docker image
         uses: fossas/fossa-action@main
         with:
           api-key: ${{ secrets.FOSSA_API_KEY }}
-          container: us-docker.pkg.dev/castai-hub/library/cluster-controller:v0.57.2
+          container: us-docker.pkg.dev/castai-hub/library/cluster-controller:$(git describe --tags)
           run-tests: true
           debug: true
