@@ -92,7 +92,6 @@ jobs:
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH,MEDIUM'
 
-
   e2e-tests:
     uses: ./.github/workflows/e2e.yaml
     if: github.event.pull_request.draft == false
