@@ -75,16 +75,11 @@ jobs:
           push: true
           tags: ghcr.io/castai/cluster-controller:${{ env.VERSION_TAG }}
 
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.28.0
+      - name: Run govulncheck
+        uses: golang/govulncheck-action@v1
         with:
-          image-ref: ghcr.io/castai/cluster-controller:${{ env.VERSION_TAG }}
-          format: 'table'
-          exit-code: '1'
-          ignore-unfixed: true
-          vuln-type: 'os,library'
-          severity: 'CRITICAL,HIGH,MEDIUM'
-
+          go-version-file: go.mod
+          go-package: ./...
 
   e2e-tests:
     uses: ./.github/workflows/e2e.yaml
