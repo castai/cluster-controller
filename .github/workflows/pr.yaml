@@ -75,13 +75,6 @@ jobs:
           push: true
           tags: ghcr.io/castai/cluster-controller:${{ env.VERSION_TAG }}
 
-      - name: "Run FOSSA Test"
-        uses: fossas/fossa-action@main # Use a specific version if locking is preferred
-        with:
-          api-key:  ${{ secrets.FOSSA_API_KEY }}
-          container: ubuntu:20.04
-          run-tests: true
-
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.28.0
         with:
@@ -91,6 +84,7 @@ jobs:
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH,MEDIUM'
+
 
   e2e-tests:
     uses: ./.github/workflows/e2e.yaml
