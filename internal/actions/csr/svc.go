@@ -335,22 +335,27 @@ func (m *ApprovalManager) validateKubeletServingCSR(ctx context.Context, csr *wr
 			}
 		}
 	}
-	if len(x509CSR.DNSNames) > 0 {
-		for _, dns := range x509CSR.DNSNames {
-			if !lo.ContainsBy(node.Status.Addresses, func(addr corev1.NodeAddress) bool {
-				if (addr.Type == corev1.NodeInternalDNS || addr.Type == corev1.NodeExternalDNS) && addr.Address == dns {
-					return true
-				}
-				if addr.Type == corev1.NodeHostName && addr.Address == node.Name && addr.Address == dns {
-					return true
-				}
-				return false
-			}) {
-				return fmt.Errorf("CSR contains DNS name %s not in node %s", dns, nodeName)
+	if !kubeletServingDNSMatchNode(x509CSR.DNSNames, node.Name, node.Status.Addresses) {
+		return fmt.Errorf("CSR contains DNS %s not specified in the node %s", x509CSR.DNSNames, nodeName)
+	}
+	return nil
+}
+
+func kubeletServingDNSMatchNode(dnsNames []string, nodeName string, nodeAddresses []corev1.NodeAddress) bool {
+	if len(dnsNames) == 0 {
+		return true
+	}
+	for _, dns := range dnsNames {
+		for _, addr := range nodeAddresses {
+			if (addr.Type == corev1.NodeInternalDNS || addr.Type == corev1.NodeExternalDNS) && addr.Address == dns {
+				return true
+			}
+			if addr.Type == corev1.NodeHostName && dns == nodeName && dns == addr.Address {
+				return true
 			}
 		}
 	}
-	return nil
+	return false
 }
 
 func (m *ApprovalManager) stopAutoApproveForCastAINodes() {
