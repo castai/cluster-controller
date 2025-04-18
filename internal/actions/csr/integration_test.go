@@ -20,7 +20,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/fake"
 	clienttesting "k8s.io/client-go/testing"
 
@@ -304,6 +303,41 @@ func testIntegration(t *testing.T, csrVersion schema.GroupVersion) {
 			signer:      certv1.KubeletServingSignerName,
 			usages:      []string{string(certv1.UsageServerAuth)},
 			username:    "system:node:node-csr-cast-pool-10i",
+			dns:         []string{"node-csr-cast-pool-10i"},
+		},
+		{
+			description: "[kubelet-serving] with matching Hostname",
+			groups:      []string{"system:nodes"},
+			nodeCreatedWithStatus: &corev1.NodeStatus{
+				Addresses: []corev1.NodeAddress{
+					{
+						Type:    corev1.NodeHostName,
+						Address: "node-csr-cast-pool-10j",
+					},
+				},
+			},
+			nodeName: "node-csr-cast-pool-10j",
+			signer:   certv1.KubeletServingSignerName,
+			usages:   []string{string(certv1.UsageServerAuth)},
+			username: "system:node:node-csr-cast-pool-10j",
+			dns:      []string{"node-csr-cast-pool-10j"},
+		},
+		{
+			description: "[kubelet-serving] with mismatching Hostname",
+			groups:      []string{"system:nodes"},
+			nodeCreatedWithStatus: &corev1.NodeStatus{
+				Addresses: []corev1.NodeAddress{
+					{
+						Type:    corev1.NodeHostName,
+						Address: "node-csr-cast-pool-10k",
+					},
+				},
+			},
+			nodeName:    "node-csr-cast-pool-10k",
+			notApproved: true,
+			signer:      certv1.KubeletServingSignerName,
+			usages:      []string{string(certv1.UsageServerAuth)},
+			username:    "system:node:node-csr-cast-pool-10k",
 			dns:         []string{"foo.bar"},
 		},
 		{
@@ -526,21 +560,8 @@ func setupManagerAndClientset(t *testing.T, csrVersion schema.GroupVersion) *fak
 	t.Helper()
 
 	// Coppied and adapter https://github.com/kubernetes/client-go/blob/master/examples/fake-client
-	watcherStarted := make(chan struct{})
-	defer close(watcherStarted)
 	// Create the fake client.
 	client := fake.NewClientset()
-	// A catch-all watch reactor that allows us to inject the watcherStarted channel.
-	client.PrependWatchReactor("*", func(action clienttesting.Action) (handled bool, ret watch.Interface, err error) {
-		gvr := action.GetResource()
-		ns := action.GetNamespace()
-		watch, err := client.Tracker().Watch(gvr, ns)
-		if err != nil {
-			return false, nil, err
-		}
-		go func() { watcherStarted <- struct{}{} }()
-		return true, watch, nil
-	})
 	client.PrependReactor("*", "*", func(action clienttesting.Action) (handled bool, ret runtime.Object, err error) {
 		if action.GetResource().Resource == "certificatesigningrequests" && action.GetResource().GroupVersion() != csrVersion {
 			err = apierrors.NewNotFound(schema.GroupResource{}, action.GetResource().String())
@@ -554,15 +575,5 @@ func setupManagerAndClientset(t *testing.T, csrVersion schema.GroupVersion) *fak
 	err := manager.Start(context.TODO())
 	require.NoError(t, err, "failed to start approval manager")
 
-	// The fake client doesn't support resource version. Any writes to the client
-	// after the informer's initial LIST and before the informer establishing the
-	// watcher will be missed by the informer. Therefore we wait until the watcher
-	// starts.
-	// Note that the fake client isn't designed to work with informer. It
-	// doesn't support resource version. It's encouraged to use a real client
-	// in an integration/E2E test if you need to test complex behavior with
-	// informer/controllers.
-	<-watcherStarted
-	<-watcherStarted
 	return client
 }

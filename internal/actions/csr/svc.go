@@ -338,7 +338,13 @@ func (m *ApprovalManager) validateKubeletServingCSR(ctx context.Context, csr *wr
 	if len(x509CSR.DNSNames) > 0 {
 		for _, dns := range x509CSR.DNSNames {
 			if !lo.ContainsBy(node.Status.Addresses, func(addr corev1.NodeAddress) bool {
-				return (addr.Type == corev1.NodeInternalDNS || addr.Type == corev1.NodeExternalDNS) && addr.Address == dns
+				if (addr.Type == corev1.NodeInternalDNS || addr.Type == corev1.NodeExternalDNS) && addr.Address == dns {
+					return true
+				}
+				if addr.Type == corev1.NodeHostName && addr.Address == node.Name && addr.Address == dns {
+					return true
+				}
+				return false
 			}) {
 				return fmt.Errorf("CSR contains DNS name %s not in node %s", dns, nodeName)
 			}
