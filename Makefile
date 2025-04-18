@@ -41,7 +41,7 @@ fix: $(GOLANGCI_LINT)
 .PHONY: fix
 
 test:
-	go test ./... -race
+	go test ./... -race -parallel=20
 .PHONY: test
 
 generate-e2e-client:

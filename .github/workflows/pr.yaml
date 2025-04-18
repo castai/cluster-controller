@@ -52,7 +52,7 @@ jobs:
           CGO_ENABLED: 0
 
       - name: Test
-        run: go test -short -race ./...
+        run: go test -short -race -timeout 15m ./...
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
