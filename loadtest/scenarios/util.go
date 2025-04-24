@@ -5,6 +5,11 @@ import (
 	"time"
 )
 
+const (
+	// nodeTestsCountOptimizeFactor controls the ratio of nodes to actions for load tests where node count can be < action count for optimization.
+	nodeTestsCountOptimizeFactor = 10
+)
+
 func WaitUntil(ctx context.Context, duration time.Duration, condition func(ctx context.Context) bool) bool {
 	start := time.Now()
 	for {

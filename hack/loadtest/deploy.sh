@@ -5,6 +5,7 @@ CC_IMAGE_TAG="${IMAGE_TAG:-latest}"
 LOAD_TEST_IMAGE_REPOSITORY="${LOAD_TEST_IMAGE_REPOSITORY:-$CC_IMAGE_REPOSITORY}"
 LOAD_TEST_IMAGE_TAG="${LOAD_TEST_IMAGE_TAG:-$CC_IMAGE_TAG}"
 DEPLOY_CLUSTER_CONTROLLER="${DEPLOY_CLUSTER_CONTROLLER:-true}"
+KWOK_REPLICAS="${KWOK_REPLICAS:-15}"
 
 # Determine the directory where the script resides.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,7 +14,7 @@ echo "Deploying kwok"
 helm repo add kwok https://kwok.sigs.k8s.io/charts/
 helm repo update kwok
 
-helm upgrade --namespace castai-agent --create-namespace  --install kwok kwok/kwok
+helm upgrade --namespace castai-agent --create-namespace  --install kwok kwok/kwok --set replicas="$KWOK_REPLICAS"
 helm upgrade --namespace castai-agent --create-namespace  --install kwok-stages kwok/stage-fast
 helm upgrade --namespace castai-agent --create-namespace  --install kwok-metrics kwok/metrics-usage
 
