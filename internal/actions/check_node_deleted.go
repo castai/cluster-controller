@@ -52,6 +52,7 @@ func (h *CheckNodeDeletedHandler) Handle(ctx context.Context, action *castai.Clu
 		"node_name":      req.NodeName,
 		"node_id":        req.NodeID,
 		"type":           reflect.TypeOf(action.Data().(*castai.ActionCheckNodeDeleted)).String(),
+		"provider_id":    req.ProviderId,
 		ActionIDLogField: action.ID,
 	})
 	log.Info("checking if node is deleted")
@@ -84,6 +85,11 @@ func (h *CheckNodeDeletedHandler) Handle(ctx context.Context, action *castai.Clu
 				if currentNodeID == req.NodeID {
 					return false, fmt.Errorf("current node id = request node ID %w", errNodeNotDeleted)
 				}
+			}
+
+			if req.ProviderId != "" && n.Spec.ProviderID != "" && n.Spec.ProviderID != req.ProviderId {
+				log.Info("node name was reused. Original node is deleted, provider id mismatch")
+				return false, nil
 			}
 
 			if n != nil {

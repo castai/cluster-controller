@@ -38,7 +38,7 @@ func TestCheckNodeDeletedHandler(t *testing.T) {
 
 		action := &castai.ClusterAction{
 			ID:                     uuid.New().String(),
-			ActionCheckNodeDeleted: &castai.ActionCheckNodeDeleted{NodeName: "node1"},
+			ActionCheckNodeDeleted: &castai.ActionCheckNodeDeleted{NodeName: "node1", ProviderId: "providerID"},
 		}
 
 		err := h.Handle(context.Background(), action)
@@ -56,7 +56,7 @@ func TestCheckNodeDeletedHandler(t *testing.T) {
 
 		action := &castai.ClusterAction{
 			ID:                     uuid.New().String(),
-			ActionCheckNodeDeleted: &castai.ActionCheckNodeDeleted{NodeName: "node1"},
+			ActionCheckNodeDeleted: &castai.ActionCheckNodeDeleted{NodeName: "node1", ProviderId: "providerID"},
 		}
 
 		err := h.Handle(context.Background(), action)
