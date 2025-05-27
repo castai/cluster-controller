@@ -195,8 +195,9 @@ type ActionCreateEvent struct {
 type ActionDisconnectCluster struct{}
 
 type ActionCheckNodeDeleted struct {
-	NodeName string `json:"nodeName"`
-	NodeID   string `json:"nodeId"`
+	NodeName   string `json:"nodeName"`
+	NodeID     string `json:"nodeId"`
+	ProviderId string `json:"providerId"`
 }
 
 type ActionCheckNodeStatus_Status string
