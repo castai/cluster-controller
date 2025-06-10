@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
@@ -22,14 +23,19 @@ import (
 
 func NewEvictPodHandler(log logrus.FieldLogger, clientset kubernetes.Interface) ActionHandler {
 	return &EvictPodHandler{
-		log:       log,
-		clientset: clientset,
+		log:                           log,
+		clientset:                     clientset,
+		podEvictRetryDelay:            5 * time.Second,
+		podsTerminationWaitRetryDelay: 10 * time.Second,
 	}
 }
 
 type EvictPodHandler struct {
 	log       logrus.FieldLogger
 	clientset kubernetes.Interface
+
+	podEvictRetryDelay            time.Duration
+	podsTerminationWaitRetryDelay time.Duration
 }
 
 func (h *EvictPodHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
@@ -93,9 +99,10 @@ func (h *EvictPodHandler) evictPod(ctx context.Context, log logrus.FieldLogger, 
 		return fmt.Errorf("unsupported eviction version: %s", groupVersion.String())
 	}
 
+	backoff := waitext.NewConstantBackoff(h.podEvictRetryDelay)
 	return waitext.Retry(
 		ctx,
-		defaultBackoff(),
+		backoff,
 		waitext.Forever,
 		func(ctx context.Context) (bool, error) {
 			err := submit(ctx)
@@ -119,9 +126,10 @@ func (h *EvictPodHandler) evictPod(ctx context.Context, log logrus.FieldLogger, 
 }
 
 func (h *EvictPodHandler) waitForPodToBeDeleted(ctx context.Context, log logrus.FieldLogger, namespace, name string) error {
+	backoff := waitext.NewConstantBackoff(h.podsTerminationWaitRetryDelay)
 	return waitext.Retry(
 		ctx, // controls how long we might wait at most.
-		defaultBackoff(),
+		backoff,
 		waitext.Forever,
 		func(ctx context.Context) (bool, error) {
 			deleted, phase, err := h.isPodDeleted(ctx, namespace, name)
