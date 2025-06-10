@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
@@ -119,9 +120,11 @@ func (h *EvictPodHandler) evictPod(ctx context.Context, log logrus.FieldLogger, 
 }
 
 func (h *EvictPodHandler) waitForPodToBeDeleted(ctx context.Context, log logrus.FieldLogger, namespace, name string) error {
+	// Workloads often implement graceful shutdown which can take a while. No need to check status frequently.
+	backoff := waitext.NewConstantBackoff(5 * time.Second)
 	return waitext.Retry(
 		ctx, // controls how long we might wait at most.
-		defaultBackoff(),
+		backoff,
 		waitext.Forever,
 		func(ctx context.Context) (bool, error) {
 			deleted, phase, err := h.isPodDeleted(ctx, namespace, name)
@@ -131,10 +134,15 @@ func (h *EvictPodHandler) waitForPodToBeDeleted(ctx context.Context, log logrus.
 			if deleted {
 				return false, nil
 			}
-			return true, fmt.Errorf("pod is in phase %s", phase)
+			return true, PodPhaseError{phase}
 		},
 		func(err error) {
-			log.Warnf("will retry checking pod status: %v", err)
+			var logFn = log.Warnf
+			if isPodPhaseError(err) {
+				// They are expected to happen during normal shutdown.
+				logFn = log.Infof
+			}
+			logFn("will retry checking pod status: %v", err)
 		},
 	)
 }
@@ -151,4 +159,9 @@ func (h *EvictPodHandler) isPodDeleted(ctx context.Context, namespace, name stri
 		return true, "", nil
 	}
 	return false, p.Status.Phase, nil
+}
+
+func isPodPhaseError(err error) bool {
+	var phaseErr PodPhaseError
+	return errors.As(err, &phaseErr)
 }

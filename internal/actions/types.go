@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	corev1 "k8s.io/api/core/v1"
 
 	"github.com/castai/cluster-controller/internal/castai"
 )
@@ -25,4 +26,12 @@ func newUnexpectedTypeErr(value, expectedType interface{}) error {
 
 type ActionHandler interface {
 	Handle(ctx context.Context, action *castai.ClusterAction) error
+}
+
+type PodPhaseError struct {
+	Phase corev1.PodPhase
+}
+
+func (e PodPhaseError) Error() string {
+	return fmt.Sprintf("pod is in phase %s", e.Phase)
 }
