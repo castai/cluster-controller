@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
 
@@ -85,37 +86,46 @@ func patchNodeStatus(ctx context.Context, log logrus.FieldLogger, clientset kube
 	return nil
 }
 
-func getNodeForPatching(ctx context.Context, log logrus.FieldLogger, clientset kubernetes.Interface, nodeName string) (*v1.Node, error) {
-	// on GKE we noticed that sometimes the node is not found, even though it is in the cluster
-	// as a result was returned from watch. But subsequent get request returns not found.
-	// This is likely due to clientset's caching that's meant to alleviate API's load.
-	// So we give enough time for cache to sync - ~10s max.
+func getNodeByIDs(ctx context.Context, clientset kubernetes.Interface, nodeName, nodeID, providerID string) (*v1.Node, error) {
+	if nodeID == "" {
+		return nil, fmt.Errorf("node ID is empty %w", errAction)
+	}
 
-	var node *v1.Node
-
-	boff := waitext.DefaultExponentialBackoff()
-	boff.Duration = 5 * time.Second
-
-	err := waitext.Retry(
-		ctx,
-		boff,
-		5,
-		func(ctx context.Context) (bool, error) {
-			var err error
-			node, err = clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
-			if err != nil {
-				return true, err
-			}
-			return false, nil
-		},
-		func(err error) {
-			log.Warnf("getting node, will retry: %v", err)
-		},
-	)
+	n, err := clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	if err != nil && k8serrors.IsNotFound(err) {
+		return nil, errNodeNotFound
+	}
 	if err != nil {
 		return nil, err
 	}
-	return node, nil
+
+	if n == nil {
+		return nil, nil
+	}
+
+	if err := isNodeIDProviderIDValid(n, nodeID, providerID); err != nil {
+		return nil, fmt.Errorf("node %s does not match node ID %s or/and provider ID %s: %w", n.Name, nodeID, providerID, err)
+	}
+
+	return n, nil
+}
+
+func isNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string) error {
+	if nodeID == "" {
+		return fmt.Errorf("node ID is empty %w", errAction)
+	}
+
+	if val, ok := node.Labels[castai.LabelNodeID]; ok {
+		if val == nodeID {
+			return nil
+		}
+	}
+
+	if providerID != "" && node.Spec.ProviderID != "" && node.Spec.ProviderID == providerID {
+		return nil
+	}
+
+	return fmt.Errorf("node ID %s or provider ID %s does not match node %s %w", nodeID, providerID, node.Name, errNodeNotFound)
 }
 
 // executeBatchPodActions executes the action for each pod in the list.

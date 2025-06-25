@@ -3,13 +3,10 @@ package actions
 import (
 	"context"
 	"errors"
-	"fmt"
 	"reflect"
 	"time"
 
 	"github.com/sirupsen/logrus"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/internal/castai"
@@ -64,36 +61,13 @@ func (h *CheckNodeDeletedHandler) Handle(ctx context.Context, action *castai.Clu
 		boff,
 		h.cfg.retries,
 		func(ctx context.Context) (bool, error) {
-			n, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
-			if apierrors.IsNotFound(err) {
-				return false, nil
-			}
-
-			if n == nil {
-				return false, nil
-			}
-
-			currentNodeID, ok := n.Labels[castai.LabelNodeID]
-			if !ok {
-				log.Info("node doesn't have castai node id label")
-			}
-			if currentNodeID != "" {
-				if currentNodeID != req.NodeID {
-					log.Info("node name was reused. Original node is deleted")
-					return false, nil
-				}
-				if currentNodeID == req.NodeID {
-					return false, fmt.Errorf("current node id = request node ID %w", errNodeNotDeleted)
-				}
-			}
-
-			if req.ProviderId != "" && n.Spec.ProviderID != "" && n.Spec.ProviderID != req.ProviderId {
-				log.Info("node name was reused. Original node is deleted, provider id mismatch")
-				return false, nil
-			}
-
+			n, err := getNodeByIDs(ctx, h.clientset, req.NodeName, req.NodeID, req.ProviderId)
 			if n != nil {
 				return false, errNodeNotDeleted
+			}
+
+			if errors.Is(err, errNodeNotFound) {
+				return false, nil
 			}
 
 			return true, err
