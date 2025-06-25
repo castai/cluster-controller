@@ -27,8 +27,6 @@ type deleteNodeConfig struct {
 	podsTerminationWait time.Duration
 }
 
-var errNodeMismatch = errors.New("node id mismatch")
-
 func NewDeleteNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface) *DeleteNodeHandler {
 	return &DeleteNodeHandler{
 		log:       log,
@@ -61,6 +59,7 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 	log := h.log.WithFields(logrus.Fields{
 		"node_name":      req.NodeName,
 		"node_id":        req.NodeID,
+		"provider_id":    req.ProviderId,
 		"type":           reflect.TypeOf(action.Data().(*castai.ActionDeleteNode)).String(),
 		ActionIDLogField: action.ID,
 	})
@@ -72,23 +71,20 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 		b,
 		h.cfg.deleteRetries,
 		func(ctx context.Context) (bool, error) {
-			current, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
+			current, err := getNodeByIDs(ctx, h.clientset, req.NodeName, req.NodeID, req.ProviderId)
 			if err != nil {
-				if apierrors.IsNotFound(err) {
+				if errors.Is(err, errNodeNotFound) {
 					log.Info("node not found, skipping delete")
 					return false, nil
 				}
 				return true, fmt.Errorf("error getting node: %w", err)
 			}
 
-			if val, ok := current.Labels[castai.LabelNodeID]; ok {
-				if val != "" && val != req.NodeID {
-					log.Infof("node id mismatch, expected %q got %q. Skipping delete.", req.NodeID, val)
-					return true, errNodeMismatch
-				}
-			}
-
-			err = h.clientset.CoreV1().Nodes().Delete(ctx, current.Name, metav1.DeleteOptions{})
+			err = h.clientset.CoreV1().Nodes().Delete(ctx, current.Name, metav1.DeleteOptions{
+				Preconditions: &metav1.Preconditions{
+					UID: &current.UID,
+				},
+			})
 			if apierrors.IsNotFound(err) {
 				log.Info("node not found, skipping delete")
 				return false, nil
@@ -99,10 +95,6 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 			h.log.Warnf("error deleting kubernetes node, will retry: %v", err)
 		},
 	)
-
-	if errors.Is(err, errNodeMismatch) {
-		return nil
-	}
 	if err != nil {
 		return fmt.Errorf("error removing node %w", err)
 	}

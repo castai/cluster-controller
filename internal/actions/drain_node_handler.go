@@ -83,16 +83,17 @@ func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	log := h.log.WithFields(logrus.Fields{
 		"node_name":      req.NodeName,
 		"node_id":        req.NodeID,
+		"provider_id":    req.ProviderId,
 		"action":         reflect.TypeOf(action.Data().(*castai.ActionDrainNode)).String(),
 		ActionIDLogField: action.ID,
 	})
 
-	node, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
+	node, err := getNodeByIDs(ctx, h.clientset, req.NodeName, req.NodeID, req.ProviderId)
+	if errors.Is(err, errNodeNotFound) {
+		log.Info("node not found, skipping draining")
+		return nil
+	}
 	if err != nil {
-		if apierrors.IsNotFound(err) {
-			log.Info("node not found, skipping draining")
-			return nil
-		}
 		return err
 	}
 
@@ -339,7 +340,8 @@ func (h *DrainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.F
 			continue
 		}
 
-		if !isDaemonSetPod(&p) && !isStaticPod(&p) {
+		// skip pods created on the node with the same name.
+		if !isDaemonSetPod(&p) && !isStaticPod(&p) && p.CreationTimestamp.Before(node.GetDeletionTimestamp()) {
 			podsToEvict = append(podsToEvict, p)
 		}
 	}
