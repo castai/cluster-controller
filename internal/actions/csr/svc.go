@@ -241,7 +241,7 @@ func shouldSkip(csr *wrapper.CSR) (bool, string) {
 		return true, fmt.Sprintf("csr requesting user is not managed by CAST AI: %s", csr.RequestingUser())
 	}
 	if !managerSubjectCommonName(csr.ParsedCertificateRequest().Subject.CommonName) {
-		return true, fmt.Sprintf("csr common name is not managed by CAST AIL %s", csr.ParsedCertificateRequest().Subject.CommonName)
+		return true, fmt.Sprintf("csr common name is not managed by CAST AI %s", csr.ParsedCertificateRequest().Subject.CommonName)
 	}
 	return false, ""
 }
