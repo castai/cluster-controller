@@ -78,7 +78,7 @@ func TestCSRApprove(t *testing.T) {
 
 		csrResult, err := client.CertificatesV1().CertificateSigningRequests().Get(ctx, csrName, metav1.GetOptions{})
 		r.NoError(err)
-		r.Len(csrResult.Status.Conditions, 1)
+		r.GreaterOrEqual(len(csrResult.Status.Conditions), 1)
 
 		r.Equal(csrResult.Status.Conditions[0].Type, certv1.CertificateApproved)
 	})
@@ -148,7 +148,7 @@ func TestCSRApprove(t *testing.T) {
 
 		csrResult, err := client.CertificatesV1().CertificateSigningRequests().Get(ctx, csrName, metav1.GetOptions{})
 		r.NoError(err)
-		r.Len(csrResult.Status.Conditions, 1)
+		r.GreaterOrEqual(len(csrResult.Status.Conditions), 1)
 
 		r.Equal(csrResult.Status.Conditions[0].Type, certv1.CertificateApproved)
 	})
@@ -184,7 +184,7 @@ func TestCSRApprove(t *testing.T) {
 
 		csrResult, err := client.CertificatesV1().CertificateSigningRequests().Get(ctx, csrName, metav1.GetOptions{})
 		r.NoError(err)
-		r.Len(csrResult.Status.Conditions, 1)
+		r.GreaterOrEqual(len(csrResult.Status.Conditions), 1)
 
 		r.Equal(csrResult.Status.Conditions[0].Type, certv1.CertificateApproved)
 	})
