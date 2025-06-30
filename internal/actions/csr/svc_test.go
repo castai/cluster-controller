@@ -78,6 +78,7 @@ func TestCSRApprove(t *testing.T) {
 
 		csrResult, err := client.CertificatesV1().CertificateSigningRequests().Get(ctx, csrName, metav1.GetOptions{})
 		r.NoError(err)
+		r.GreaterOrEqual(len(csrResult.Status.Conditions), 1)
 
 		r.Equal(csrResult.Status.Conditions[0].Type, certv1.CertificateApproved)
 	})
@@ -88,6 +89,112 @@ func TestCSRApprove(t *testing.T) {
 
 		csrName := "123"
 		userName := "kubelet-bootstrap"
+		client := fake.NewClientset(getCSRv1(csrName, userName))
+		s := NewApprovalManager(log, client)
+		watcher := watch.NewFake()
+		client.PrependWatchReactor("certificatesigningrequests", ktest.DefaultWatchReactor(watcher, nil))
+
+		ctx := context.Background()
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			if err := s.Start(ctx); err != nil {
+				t.Logf("failed to start approval manager: %s", err.Error())
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			watcher.Add(getCSRv1(csrName, userName))
+			time.Sleep(100 * time.Millisecond)
+			s.Stop()
+		}()
+
+		wg.Wait()
+
+		csrResult, err := client.CertificatesV1().CertificateSigningRequests().Get(ctx, csrName, metav1.GetOptions{})
+		r.NoError(err)
+		r.Len(csrResult.Status.Conditions, 0)
+	})
+
+	t.Run("approves for kubelet-bootstrap user", func(t *testing.T) {
+		r := require.New(t)
+		t.Parallel()
+
+		csrName := "node-csr-123"
+		userName := "kubelet-bootstrap"
+		client := fake.NewClientset(getCSRv1(csrName, userName))
+		s := NewApprovalManager(log, client)
+		watcher := watch.NewFake()
+		client.PrependWatchReactor("certificatesigningrequests", ktest.DefaultWatchReactor(watcher, nil))
+
+		ctx := context.Background()
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			if err := s.Start(ctx); err != nil {
+				t.Logf("failed to start approval manager: %s", err.Error())
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			watcher.Add(getCSRv1(csrName, userName))
+			time.Sleep(100 * time.Millisecond)
+			s.Stop()
+		}()
+
+		wg.Wait()
+
+		csrResult, err := client.CertificatesV1().CertificateSigningRequests().Get(ctx, csrName, metav1.GetOptions{})
+		r.NoError(err)
+		r.GreaterOrEqual(len(csrResult.Status.Conditions), 1)
+
+		r.Equal(csrResult.Status.Conditions[0].Type, certv1.CertificateApproved)
+	})
+
+	t.Run("approves for kubelet-nodepool-bootstrap user", func(t *testing.T) {
+		r := require.New(t)
+		t.Parallel()
+
+		csrName := "node-csr-123"
+		userName := "kubelet-nodepool-bootstrap"
+		client := fake.NewClientset(getCSRv1(csrName, userName))
+		s := NewApprovalManager(log, client)
+		watcher := watch.NewFake()
+		client.PrependWatchReactor("certificatesigningrequests", ktest.DefaultWatchReactor(watcher, nil))
+
+		ctx := context.Background()
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			if err := s.Start(ctx); err != nil {
+				t.Logf("failed to start approval manager: %s", err.Error())
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			watcher.Add(getCSRv1(csrName, userName))
+			time.Sleep(100 * time.Millisecond)
+			s.Stop()
+		}()
+
+		wg.Wait()
+
+		csrResult, err := client.CertificatesV1().CertificateSigningRequests().Get(ctx, csrName, metav1.GetOptions{})
+		r.NoError(err)
+		r.GreaterOrEqual(len(csrResult.Status.Conditions), 1)
+
+		r.Equal(csrResult.Status.Conditions[0].Type, certv1.CertificateApproved)
+	})
+
+	t.Run("skips for unknown user", func(t *testing.T) {
+		r := require.New(t)
+		t.Parallel()
+
+		csrName := "node-csr-123"
+		userName := "some-unknown-user"
 		client := fake.NewClientset(getCSRv1(csrName, userName))
 		s := NewApprovalManager(log, client)
 		watcher := watch.NewFake()
