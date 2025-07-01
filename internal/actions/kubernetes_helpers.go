@@ -87,7 +87,7 @@ func patchNodeStatus(ctx context.Context, log logrus.FieldLogger, clientset kube
 }
 
 func getNodeByIDs(ctx context.Context, clientset kubernetes.Interface, nodeName, nodeID, providerID string) (*v1.Node, error) {
-	if nodeID == "" {
+	if nodeID == "" && providerID == "" {
 		return nil, fmt.Errorf("node ID is empty %w", errAction)
 	}
 
@@ -111,13 +111,11 @@ func getNodeByIDs(ctx context.Context, clientset kubernetes.Interface, nodeName,
 }
 
 func isNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string) error {
-	if nodeID == "" {
-		return fmt.Errorf("node ID is empty %w", errAction)
-	}
-
-	if val, ok := node.Labels[castai.LabelNodeID]; ok {
-		if val == nodeID {
-			return nil
+	if nodeID != "" {
+		if val, ok := node.Labels[castai.LabelNodeID]; ok {
+			if val == nodeID {
+				return nil
+			}
 		}
 	}
 
@@ -125,7 +123,7 @@ func isNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string) error {
 		return nil
 	}
 
-	return fmt.Errorf("node ID %s or provider ID %s does not match node %s %w", nodeID, providerID, node.Name, errNodeNotFound)
+	return fmt.Errorf("node ID %s or provider ID %s does not match node %s: %w", nodeID, providerID, node.Name, errNodeNotFound)
 }
 
 // executeBatchPodActions executes the action for each pod in the list.
