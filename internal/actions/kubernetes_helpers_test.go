@@ -22,11 +22,11 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name: "empty node ID",
+			name: "empty node ID and provider id",
 			args: args{
 				node: &v1.Node{},
 			},
-			wantErr: errAction,
+			wantErr: errNodeNotFound,
 		},
 		{
 			name: "node ID matches label",
@@ -59,6 +59,22 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 			},
 		},
 		{
+			name: "node ID is empty but provider ID matches",
+			args: args{
+				node: &v1.Node{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							castai.LabelNodeID: "node-id-123-not-matching",
+						},
+					},
+					Spec: v1.NodeSpec{
+						ProviderID: "provider-id-456",
+					},
+				},
+				providerID: "provider-id-456",
+			},
+		},
+		{
 			name: "node ID does not match label but provider ID empty",
 			args: args{
 				node: &v1.Node{
@@ -77,7 +93,7 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 			wantErr: errNodeNotFound,
 		},
 		{
-			name: "node ID  and provider ID do not match",
+			name: "node ID and provider ID do not match",
 			args: args{
 				node: &v1.Node{
 					ObjectMeta: metav1.ObjectMeta{
