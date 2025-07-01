@@ -2,16 +2,16 @@ package actions
 
 import (
 	"context"
-	"github.com/castai/clust
+	"testing"
+
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-pimachinery/pkg/apis/meta/v1"
-	"k8s
-io/apimachinery/pkg/runtime"
-	"k8s.
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+
+	"github.com/castai/cluster-controller/internal/castai"
 )
 
 func TestCheckNodeDeletedHandler_Handle(t *testing.T) {

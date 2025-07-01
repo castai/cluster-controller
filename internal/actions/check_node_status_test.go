@@ -19,6 +19,7 @@ import (
 	"github.com/castai/cluster-controller/internal/castai"
 )
 
+// nolint:goconst
 func TestCheckStatus_Deleted(t *testing.T) {
 	log := logrus.New()
 	log.SetLevel(logrus.DebugLevel)
