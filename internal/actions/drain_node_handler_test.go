@@ -544,15 +544,15 @@ func setupFakeClientWithNodePodEviction(nodeName, nodeID, podName string) *fake.
 	node := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: nodeName,
+			Labels: map[string]string{
+				castai.LabelNodeID: nodeID,
+			},
 		},
 	}
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      podName,
 			Namespace: "default",
-			Labels: map[string]string{
-				castai.LabelNodeID: nodeID,
-			},
 		},
 		Spec: v1.PodSpec{
 			NodeName: nodeName,
