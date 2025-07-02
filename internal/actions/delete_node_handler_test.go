@@ -125,13 +125,15 @@ func TestDeleteNodeHandler(t *testing.T) {
 	t.Run("delete node with pods", func(t *testing.T) {
 		r := require.New(t)
 		nodeName := "node1"
+		nodeID := "node-id"
 		podName := "pod1"
-		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
+		clientset := setupFakeClientWithNodePodEviction(nodeName, nodeID, podName)
 
 		action := &castai.ClusterAction{
 			ID: uuid.New().String(),
 			ActionDeleteNode: &castai.ActionDeleteNode{
 				NodeName: nodeName,
+				NodeID:   "node-id",
 			},
 		}
 

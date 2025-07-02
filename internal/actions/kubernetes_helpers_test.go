@@ -26,7 +26,7 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 			args: args{
 				node: &v1.Node{},
 			},
-			wantErr: errNodeNotFound,
+			wantErr: errNodeNotValid,
 		},
 		{
 			name: "node ID matches label",
@@ -90,7 +90,7 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 				nodeID:     "node-id-123",
 				providerID: "",
 			},
-			wantErr: errNodeNotFound,
+			wantErr: errNodeNotValid,
 		},
 		{
 			name: "node ID and provider ID do not match",
@@ -108,7 +108,7 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 				nodeID:     "node-id-123",
 				providerID: "provider-id-456",
 			},
-			wantErr: errNodeNotFound,
+			wantErr: errNodeNotValid,
 		},
 	}
 	for _, tt := range tests {
