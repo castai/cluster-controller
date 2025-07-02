@@ -403,6 +403,7 @@ func TestDrainNodeHandler(t *testing.T) {
 			ID: uuid.New().String(),
 			ActionDrainNode: &castai.ActionDrainNode{
 				NodeName:            "node1",
+				NodeID:              nodeID,
 				DrainTimeoutSeconds: 2,
 				Force:               false,
 			},
