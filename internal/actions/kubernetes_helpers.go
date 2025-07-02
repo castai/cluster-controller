@@ -104,11 +104,13 @@ func getNodeByIDs(ctx context.Context, clientset kubernetes.Interface, nodeName,
 	}
 
 	if err := isNodeIDProviderIDValid(n, nodeID, providerID); err != nil {
-		return nil, fmt.Errorf("node %s does not match node ID %s or/and provider ID %s: %w", n.Name, nodeID, providerID, err)
+		return nil, fmt.Errorf("node %s not valid %w", n.Name, err)
 	}
 
 	return n, nil
 }
+
+var errNodeNotValid = fmt.Errorf("node is not valid")
 
 func isNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string) error {
 	if nodeID != "" {
@@ -123,7 +125,7 @@ func isNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string) error {
 		return nil
 	}
 
-	return fmt.Errorf("node ID %s or provider ID %s does not match node %s: %w", nodeID, providerID, node.Name, errNodeNotFound)
+	return fmt.Errorf("node ID %s or provider ID %s does not match node %s: %w", nodeID, providerID, node.Name, errNodeNotValid)
 }
 
 // executeBatchPodActions executes the action for each pod in the list.
