@@ -3,6 +3,7 @@ package actions
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -10,7 +11,6 @@ import (
 
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/internal/castai"
@@ -21,14 +21,16 @@ var _ ActionHandler = &PatchNodeHandler{}
 
 func NewPatchNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface) *PatchNodeHandler {
 	return &PatchNodeHandler{
-		log:       log,
-		clientset: clientset,
+		retryTimeout: 5 * time.Second, // default timeout for retrying node patching
+		log:          log,
+		clientset:    clientset,
 	}
 }
 
 type PatchNodeHandler struct {
-	log       logrus.FieldLogger
-	clientset kubernetes.Interface
+	retryTimeout time.Duration
+	log          logrus.FieldLogger
+	clientset    kubernetes.Interface
 }
 
 func (h *PatchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
@@ -62,7 +64,7 @@ func (h *PatchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 
 	node, err := h.getNodeForPatching(ctx, req.NodeName, req.NodeID, req.ProviderId)
 	if err != nil {
-		if apierrors.IsNotFound(err) {
+		if errors.Is(err, errNodeNotFound) {
 			log.WithError(err).Infof("node not found, skipping patch")
 			return nil
 		}
@@ -119,7 +121,7 @@ func (h *PatchNodeHandler) getNodeForPatching(ctx context.Context, nodeName, nod
 	var node *v1.Node
 
 	boff := waitext.DefaultExponentialBackoff()
-	boff.Duration = 5 * time.Second
+	boff.Duration = h.retryTimeout
 
 	err := waitext.Retry(
 		ctx,
