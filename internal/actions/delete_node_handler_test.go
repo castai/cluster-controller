@@ -27,6 +27,9 @@ func TestDeleteNodeHandler(t *testing.T) {
 		node := &v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: nodeName,
+				Labels: map[string]string{
+					castai.LabelNodeID: "node-id",
+				},
 			},
 		}
 		clientset := fake.NewSimpleClientset(node)
@@ -35,6 +38,7 @@ func TestDeleteNodeHandler(t *testing.T) {
 			ID: uuid.New().String(),
 			ActionDeleteNode: &castai.ActionDeleteNode{
 				NodeName: "node1",
+				NodeID:   "node-id",
 			},
 		}
 
@@ -66,6 +70,7 @@ func TestDeleteNodeHandler(t *testing.T) {
 			ID: uuid.New().String(),
 			ActionDeleteNode: &castai.ActionDeleteNode{
 				NodeName: "already-deleted-node",
+				NodeID:   "node-id",
 			},
 		}
 
