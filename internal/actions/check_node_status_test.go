@@ -80,7 +80,7 @@ func TestCheckStatus_Deleted(t *testing.T) {
 		}
 
 		err := h.Handle(context.Background(), action)
-		r.EqualError(err, "node is not deleted")
+		r.EqualError(err, errNodeNotValid.Error())
 	})
 
 	t.Run("handle check successfully when node is not found", func(t *testing.T) {
@@ -132,7 +132,7 @@ func TestCheckStatus_Deleted(t *testing.T) {
 		}
 
 		err := h.Handle(context.Background(), action)
-		r.NoError(err)
+		r.EqualError(err, errNodeNotValid.Error())
 	})
 }
 
