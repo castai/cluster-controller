@@ -201,6 +201,14 @@ type ClientInterface interface {
 
 	ExternalClusterAPIHandleCloudEvent(ctx context.Context, clusterId string, body ExternalClusterAPIHandleCloudEventJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ExternalClusterAPIGCPCreateSA request with any body
+	ExternalClusterAPIGCPCreateSAWithBody(ctx context.Context, clusterId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	ExternalClusterAPIGCPCreateSA(ctx context.Context, clusterId string, body ExternalClusterAPIGCPCreateSAJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ExternalClusterAPIDisableGCPSA request
+	ExternalClusterAPIDisableGCPSA(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ExternalClusterAPIGKECreateSA request with any body
 	ExternalClusterAPIGKECreateSAWithBody(ctx context.Context, clusterId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -232,7 +240,7 @@ type ClientInterface interface {
 	ExternalClusterAPIDrainNode(ctx context.Context, clusterId string, nodeId string, body ExternalClusterAPIDrainNodeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ExternalClusterAPIReconcileCluster request
-	ExternalClusterAPIReconcileCluster(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ExternalClusterAPIReconcileCluster(ctx context.Context, clusterId string, params *ExternalClusterAPIReconcileClusterParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ExternalClusterAPITriggerResumeCluster request with any body
 	ExternalClusterAPITriggerResumeClusterWithBody(ctx context.Context, clusterId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -734,6 +742,42 @@ func (c *Client) ExternalClusterAPIHandleCloudEvent(ctx context.Context, cluster
 	return c.Client.Do(req)
 }
 
+func (c *Client) ExternalClusterAPIGCPCreateSAWithBody(ctx context.Context, clusterId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewExternalClusterAPIGCPCreateSARequestWithBody(c.Server, clusterId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ExternalClusterAPIGCPCreateSA(ctx context.Context, clusterId string, body ExternalClusterAPIGCPCreateSAJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewExternalClusterAPIGCPCreateSARequest(c.Server, clusterId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ExternalClusterAPIDisableGCPSA(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewExternalClusterAPIDisableGCPSARequest(c.Server, clusterId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) ExternalClusterAPIGKECreateSAWithBody(ctx context.Context, clusterId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewExternalClusterAPIGKECreateSARequestWithBody(c.Server, clusterId, contentType, body)
 	if err != nil {
@@ -866,8 +910,8 @@ func (c *Client) ExternalClusterAPIDrainNode(ctx context.Context, clusterId stri
 	return c.Client.Do(req)
 }
 
-func (c *Client) ExternalClusterAPIReconcileCluster(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewExternalClusterAPIReconcileClusterRequest(c.Server, clusterId)
+func (c *Client) ExternalClusterAPIReconcileCluster(ctx context.Context, clusterId string, params *ExternalClusterAPIReconcileClusterParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewExternalClusterAPIReconcileClusterRequest(c.Server, clusterId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -1322,6 +1366,22 @@ func NewAutoscalerAPIGetAgentScriptRequest(server string, params *AutoscalerAPIG
 	if params.OpenshiftFsGroup != nil {
 
 		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "openshift.fsGroup", runtime.ParamLocationQuery, *params.OpenshiftFsGroup); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+	}
+
+	if params.AnywhereClusterName != nil {
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "anywhere.clusterName", runtime.ParamLocationQuery, *params.AnywhereClusterName); err != nil {
 			return nil, err
 		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 			return nil, err
@@ -1845,6 +1905,22 @@ func NewAutoscalerAPIListRebalancingPlansRequest(server string, clusterId string
 	if params.IncludeConfigurations != nil {
 
 		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "includeConfigurations", runtime.ParamLocationQuery, *params.IncludeConfigurations); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+	}
+
+	if params.IncludeNegative != nil {
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "includeNegative", runtime.ParamLocationQuery, *params.IncludeNegative); err != nil {
 			return nil, err
 		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 			return nil, err
@@ -2654,6 +2730,38 @@ func NewExternalClusterAPIGetCredentialsScriptRequest(server string, clusterId s
 
 	}
 
+	if params.InstallNetflowExporter != nil {
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "installNetflowExporter", runtime.ParamLocationQuery, *params.InstallNetflowExporter); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+	}
+
+	if params.InstallWorkloadAutoscaler != nil {
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "installWorkloadAutoscaler", runtime.ParamLocationQuery, *params.InstallWorkloadAutoscaler); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+	}
+
 	queryURL.RawQuery = queryValues.Encode()
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -2754,6 +2862,87 @@ func NewExternalClusterAPIHandleCloudEventRequestWithBody(server string, cluster
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewExternalClusterAPIGCPCreateSARequest calls the generic ExternalClusterAPIGCPCreateSA builder with application/json body
+func NewExternalClusterAPIGCPCreateSARequest(server string, clusterId string, body ExternalClusterAPIGCPCreateSAJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewExternalClusterAPIGCPCreateSARequestWithBody(server, clusterId, "application/json", bodyReader)
+}
+
+// NewExternalClusterAPIGCPCreateSARequestWithBody generates requests for ExternalClusterAPIGCPCreateSA with any type of body
+func NewExternalClusterAPIGCPCreateSARequestWithBody(server string, clusterId string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "clusterId", runtime.ParamLocationPath, clusterId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/kubernetes/external-clusters/%s/gcp-create-sa", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewExternalClusterAPIDisableGCPSARequest generates requests for ExternalClusterAPIDisableGCPSA
+func NewExternalClusterAPIDisableGCPSARequest(server string, clusterId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "clusterId", runtime.ParamLocationPath, clusterId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/kubernetes/external-clusters/%s/gcp-disable-sa", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -3371,7 +3560,7 @@ func NewExternalClusterAPIDrainNodeRequestWithBody(server string, clusterId stri
 }
 
 // NewExternalClusterAPIReconcileClusterRequest generates requests for ExternalClusterAPIReconcileCluster
-func NewExternalClusterAPIReconcileClusterRequest(server string, clusterId string) (*http.Request, error) {
+func NewExternalClusterAPIReconcileClusterRequest(server string, clusterId string, params *ExternalClusterAPIReconcileClusterParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -3395,6 +3584,26 @@ func NewExternalClusterAPIReconcileClusterRequest(server string, clusterId strin
 	if err != nil {
 		return nil, err
 	}
+
+	queryValues := queryURL.Query()
+
+	if params.SkipAksInitData != nil {
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "skipAksInitData", runtime.ParamLocationQuery, *params.SkipAksInitData); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+	}
+
+	queryURL.RawQuery = queryValues.Encode()
 
 	req, err := http.NewRequest("POST", queryURL.String(), nil)
 	if err != nil {
@@ -3775,6 +3984,14 @@ type ClientWithResponsesInterface interface {
 
 	ExternalClusterAPIHandleCloudEventWithResponse(ctx context.Context, clusterId string, body ExternalClusterAPIHandleCloudEventJSONRequestBody) (*ExternalClusterAPIHandleCloudEventResponse, error)
 
+	// ExternalClusterAPIGCPCreateSA request  with any body
+	ExternalClusterAPIGCPCreateSAWithBodyWithResponse(ctx context.Context, clusterId string, contentType string, body io.Reader) (*ExternalClusterAPIGCPCreateSAResponse, error)
+
+	ExternalClusterAPIGCPCreateSAWithResponse(ctx context.Context, clusterId string, body ExternalClusterAPIGCPCreateSAJSONRequestBody) (*ExternalClusterAPIGCPCreateSAResponse, error)
+
+	// ExternalClusterAPIDisableGCPSA request
+	ExternalClusterAPIDisableGCPSAWithResponse(ctx context.Context, clusterId string) (*ExternalClusterAPIDisableGCPSAResponse, error)
+
 	// ExternalClusterAPIGKECreateSA request  with any body
 	ExternalClusterAPIGKECreateSAWithBodyWithResponse(ctx context.Context, clusterId string, contentType string, body io.Reader) (*ExternalClusterAPIGKECreateSAResponse, error)
 
@@ -3806,7 +4023,7 @@ type ClientWithResponsesInterface interface {
 	ExternalClusterAPIDrainNodeWithResponse(ctx context.Context, clusterId string, nodeId string, body ExternalClusterAPIDrainNodeJSONRequestBody) (*ExternalClusterAPIDrainNodeResponse, error)
 
 	// ExternalClusterAPIReconcileCluster request
-	ExternalClusterAPIReconcileClusterWithResponse(ctx context.Context, clusterId string) (*ExternalClusterAPIReconcileClusterResponse, error)
+	ExternalClusterAPIReconcileClusterWithResponse(ctx context.Context, clusterId string, params *ExternalClusterAPIReconcileClusterParams) (*ExternalClusterAPIReconcileClusterResponse, error)
 
 	// ExternalClusterAPITriggerResumeCluster request  with any body
 	ExternalClusterAPITriggerResumeClusterWithBodyWithResponse(ctx context.Context, clusterId string, contentType string, body io.Reader) (*ExternalClusterAPITriggerResumeClusterResponse, error)
@@ -4796,6 +5013,66 @@ func (r ExternalClusterAPIHandleCloudEventResponse) GetBody() []byte {
 
 // TODO: </castai customization> to have common interface. https://github.com/deepmap/oapi-codegen/issues/240
 
+type ExternalClusterAPIGCPCreateSAResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ExternalclusterV1GCPCreateSAResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r ExternalClusterAPIGCPCreateSAResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ExternalClusterAPIGCPCreateSAResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// TODO: <castai customization> to have common interface. https://github.com/deepmap/oapi-codegen/issues/240
+// Body returns body of byte array
+func (r ExternalClusterAPIGCPCreateSAResponse) GetBody() []byte {
+	return r.Body
+}
+
+// TODO: </castai customization> to have common interface. https://github.com/deepmap/oapi-codegen/issues/240
+
+type ExternalClusterAPIDisableGCPSAResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ExternalclusterV1DisableGCPSAResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r ExternalClusterAPIDisableGCPSAResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ExternalClusterAPIDisableGCPSAResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// TODO: <castai customization> to have common interface. https://github.com/deepmap/oapi-codegen/issues/240
+// Body returns body of byte array
+func (r ExternalClusterAPIDisableGCPSAResponse) GetBody() []byte {
+	return r.Body
+}
+
+// TODO: </castai customization> to have common interface. https://github.com/deepmap/oapi-codegen/issues/240
+
 type ExternalClusterAPIGKECreateSAResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -5566,6 +5843,32 @@ func (c *ClientWithResponses) ExternalClusterAPIHandleCloudEventWithResponse(ctx
 	return ParseExternalClusterAPIHandleCloudEventResponse(rsp)
 }
 
+// ExternalClusterAPIGCPCreateSAWithBodyWithResponse request with arbitrary body returning *ExternalClusterAPIGCPCreateSAResponse
+func (c *ClientWithResponses) ExternalClusterAPIGCPCreateSAWithBodyWithResponse(ctx context.Context, clusterId string, contentType string, body io.Reader) (*ExternalClusterAPIGCPCreateSAResponse, error) {
+	rsp, err := c.ExternalClusterAPIGCPCreateSAWithBody(ctx, clusterId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	return ParseExternalClusterAPIGCPCreateSAResponse(rsp)
+}
+
+func (c *ClientWithResponses) ExternalClusterAPIGCPCreateSAWithResponse(ctx context.Context, clusterId string, body ExternalClusterAPIGCPCreateSAJSONRequestBody) (*ExternalClusterAPIGCPCreateSAResponse, error) {
+	rsp, err := c.ExternalClusterAPIGCPCreateSA(ctx, clusterId, body)
+	if err != nil {
+		return nil, err
+	}
+	return ParseExternalClusterAPIGCPCreateSAResponse(rsp)
+}
+
+// ExternalClusterAPIDisableGCPSAWithResponse request returning *ExternalClusterAPIDisableGCPSAResponse
+func (c *ClientWithResponses) ExternalClusterAPIDisableGCPSAWithResponse(ctx context.Context, clusterId string) (*ExternalClusterAPIDisableGCPSAResponse, error) {
+	rsp, err := c.ExternalClusterAPIDisableGCPSA(ctx, clusterId)
+	if err != nil {
+		return nil, err
+	}
+	return ParseExternalClusterAPIDisableGCPSAResponse(rsp)
+}
+
 // ExternalClusterAPIGKECreateSAWithBodyWithResponse request with arbitrary body returning *ExternalClusterAPIGKECreateSAResponse
 func (c *ClientWithResponses) ExternalClusterAPIGKECreateSAWithBodyWithResponse(ctx context.Context, clusterId string, contentType string, body io.Reader) (*ExternalClusterAPIGKECreateSAResponse, error) {
 	rsp, err := c.ExternalClusterAPIGKECreateSAWithBody(ctx, clusterId, contentType, body)
@@ -5663,8 +5966,8 @@ func (c *ClientWithResponses) ExternalClusterAPIDrainNodeWithResponse(ctx contex
 }
 
 // ExternalClusterAPIReconcileClusterWithResponse request returning *ExternalClusterAPIReconcileClusterResponse
-func (c *ClientWithResponses) ExternalClusterAPIReconcileClusterWithResponse(ctx context.Context, clusterId string) (*ExternalClusterAPIReconcileClusterResponse, error) {
-	rsp, err := c.ExternalClusterAPIReconcileCluster(ctx, clusterId)
+func (c *ClientWithResponses) ExternalClusterAPIReconcileClusterWithResponse(ctx context.Context, clusterId string, params *ExternalClusterAPIReconcileClusterParams) (*ExternalClusterAPIReconcileClusterResponse, error) {
+	rsp, err := c.ExternalClusterAPIReconcileCluster(ctx, clusterId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -6544,6 +6847,58 @@ func ParseExternalClusterAPIHandleCloudEventResponse(rsp *http.Response) (*Exter
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest ExternalclusterV1HandleCloudEventResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseExternalClusterAPIGCPCreateSAResponse parses an HTTP response from a ExternalClusterAPIGCPCreateSAWithResponse call
+func ParseExternalClusterAPIGCPCreateSAResponse(rsp *http.Response) (*ExternalClusterAPIGCPCreateSAResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer rsp.Body.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ExternalClusterAPIGCPCreateSAResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ExternalclusterV1GCPCreateSAResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseExternalClusterAPIDisableGCPSAResponse parses an HTTP response from a ExternalClusterAPIDisableGCPSAWithResponse call
+func ParseExternalClusterAPIDisableGCPSAResponse(rsp *http.Response) (*ExternalClusterAPIDisableGCPSAResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer rsp.Body.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ExternalClusterAPIDisableGCPSAResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ExternalclusterV1DisableGCPSAResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

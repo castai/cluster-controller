@@ -24,12 +24,15 @@ import (
 )
 
 const (
-	approveCSRTimeout              = 4 * time.Minute
-	groupSystemNodesName           = "system:nodes"
+	approveCSRTimeout    = 4 * time.Minute
+	groupSystemNodesName = "system:nodes"
+	// kubeletBootstrapRequestingUser is the observed requestor for node's CSRs from real GKE clusters.
 	kubeletBootstrapRequestingUser = "kubelet-bootstrap"
-	clusterControllerSAName        = "system:serviceaccount:castai-agent:castai-cluster-controller"
-	approvedMessage                = "This CSR was approved by CAST AI"
-	csrOutdatedAfter               = time.Hour
+	// kubeletNodepoolBootstrapRequestingUser is the observed requestor for node's CSRs for GKE clusters 1.33+.
+	kubeletNodepoolBootstrapRequestingUser = "kubelet-nodepool-bootstrap"
+	clusterControllerSAName                = "system:serviceaccount:castai-agent:castai-cluster-controller"
+	approvedMessage                        = "This CSR was approved by CAST AI"
+	csrOutdatedAfter                       = time.Hour
 )
 
 func NewApprovalManager(log logrus.FieldLogger, clientset kubernetes.Interface) *ApprovalManager {
@@ -148,8 +151,8 @@ func (m *ApprovalManager) runAutoApproveForCastAINodes(ctx context.Context, c <-
 					"signer": csr.SignerName(),
 					"csr":    csr.Name(),
 				})
-				if shouldSkip(log, csr) {
-					log.Debug("skipping csr")
+				if skip, reason := shouldSkip(csr); skip {
+					log.Infof("skipping csr due to reason: %s", reason)
 					return
 				}
 				log.Info("auto approving csr")
@@ -221,32 +224,26 @@ func (m *ApprovalManager) handle(ctx context.Context, log logrus.FieldLogger, cs
 	return errors.New("certificate signing request was not approved")
 }
 
-func shouldSkip(log logrus.FieldLogger, csr *wrapper.CSR) bool {
+func shouldSkip(csr *wrapper.CSR) (bool, string) {
 	if csr.Approved() {
-		log.Debug("csr already approved")
-		return true
+		return true, "csr already approved"
 	}
 	if time.Since(csr.CreatedAt()) > csrOutdatedAfter {
-		log.Debug("csr is outdated")
-		return true
+		return true, fmt.Sprintf("csr is outdated, %v is larger than %v", time.Since(csr.CreatedAt()), csrOutdatedAfter)
 	}
 	if !managedSigner(csr.SignerName()) {
-		log.Debug("csr unknown signer")
-		return true
+		return true, fmt.Sprintf("csr unknown signer: %s", csr.SignerName())
 	}
 	if !managedCSRNamePrefix(csr.Name()) {
-		log.Debug("csr name not managed by CAST AI: ", csr.Name())
-		return true
+		return true, fmt.Sprintf("csr name not managed by CAST AI: %s", csr.Name())
 	}
 	if !managedCSRRequestingUser(csr.RequestingUser()) {
-		log.Debug("csr requesting user is not managed by CAST AI")
-		return true
+		return true, fmt.Sprintf("csr requesting user is not managed by CAST AI: %s", csr.RequestingUser())
 	}
 	if !managerSubjectCommonName(csr.ParsedCertificateRequest().Subject.CommonName) {
-		log.Debug("csr common name is not managed by CAST AI")
-		return true
+		return true, fmt.Sprintf("csr common name is not managed by CAST AI %s", csr.ParsedCertificateRequest().Subject.CommonName)
 	}
-	return false
+	return false, ""
 }
 
 func managedSigner(signerName string) bool {
@@ -259,7 +256,10 @@ func managedCSRNamePrefix(n string) bool {
 }
 
 func managedCSRRequestingUser(s string) bool {
-	return s == kubeletBootstrapRequestingUser || s == clusterControllerSAName || strings.HasPrefix(s, "system:node:")
+	return s == kubeletBootstrapRequestingUser || // kubelet bootstrap user variation
+		s == kubeletNodepoolBootstrapRequestingUser || // kubelet bootstrap user variation (observed initially on GKE 1.33+)
+		s == clusterControllerSAName || // if created by CC
+		strings.HasPrefix(s, "system:node:") // Post-bootstrap node user; usually for serving certificate
 }
 
 func managerSubjectCommonName(commonName string) bool {
