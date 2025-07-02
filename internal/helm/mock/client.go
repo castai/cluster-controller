@@ -5,13 +5,13 @@
 package mock_helm
 
 import (
-	"context"
-	"reflect"
+	context "context"
+	reflect "reflect"
 
-	"github.com/castai/cluster-controller/internal/helm"
-	"github.com/golang/mock/gomock"
-	"helm.sh/helm/v3/pkg/action"
-	"helm.sh/helm/v3/pkg/release"
+	helm "github.com/castai/cluster-controller/internal/helm"
+	gomock "github.com/golang/mock/gomock"
+	action "helm.sh/helm/v3/pkg/action"
+	release "helm.sh/helm/v3/pkg/release"
 )
 
 // MockClient is a mock of Client interface.

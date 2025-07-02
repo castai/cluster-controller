@@ -75,6 +75,28 @@ const (
 	CastaiAutoscalerV1beta1StatusPreparingNodes    CastaiAutoscalerV1beta1Status = "preparing_nodes"
 )
 
+// Defines values for CastaiFeaturesV1EntityType.
+const (
+	ClusterId      CastaiFeaturesV1EntityType = "clusterId"
+	Environment    CastaiFeaturesV1EntityType = "environment"
+	OrganizationId CastaiFeaturesV1EntityType = "organizationId"
+	UserId         CastaiFeaturesV1EntityType = "userId"
+)
+
+// Defines values for CastaiFeaturesV1LogicalOperator.
+const (
+	And                CastaiFeaturesV1LogicalOperator = "and"
+	LogicalUnspecified CastaiFeaturesV1LogicalOperator = "logical_unspecified"
+	Or                 CastaiFeaturesV1LogicalOperator = "or"
+)
+
+// Defines values for CastaiFeaturesV1Operator.
+const (
+	Equals              CastaiFeaturesV1Operator = "equals"
+	NotEquals           CastaiFeaturesV1Operator = "not_equals"
+	OperatorUnspecified CastaiFeaturesV1Operator = "operator_unspecified"
+)
+
 // Defines values for ExternalclusterV1ClusterReconcileInfoReconcileMode.
 const (
 	Disabled    ExternalclusterV1ClusterReconcileInfoReconcileMode = "disabled"
@@ -119,7 +141,11 @@ const (
 // Defines the cluster rebalance request.
 type AutoscalerAPIGenerateRebalancingPlanRequest struct {
 	// When enabled will also consider rebalancing problematic pods (pods without controller, job pods, pods with removal-disabled annotation).
-	AggressiveMode *bool `json:"aggressiveMode"`
+	//
+	// Deprecated: use AggressiveModeConfig instead.
+	// We still honor the behavior of this legacy option, but this field will be removed at some point in the future.
+	AggressiveMode       *bool                                        `json:"aggressiveMode"`
+	AggressiveModeConfig *CastaiAutoscalerV1beta1AggressiveModeConfig `json:"aggressiveModeConfig,omitempty"`
 
 	// Defines whether the nodes that failed to get drained until a predefined timeout, will be kept with a
 	// rebalancing.cast.ai/status=drain-failed annotation instead of forcefully drained.
@@ -132,6 +158,9 @@ type AutoscalerAPIGenerateRebalancingPlanRequest struct {
 	// Minimum number of nodes that the cluster should have after rebalancing is done.
 	MinNodes *int32 `json:"minNodes,omitempty"`
 
+	// Defines configuration of a paused draining feature. Requires feature flag to be enabled.
+	PausedDrainConfig *CastaiAutoscalerV1beta1PausedDrainConfig `json:"pausedDrainConfig,omitempty"`
+
 	// Subset of nodes to rebalance. If empty, it is considered to include all nodes (full rebalancing).
 	RebalancingNodes *[]CastaiAutoscalerV1beta1RebalancingNode `json:"rebalancingNodes,omitempty"`
 }
@@ -141,6 +170,15 @@ type ErrorResponse struct {
 	// in case the error is related to specific field, this list will contain
 	FieldViolations []FieldViolation `json:"fieldViolations"`
 	Message         string           `json:"message"`
+}
+
+// ExternalClusterAPIGCPCreateSARequest defines model for ExternalClusterAPI_GCPCreateSA_request.
+type ExternalClusterAPIGCPCreateSARequest struct {
+	// AKSClusterParams is a placeholder for future use.
+	Aks *ExternalclusterV1GCPCreateSARequestAKSClusterParams `json:"aks,omitempty"`
+
+	// UpdateGKEClusterParams defines updatable GKE cluster configuration.
+	Gke *ExternalclusterV1UpdateGKEClusterParams `json:"gke,omitempty"`
 }
 
 // ExternalClusterAPIGKECreateSARequest defines model for ExternalClusterAPI_GKECreateSA_request.
@@ -166,6 +204,10 @@ type CastaiAuthtokenV1beta1AuthToken struct {
 	// created_by is used to link this token to a user who created it.
 	CreatedBy *string `json:"createdBy"`
 
+	// Time when the token will expire (unix timestamp in nanoseconds).
+	// A null value means that the key will never expire.
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+
 	// (read only) ID of the token.
 	Id *string `json:"id,omitempty"`
 
@@ -175,11 +217,9 @@ type CastaiAuthtokenV1beta1AuthToken struct {
 	// (required) User provided name of the token.
 	Name string `json:"name"`
 
+	// TODO: we need to think how to migrate away from this flag.
 	// whether token has readonly permissions.
 	Readonly bool `json:"readonly"`
-
-	// service_account_id is used to link this token to a service account.
-	ServiceAccountId *string `json:"serviceAccountId"`
 
 	// (read only, visible once on creation) actual token used to authenticate via api.
 	Token *string `json:"token"`
@@ -244,6 +284,26 @@ type CastaiAutoscalerV1beta1AWSNodeTemplateMigrationResult struct {
 
 	// Indicates whether AWSNodeTemplate migration was successful.
 	Success *bool `json:"success,omitempty"`
+}
+
+// CastaiAutoscalerV1beta1AggressiveModeConfig defines model for castai.autoscaler.v1beta1.AggressiveModeConfig.
+type CastaiAutoscalerV1beta1AggressiveModeConfig struct {
+	// Rebalance workloads that use local-path Persistent Volumes.
+	// WARNING: THIS WILL RESULT IN DATA LOSS.
+	IgnoreLocalPersistentVolumes *bool `json:"ignoreLocalPersistentVolumes,omitempty"`
+
+	// Pods spawned by Jobs or CronJobs will not prevent the Rebalancer from deleting a node on which they run.
+	// WARNING: When true, pods spawned by Jobs or CronJobs will be terminated if the Rebalancer picks a node that runs them.
+	// As such, they are likely to lose their progress.
+	IgnoreProblemJobPods *bool `json:"ignoreProblemJobPods,omitempty"`
+
+	// Pods that don't have a controller (bare pods) will not prevent the Rebalancer from deleting a node on which they run.
+	// WARNING: When true, such pods might not restart, since they have no controller to do it.
+	IgnoreProblemPodsWithoutController *bool `json:"ignoreProblemPodsWithoutController,omitempty"`
+
+	// Pods that are marked with "removal disabled" will not prevent the Rebalancer from deleting a node on which they run.
+	// WARNING: When true, such pods will be evicted and disrupted.
+	IgnoreProblemRemovalDisabledPods *bool `json:"ignoreProblemRemovalDisabledPods,omitempty"`
 }
 
 // CastaiAutoscalerV1beta1EC2NodeClassMigrationIntent defines model for castai.autoscaler.v1beta1.EC2NodeClassMigrationIntent.
@@ -638,6 +698,15 @@ type CastaiAutoscalerV1beta1NodePoolMigrationResult struct {
 // CastaiAutoscalerV1beta1Os defines model for castai.autoscaler.v1beta1.Os.
 type CastaiAutoscalerV1beta1Os string
 
+// Defines configuration of a paused draining feature. Requires feature flag to be enabled.
+type CastaiAutoscalerV1beta1PausedDrainConfig struct {
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// Maximum time in seconds for which nodes will stay cordoned during paused draining phase.
+	// After that time, nodes will be automatically uncordoned by the Autoscaler's node deletion policy (if enabled).
+	TimeoutSeconds *int32 `json:"timeoutSeconds"`
+}
+
 // CastaiAutoscalerV1beta1ProvisionerMigrationIntent defines model for castai.autoscaler.v1beta1.ProvisionerMigrationIntent.
 type CastaiAutoscalerV1beta1ProvisionerMigrationIntent struct {
 	// Karpenter's AWSNodeTemplate name that this Provisioner is referencing.
@@ -697,7 +766,10 @@ type CastaiAutoscalerV1beta1RebalancingNode struct {
 // Defines the cluster rebalancing plan response.
 type CastaiAutoscalerV1beta1RebalancingPlanResponse struct {
 	// When enabled will also consider rebalancing problematic pods (pods without controller, job pods, pods with removal-disabled annotation).
-	AggressiveMode *bool `json:"aggressiveMode"`
+	//
+	// Deprecated: use AggressiveModeConfig instead.
+	AggressiveMode       *bool                                        `json:"aggressiveMode"`
+	AggressiveModeConfig *CastaiAutoscalerV1beta1AggressiveModeConfig `json:"aggressiveModeConfig,omitempty"`
 
 	// ID of the cluster that is being rebalanced.
 	ClusterId *string `json:"clusterId,omitempty"`
@@ -741,6 +813,9 @@ type CastaiAutoscalerV1beta1RebalancingPlanResponse struct {
 	// List of operations needed to execute this rebalancing plan. Documents the factual actions needed to be taken and/or
 	// actions already done.
 	Operations *[]CastaiAutoscalerV1beta1RebalancingPlanResponseOperation `json:"operations,omitempty"`
+
+	// Defines configuration of a paused draining feature. Requires feature flag to be enabled.
+	PausedDrainConfig *CastaiAutoscalerV1beta1PausedDrainConfig `json:"pausedDrainConfig,omitempty"`
 
 	// Subset of the node IDs which were selected to rebalance. In case of full cluster rebalancing, this list
 	// will be empty.
@@ -788,7 +863,8 @@ type CastaiAutoscalerV1beta1RebalancingPlanResponseConfigurations struct {
 	Diff *CastaiAutoscalerV1beta1RebalancingPlanResponseConfigurationsDiff `json:"diff,omitempty"`
 
 	// Defines a single rebalancing plan configuration.
-	Green *CastaiAutoscalerV1beta1RebalancingPlanResponseConfigurationsConfiguration `json:"green,omitempty"`
+	Green           *CastaiAutoscalerV1beta1RebalancingPlanResponseConfigurationsConfiguration   `json:"green,omitempty"`
+	Recommendations *CastaiAutoscalerV1beta1RebalancingPlanResponseConfigurationsRecommendations `json:"recommendations,omitempty"`
 }
 
 // Defines a single rebalancing plan configuration.
@@ -909,6 +985,11 @@ type CastaiAutoscalerV1beta1RebalancingPlanResponseConfigurationsDiff struct {
 	SavingsPercentage *string `json:"savingsPercentage,omitempty"`
 }
 
+// CastaiAutoscalerV1beta1RebalancingPlanResponseConfigurationsRecommendations defines model for castai.autoscaler.v1beta1.RebalancingPlanResponse.Configurations.Recommendations.
+type CastaiAutoscalerV1beta1RebalancingPlanResponseConfigurationsRecommendations struct {
+	Applied *bool `json:"applied,omitempty"`
+}
+
 // Defines the totals of a single configuration.
 type CastaiAutoscalerV1beta1RebalancingPlanResponseConfigurationsTotals struct {
 	// Total memory capacity of this configuration in MiBs.
@@ -996,7 +1077,8 @@ type CastaiAutoscalerV1beta1RebalancingPlanResponseOperationCreateParams struct 
 	IsSpotFallback *bool `json:"isSpotFallback,omitempty"`
 
 	// Node configuration ID to be used for the new node.
-	NodeConfigurationId *string `json:"nodeConfigurationId,omitempty"`
+	NodeConfigurationId  *string  `json:"nodeConfigurationId,omitempty"`
+	SpotReliabilityScore *float32 `json:"spotReliabilityScore"`
 
 	// The subnet id of the created node. if empty - the subnet id will be random based on the availability zone.
 	SubnetId *string `json:"subnetId"`
@@ -1050,7 +1132,8 @@ type CastaiAutoscalerV1beta1RebalancingPlanResponseOperationPrepareParams struct
 	IsSpot *bool `json:"isSpot,omitempty"`
 
 	// Whether the node is a spot fallback.
-	IsSpotFallback *bool `json:"isSpotFallback,omitempty"`
+	IsSpotFallback       *bool    `json:"isSpotFallback,omitempty"`
+	SpotReliabilityScore *float32 `json:"spotReliabilityScore"`
 }
 
 // Type of the operation.
@@ -1113,6 +1196,63 @@ type CastaiAutoscalerV1beta1RebalancingPlanResponsePlanErrorReason string
 // * `error` - the rebalancing plan has failed.
 type CastaiAutoscalerV1beta1Status string
 
+// Comparison represents a entity to entity ID comparison.
+type CastaiFeaturesV1Comparison struct {
+	// The entity ID to compare against (e.g., "da7a9f8d-ed18-40c3-89a7-93a81283af62").
+	EntityId *string `json:"entityId,omitempty"`
+
+	// EntityType defines available entity types for feature flag enablement.
+	//
+	//  - organizationId: Represents the main identifier(organization_id) for organization in Cast AI.
+	//  - clusterId: Represents the main identifier(cluster_id) for cluster in Cast AI.
+	//  - userId: Represents the user identifier(username) which is used to identify a user in users service.
+	//  - environment: Represents the identifier which is used to identify an environment in Cast AI.
+	EntityType *CastaiFeaturesV1EntityType `json:"entityType,omitempty"`
+
+	// Operator defines available operators for targeting rules.
+	//
+	//  - operator_unspecified: unspecified operator.
+	//  - equals: Represents the equals operator, ==.
+	//  - not_equals: Represents the not equals operator, !=.
+	Operator *CastaiFeaturesV1Operator `json:"operator,omitempty"`
+}
+
+// Represents a condition, which can be a comparison or a nested query.
+type CastaiFeaturesV1Condition struct {
+	// Comparison represents a entity to entity ID comparison.
+	Comparison *CastaiFeaturesV1Comparison `json:"comparison,omitempty"`
+
+	// QueryExpression represents a logical operation with conditions.
+	NestedQuery *CastaiFeaturesV1QueryExpression `json:"nestedQuery,omitempty"`
+}
+
+// EntityType defines available entity types for feature flag enablement.
+//
+//   - organizationId: Represents the main identifier(organization_id) for organization in Cast AI.
+//   - clusterId: Represents the main identifier(cluster_id) for cluster in Cast AI.
+//   - userId: Represents the user identifier(username) which is used to identify a user in users service.
+//   - environment: Represents the identifier which is used to identify an environment in Cast AI.
+type CastaiFeaturesV1EntityType string
+
+// LogicalOperator defines available logical operators for targeting rules.
+type CastaiFeaturesV1LogicalOperator string
+
+// Operator defines available operators for targeting rules.
+//
+//   - operator_unspecified: unspecified operator.
+//   - equals: Represents the equals operator, ==.
+//   - not_equals: Represents the not equals operator, !=.
+type CastaiFeaturesV1Operator string
+
+// QueryExpression represents a logical operation with conditions.
+type CastaiFeaturesV1QueryExpression struct {
+	// Represents evaluation conditions.
+	Conditions []CastaiFeaturesV1Condition `json:"conditions"`
+
+	// LogicalOperator defines available logical operators for targeting rules.
+	LogicalOperator CastaiFeaturesV1LogicalOperator `json:"logicalOperator"`
+}
+
 // Operation object.
 type CastaiOperationsV1beta1Operation struct {
 	// Operation creation timestamp in RFC3339Nano format.
@@ -1143,6 +1283,12 @@ type CastaiOperationsV1beta1OperationError struct {
 
 // AKSClusterParams defines AKS-specific arguments.
 type ExternalclusterV1AKSClusterParams struct {
+	// Azure cluster resource group.
+	ClusterResourceGroup *string `json:"clusterResourceGroup,omitempty"`
+
+	// HttpProxyConfig holds settings when HTTP/S communication is required.
+	HttpProxyConfig *ExternalclusterV1HttpProxyConfig `json:"httpProxyConfig,omitempty"`
+
 	// Deprecated. This field is no longer updatable and node configuration equivalent should be used.
 	MaxPodsPerNode *int32 `json:"maxPodsPerNode,omitempty"`
 
@@ -1151,12 +1297,16 @@ type ExternalclusterV1AKSClusterParams struct {
 
 	// Node resource group of the cluster.
 	NodeResourceGroup *string `json:"nodeResourceGroup,omitempty"`
+	PodCidr           *string `json:"podCidr"`
 
 	// Region of the cluster.
 	Region *string `json:"region,omitempty"`
 
 	// Azure subscription ID where cluster runs.
 	SubscriptionId *string `json:"subscriptionId,omitempty"`
+
+	// Azure tenant id.
+	TenantId *string `json:"tenantId,omitempty"`
 
 	// Zone name pattern in the cluster.
 	ZoneNamePattern *string `json:"zoneNamePattern,omitempty"`
@@ -1169,6 +1319,15 @@ type ExternalclusterV1AddNodeResponse struct {
 
 	// Add node operation ID.
 	OperationId string `json:"operationId"`
+}
+
+// AnywhereClusterParams defines Anywhere-specific arguments.
+type ExternalclusterV1AnywhereClusterParams struct {
+	// Name of the cluster.
+	ClusterName *string `json:"clusterName,omitempty"`
+
+	// NamespaceID as unique identifier for the cluster.
+	KubeSystemNamespaceId string `json:"kubeSystemNamespaceId"`
 }
 
 // CloudEvent represents a remote event that happened in the cloud, e.g. "node added".
@@ -1199,6 +1358,9 @@ type ExternalclusterV1Cluster struct {
 
 	// All available zones in cluster's region.
 	AllRegionZones *[]ExternalclusterV1Zone `json:"allRegionZones,omitempty"`
+
+	// AnywhereClusterParams defines Anywhere-specific arguments.
+	Anywhere *ExternalclusterV1AnywhereClusterParams `json:"anywhere,omitempty"`
 
 	// User friendly unique cluster identifier.
 	ClusterNameId *string `json:"clusterNameId,omitempty"`
@@ -1257,7 +1419,8 @@ type ExternalclusterV1Cluster struct {
 	ReconciledAt *time.Time `json:"reconciledAt"`
 
 	// Region represents cluster region.
-	Region *ExternalclusterV1Region `json:"region,omitempty"`
+	Region                 *ExternalclusterV1Region                       `json:"region,omitempty"`
+	SelfHostedWithEc2Nodes *ExternalclusterV1SelfHostedWithEC2NodesParams `json:"selfHostedWithEc2Nodes,omitempty"`
 
 	// Deprecated. Node configuration equivalent should be used.
 	SshPublicKey *string `json:"sshPublicKey"`
@@ -1310,6 +1473,9 @@ type ExternalclusterV1ClusterReconcileInfoReconcileStatus string
 
 // ExternalclusterV1ClusterUpdate defines model for externalcluster.v1.ClusterUpdate.
 type ExternalclusterV1ClusterUpdate struct {
+	// UpdateAKSClusterParams defines updatable AKS cluster configuration.
+	Aks *ExternalclusterV1UpdateAKSClusterParams `json:"aks,omitempty"`
+
 	// JSON encoded cluster credentials string.
 	Credentials *string `json:"credentials,omitempty"`
 
@@ -1317,7 +1483,8 @@ type ExternalclusterV1ClusterUpdate struct {
 	Eks *ExternalclusterV1UpdateEKSClusterParams `json:"eks,omitempty"`
 
 	// UpdateGKEClusterParams defines updatable GKE cluster configuration.
-	Gke *ExternalclusterV1UpdateGKEClusterParams `json:"gke,omitempty"`
+	Gke                    *ExternalclusterV1UpdateGKEClusterParams             `json:"gke,omitempty"`
+	SelfHostedWithEc2Nodes *ExternalclusterV1UpdateSelfHostedWithEC2NodesParams `json:"selfHostedWithEc2Nodes,omitempty"`
 }
 
 // ExternalclusterV1CreateAssumeRolePrincipalResponse defines model for externalcluster.v1.CreateAssumeRolePrincipalResponse.
@@ -1338,6 +1505,9 @@ type ExternalclusterV1DeleteNodeResponse struct {
 	// Node delete operation ID.
 	OperationId *string `json:"operationId,omitempty"`
 }
+
+// ExternalclusterV1DisableGCPSAResponse defines model for externalcluster.v1.DisableGCPSAResponse.
+type ExternalclusterV1DisableGCPSAResponse = map[string]interface{}
 
 // ExternalclusterV1DisableGKESAResponse defines model for externalcluster.v1.DisableGKESAResponse.
 type ExternalclusterV1DisableGKESAResponse = map[string]interface{}
@@ -1397,6 +1567,21 @@ type ExternalclusterV1EKSClusterParams_Tags struct {
 	AdditionalProperties map[string]string `json:"-"`
 }
 
+// AKSClusterParams is a placeholder for future use.
+type ExternalclusterV1GCPCreateSARequestAKSClusterParams = map[string]interface{}
+
+// ExternalclusterV1GCPCreateSAResponse defines model for externalcluster.v1.GCPCreateSAResponse.
+type ExternalclusterV1GCPCreateSAResponse struct {
+	ServiceAccountEmail *string `json:"serviceAccountEmail,omitempty"`
+
+	// service_account_id - The unique, stable numeric ID for the service
+	// account. Each service account retains its unique ID even if you delete the
+	// service account. For example, if you delete a service account, then create a
+	// new service account with the same name, the new service account has a
+	// different unique ID than the deleted service account.
+	ServiceAccountId *string `json:"serviceAccountId,omitempty"`
+}
+
 // GKEClusterParams defines GKE-specific arguments.
 type ExternalclusterV1GKEClusterParams struct {
 	CastServiceAccount   *string `json:"castServiceAccount,omitempty"`
@@ -1425,13 +1610,24 @@ type ExternalclusterV1GKECreateSAResponse struct {
 
 // GPUConfig describes instance GPU configuration.
 //
+// Use for:
+// * Creating GCP N1 with customer quantity and type of GPUs attached.
+// * Setting required labels for AKS GPU nodes.
+// * Configuring gpu sharing.
 // Required while provisioning GCP N1 instance types with GPU.
 // Eg.: n1-standard-2 with 8 x NVIDIA Tesla K80
 type ExternalclusterV1GPUConfig struct {
-	// Number of GPUs.
+	// Number of GPUs. N1 GCP machines allow attaching custom number of GPUs.
 	Count *int32 `json:"count,omitempty"`
 
-	// GPU type.
+	// MIGConfig configures MIG slicing on NVIDIA GPUs.
+	MigConfig *ExternalclusterV1MIGConfig `json:"migConfig,omitempty"`
+
+	// GPUTimeSharing configures sharing strategy by splitting time of single GPU to several processes.
+	TimeSharing *ExternalclusterV1GPUTimeSharing `json:"timeSharing,omitempty"`
+
+	// GPU type.  N1 GCP machines allow attaching custom type of GPUs.
+	// Public documentation refers to this as "accelerator type" which you should read "name of specialized hardware".
 	Type *string `json:"type,omitempty"`
 }
 
@@ -1445,6 +1641,11 @@ type ExternalclusterV1GPUDevice struct {
 // ExternalclusterV1GPUInfo defines model for externalcluster.v1.GPUInfo.
 type ExternalclusterV1GPUInfo struct {
 	GpuDevices *[]ExternalclusterV1GPUDevice `json:"gpuDevices,omitempty"`
+}
+
+// GPUTimeSharing configures sharing strategy by splitting time of single GPU to several processes.
+type ExternalclusterV1GPUTimeSharing struct {
+	Replicas *int32 `json:"replicas,omitempty"`
 }
 
 // ExternalclusterV1GetAssumeRolePrincipalResponse defines model for externalcluster.v1.GetAssumeRolePrincipalResponse.
@@ -1475,6 +1676,13 @@ type ExternalclusterV1GetListNodesFiltersResponse struct {
 // HandleCloudEventResponse is the result of HandleCloudEventRequest.
 type ExternalclusterV1HandleCloudEventResponse = map[string]interface{}
 
+// HttpProxyConfig holds settings when HTTP/S communication is required.
+type ExternalclusterV1HttpProxyConfig struct {
+	HttpProxy  *string   `json:"httpProxy,omitempty"`
+	HttpsProxy *string   `json:"httpsProxy,omitempty"`
+	NoProxy    *[]string `json:"noProxy,omitempty"`
+}
+
 // KOPSClusterParams defines KOPS-specific arguments.
 type ExternalclusterV1KOPSClusterParams struct {
 	// Cloud provider of the cluster.
@@ -1499,6 +1707,12 @@ type ExternalclusterV1ListClustersResponse struct {
 type ExternalclusterV1ListNodesResponse struct {
 	Items      *[]ExternalclusterV1Node `json:"items,omitempty"`
 	NextCursor *string                  `json:"nextCursor,omitempty"`
+}
+
+// MIGConfig configures MIG slicing on NVIDIA GPUs.
+type ExternalclusterV1MIGConfig struct {
+	GpuMemoryGb    *int32    `json:"gpuMemoryGb"`
+	PartitionSizes *[]string `json:"partitionSizes,omitempty"`
 }
 
 // Node represents a single VM that run as Kubernetes master or worker.
@@ -1586,6 +1800,10 @@ type ExternalclusterV1NodeConfig struct {
 
 	// GPUConfig describes instance GPU configuration.
 	//
+	// Use for:
+	// * Creating GCP N1 with customer quantity and type of GPUs attached.
+	// * Setting required labels for AKS GPU nodes.
+	// * Configuring gpu sharing.
 	// Required while provisioning GCP N1 instance types with GPU.
 	// Eg.: n1-standard-2 with 8 x NVIDIA Tesla K80
 	GpuConfig *ExternalclusterV1GPUConfig `json:"gpuConfig,omitempty"`
@@ -1709,6 +1927,9 @@ type ExternalclusterV1RegisterClusterRequest struct {
 	// AKSClusterParams defines AKS-specific arguments.
 	Aks *ExternalclusterV1AKSClusterParams `json:"aks,omitempty"`
 
+	// AnywhereClusterParams defines Anywhere-specific arguments.
+	Anywhere *ExternalclusterV1AnywhereClusterParams `json:"anywhere,omitempty"`
+
 	// EKSClusterParams defines EKS-specific arguments.
 	Eks *ExternalclusterV1EKSClusterParams `json:"eks,omitempty"`
 
@@ -1728,7 +1949,8 @@ type ExternalclusterV1RegisterClusterRequest struct {
 	Openshift *ExternalclusterV1OpenshiftClusterParams `json:"openshift,omitempty"`
 
 	// Organization of the cluster.
-	OrganizationId *string `json:"organizationId,omitempty"`
+	OrganizationId         *string                                        `json:"organizationId,omitempty"`
+	SelfHostedWithEc2Nodes *ExternalclusterV1SelfHostedWithEC2NodesParams `json:"selfHostedWithEc2Nodes,omitempty"`
 }
 
 // ExternalclusterV1Resources defines model for externalcluster.v1.Resources.
@@ -1740,6 +1962,19 @@ type ExternalclusterV1Resources struct {
 	MemAllocatableMib     *int32 `json:"memAllocatableMib,omitempty"`
 	MemCapacityMib        *int32 `json:"memCapacityMib,omitempty"`
 	MemRequestsMib        *int32 `json:"memRequestsMib,omitempty"`
+}
+
+// ExternalclusterV1SelfHostedWithEC2NodesParams defines model for externalcluster.v1.SelfHostedWithEC2NodesParams.
+type ExternalclusterV1SelfHostedWithEC2NodesParams struct {
+	// AWS Account ID where cluster runs.
+	AccountId     *string `json:"accountId,omitempty"`
+	AssumeRoleArn *string `json:"assumeRoleArn,omitempty"`
+
+	// Name of the cluster.
+	ClusterName *string `json:"clusterName,omitempty"`
+
+	// Region of the cluster.
+	Region *string `json:"region,omitempty"`
 }
 
 // Subnet represents cluster subnet.
@@ -1786,6 +2021,12 @@ type ExternalclusterV1TriggerResumeClusterResponse struct {
 	OperationId string `json:"operationId"`
 }
 
+// UpdateAKSClusterParams defines updatable AKS cluster configuration.
+type ExternalclusterV1UpdateAKSClusterParams struct {
+	// HttpProxyConfig holds settings when HTTP/S communication is required.
+	HttpProxyConfig *ExternalclusterV1HttpProxyConfig `json:"httpProxyConfig,omitempty"`
+}
+
 // UpdateClusterTagsResponse result of cluster tags update.
 type ExternalclusterV1UpdateClusterTagsResponse = map[string]interface{}
 
@@ -1801,6 +2042,12 @@ type ExternalclusterV1UpdateGKEClusterParams struct {
 
 	// GCP target project where cluster runs.
 	ProjectId *string `json:"projectId,omitempty"`
+}
+
+// ExternalclusterV1UpdateSelfHostedWithEC2NodesParams defines model for externalcluster.v1.UpdateSelfHostedWithEC2NodesParams.
+type ExternalclusterV1UpdateSelfHostedWithEC2NodesParams struct {
+	AssumeRoleArn      *string `json:"assumeRoleArn,omitempty"`
+	InstanceProfileArn *string `json:"instanceProfileArn"`
 }
 
 // Cluster zone.
@@ -1868,6 +2115,7 @@ type AutoscalerAPIGetAgentScriptParams struct {
 	//  - aws: Amazon web services.
 	//  - gcp: Google cloud provider.
 	//  - azure: Microsoft Azure.
+	//  - unknown: Unknown.
 	KopsCsp *AutoscalerAPIGetAgentScriptParamsKopsCsp `form:"kops.csp,omitempty" json:"kops.csp,omitempty"`
 
 	// The region of your kOps cluster. Region is CSP specific.
@@ -1896,6 +2144,7 @@ type AutoscalerAPIGetAgentScriptParams struct {
 	//  - aws: Amazon web services.
 	//  - gcp: Google cloud provider.
 	//  - azure: Microsoft Azure.
+	//  - unknown: Unknown.
 	OpenshiftCsp *AutoscalerAPIGetAgentScriptParamsOpenshiftCsp `form:"openshift.csp,omitempty" json:"openshift.csp,omitempty"`
 
 	// The region of your OpenShift cluster. Region is CSP specific.
@@ -1917,6 +2166,9 @@ type AutoscalerAPIGetAgentScriptParams struct {
 
 	// The gid of the user that owns the agent pod's volumes.
 	OpenshiftFsGroup *string `form:"openshift.fsGroup,omitempty" json:"openshift.fsGroup,omitempty"`
+
+	// The name of your cluster.
+	AnywhereClusterName *string `form:"anywhere.clusterName,omitempty" json:"anywhere.clusterName,omitempty"`
 }
 
 // AutoscalerAPIGetAgentScriptParamsProvider defines parameters for AutoscalerAPIGetAgentScript.
@@ -1968,6 +2220,9 @@ type AutoscalerAPIListRebalancingPlansParams struct {
 
 	// If include configurations is true then configurations is returned in response, otherwise is skipped
 	IncludeConfigurations *bool `form:"includeConfigurations,omitempty" json:"includeConfigurations,omitempty"`
+
+	// If true, negative plans are also returned. Note: negative plans are already returned when querying for specific statuses.
+	IncludeNegative *bool `form:"includeNegative,omitempty" json:"includeNegative,omitempty"`
 }
 
 // AutoscalerAPIListRebalancingPlansParamsFilterStatuses defines parameters for AutoscalerAPIListRebalancingPlans.
@@ -2014,6 +2269,12 @@ type ExternalClusterAPIGetCredentialsScriptParams struct {
 
 	// Whether GCP SA Impersonate feature should be enabled.
 	GcpSaImpersonate *bool `form:"gcpSaImpersonate,omitempty" json:"gcpSaImpersonate,omitempty"`
+
+	// Whether Netflow network exporter should be installed.
+	InstallNetflowExporter *bool `form:"installNetflowExporter,omitempty" json:"installNetflowExporter,omitempty"`
+
+	// Whether CAST AI Workload Autoscaler should be installed.
+	InstallWorkloadAutoscaler *bool `form:"installWorkloadAutoscaler,omitempty" json:"installWorkloadAutoscaler,omitempty"`
 }
 
 // ExternalClusterAPIDisconnectClusterJSONBody defines parameters for ExternalClusterAPIDisconnectCluster.
@@ -2021,6 +2282,9 @@ type ExternalClusterAPIDisconnectClusterJSONBody = ExternalclusterV1DisconnectCo
 
 // ExternalClusterAPIHandleCloudEventJSONBody defines parameters for ExternalClusterAPIHandleCloudEvent.
 type ExternalClusterAPIHandleCloudEventJSONBody = ExternalclusterV1CloudEvent
+
+// ExternalClusterAPIGCPCreateSAJSONBody defines parameters for ExternalClusterAPIGCPCreateSA.
+type ExternalClusterAPIGCPCreateSAJSONBody = ExternalClusterAPIGCPCreateSARequest
 
 // ExternalClusterAPIGKECreateSAJSONBody defines parameters for ExternalClusterAPIGKECreateSA.
 type ExternalClusterAPIGKECreateSAJSONBody = ExternalClusterAPIGKECreateSARequest
@@ -2068,6 +2332,12 @@ type ExternalClusterAPIDeleteNodeParams struct {
 // ExternalClusterAPIDrainNodeJSONBody defines parameters for ExternalClusterAPIDrainNode.
 type ExternalClusterAPIDrainNodeJSONBody = ExternalclusterV1DrainConfig
 
+// ExternalClusterAPIReconcileClusterParams defines parameters for ExternalClusterAPIReconcileCluster.
+type ExternalClusterAPIReconcileClusterParams struct {
+	// Whether to skip AKS refresh of instance-template.
+	SkipAksInitData *bool `form:"skipAksInitData,omitempty" json:"skipAksInitData,omitempty"`
+}
+
 // ExternalClusterAPITriggerResumeClusterJSONBody defines parameters for ExternalClusterAPITriggerResumeCluster.
 type ExternalClusterAPITriggerResumeClusterJSONBody = ExternalclusterV1NodeConfig
 
@@ -2104,6 +2374,9 @@ type ExternalClusterAPIDisconnectClusterJSONRequestBody = ExternalClusterAPIDisc
 
 // ExternalClusterAPIHandleCloudEventJSONRequestBody defines body for ExternalClusterAPIHandleCloudEvent for application/json ContentType.
 type ExternalClusterAPIHandleCloudEventJSONRequestBody = ExternalClusterAPIHandleCloudEventJSONBody
+
+// ExternalClusterAPIGCPCreateSAJSONRequestBody defines body for ExternalClusterAPIGCPCreateSA for application/json ContentType.
+type ExternalClusterAPIGCPCreateSAJSONRequestBody = ExternalClusterAPIGCPCreateSAJSONBody
 
 // ExternalClusterAPIGKECreateSAJSONRequestBody defines body for ExternalClusterAPIGKECreateSA for application/json ContentType.
 type ExternalClusterAPIGKECreateSAJSONRequestBody = ExternalClusterAPIGKECreateSAJSONBody
