@@ -32,16 +32,14 @@ func TestDrainNodeHandler(t *testing.T) {
 		t.Parallel()
 
 		nodeName := "node1"
-		nodeID := "node-id"
 		podName := "pod1"
-		clientset := setupFakeClientWithNodePodEviction(nodeName, nodeID, podName)
+		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 		prependEvictionReaction(t, clientset, true, false)
 
 		action := &castai.ClusterAction{
 			ID: uuid.New().String(),
 			ActionDrainNode: &castai.ActionDrainNode{
 				NodeName:            "node1",
-				NodeID:              nodeID,
 				DrainTimeoutSeconds: 1,
 				Force:               true,
 			},
@@ -77,15 +75,13 @@ func TestDrainNodeHandler(t *testing.T) {
 		t.Parallel()
 
 		nodeName := "node1"
-		nodeID := "node-id"
 		podName := "pod1"
-		clientset := setupFakeClientWithNodePodEviction(nodeName, nodeID, podName)
+		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 
 		action := &castai.ClusterAction{
 			ID: uuid.New().String(),
 			ActionDrainNode: &castai.ActionDrainNode{
 				NodeName:            "already-deleted-node",
-				NodeID:              nodeID,
 				DrainTimeoutSeconds: 1,
 				Force:               true,
 			},
@@ -109,16 +105,14 @@ func TestDrainNodeHandler(t *testing.T) {
 		t.Parallel()
 
 		nodeName := "node1"
-		nodeID := "node-id"
 		podName := "pod1"
-		clientset := setupFakeClientWithNodePodEviction(nodeName, nodeID, podName)
+		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 		prependEvictionReaction(t, clientset, false, false)
 
 		action := &castai.ClusterAction{
 			ID: uuid.New().String(),
 			ActionDrainNode: &castai.ActionDrainNode{
 				NodeName:            "node1",
-				NodeID:              nodeID,
 				DrainTimeoutSeconds: 1,
 				Force:               false,
 			},
@@ -148,16 +142,14 @@ func TestDrainNodeHandler(t *testing.T) {
 		t.Parallel()
 
 		nodeName := "node1"
-		nodeID := "node-id"
 		podName := "pod1"
-		clientset := setupFakeClientWithNodePodEviction(nodeName, nodeID, podName)
+		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 		prependEvictionReaction(t, clientset, false, true)
 
 		action := &castai.ClusterAction{
 			ID: uuid.New().String(),
 			ActionDrainNode: &castai.ActionDrainNode{
 				NodeName:            "node1",
-				NodeID:              nodeID,
 				DrainTimeoutSeconds: 0,
 				Force:               false,
 			},
@@ -210,16 +202,14 @@ func TestDrainNodeHandler(t *testing.T) {
 
 				r := require.New(t)
 				nodeName := "node1"
-				nodeID := "node-id"
 				podName := "pod1"
-				clientset := setupFakeClientWithNodePodEviction(nodeName, nodeID, podName)
+				clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 				prependEvictionReaction(t, clientset, false, tc.retryablePodEvictionErr)
 
 				action := &castai.ClusterAction{
 					ID: uuid.New().String(),
 					ActionDrainNode: &castai.ActionDrainNode{
 						NodeName:            "node1",
-						NodeID:              nodeID,
 						DrainTimeoutSeconds: tc.drainTimeoutSeconds,
 						Force:               true,
 					},
@@ -273,15 +263,13 @@ func TestDrainNodeHandler(t *testing.T) {
 		t.Parallel()
 
 		nodeName := "node1"
-		nodeID := "node-id"
 		podName := "pod1"
-		clientset := setupFakeClientWithNodePodEviction(nodeName, nodeID, podName)
+		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 
 		action := &castai.ClusterAction{
 			ID: uuid.New().String(),
 			ActionDrainNode: &castai.ActionDrainNode{
 				NodeName:            "node1",
-				NodeID:              nodeID,
 				DrainTimeoutSeconds: 1,
 				Force:               true,
 			},
@@ -325,15 +313,13 @@ func TestDrainNodeHandler(t *testing.T) {
 		t.Parallel()
 
 		nodeName := "node1"
-		nodeID := "node-id"
 		podName := "pod1"
-		clientset := setupFakeClientWithNodePodEviction(nodeName, nodeID, podName)
+		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 
 		action := &castai.ClusterAction{
 			ID: uuid.New().String(),
 			ActionDrainNode: &castai.ActionDrainNode{
 				NodeName:            "node1",
-				NodeID:              nodeID,
 				DrainTimeoutSeconds: 1,
 				Force:               true,
 			},
@@ -376,9 +362,8 @@ func TestDrainNodeHandler(t *testing.T) {
 
 		// tests specifically that PDB error in eviction is retried and not failed fast.
 		nodeName := "node1"
-		nodeID := "node-id"
 		podName := "pod1"
-		clientset := setupFakeClientWithNodePodEviction(nodeName, nodeID, podName)
+		clientset := setupFakeClientWithNodePodEviction(nodeName, podName)
 
 		clientset.PrependReactor("create", "pods", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
 			if action.GetSubresource() != "eviction" {
@@ -404,7 +389,6 @@ func TestDrainNodeHandler(t *testing.T) {
 			ID: uuid.New().String(),
 			ActionDrainNode: &castai.ActionDrainNode{
 				NodeName:            "node1",
-				NodeID:              nodeID,
 				DrainTimeoutSeconds: 2,
 				Force:               false,
 			},
@@ -542,13 +526,10 @@ func prependEvictionReaction(t testing.TB, c *fake.Clientset, success, retryable
 }
 
 // nolint: unparam
-func setupFakeClientWithNodePodEviction(nodeName, nodeID, podName string) *fake.Clientset {
+func setupFakeClientWithNodePodEviction(nodeName, podName string) *fake.Clientset {
 	node := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: nodeName,
-			Labels: map[string]string{
-				castai.LabelNodeID: nodeID,
-			},
 		},
 	}
 	pod := &v1.Pod{

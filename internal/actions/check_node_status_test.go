@@ -19,7 +19,6 @@ import (
 	"github.com/castai/cluster-controller/internal/castai"
 )
 
-// nolint:goconst
 func TestCheckStatus_Deleted(t *testing.T) {
 	log := logrus.New()
 	log.SetLevel(logrus.DebugLevel)
@@ -80,7 +79,7 @@ func TestCheckStatus_Deleted(t *testing.T) {
 		}
 
 		err := h.Handle(context.Background(), action)
-		r.EqualError(err, errNodeNotValid.Error())
+		r.EqualError(err, "node is not deleted")
 	})
 
 	t.Run("handle check successfully when node is not found", func(t *testing.T) {
@@ -132,7 +131,7 @@ func TestCheckStatus_Deleted(t *testing.T) {
 		}
 
 		err := h.Handle(context.Background(), action)
-		r.EqualError(err, errNodeNotValid.Error())
+		r.NoError(err)
 	})
 }
 
@@ -177,12 +176,6 @@ func TestCheckStatus_Ready(t *testing.T) {
 		node := &v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: nodeName,
-				Labels: map[string]string{
-					castai.LabelNodeID: "node1-id",
-				},
-			},
-			Spec: v1.NodeSpec{
-				ProviderID: "aws:///us-east-1",
 			},
 			Status: v1.NodeStatus{
 				Conditions: []v1.NodeCondition{
@@ -205,8 +198,6 @@ func TestCheckStatus_Ready(t *testing.T) {
 			ID: uuid.New().String(),
 			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
 				NodeName:           "node1",
-				NodeID:             "node1-id",
-				ProviderId:         "aws:///us-east-1",
 				NodeStatus:         castai.ActionCheckNodeStatus_READY,
 				WaitTimeoutSeconds: &timeout,
 			},
@@ -247,8 +238,7 @@ func TestCheckStatus_Ready(t *testing.T) {
 				},
 			},
 			Spec: v1.NodeSpec{
-				Taints:     []v1.Taint{taintCloudProviderUninitialized},
-				ProviderID: "aws:///us-east-1",
+				Taints: []v1.Taint{taintCloudProviderUninitialized},
 			},
 		}
 		clientset := fake.NewClientset(node)
@@ -263,7 +253,6 @@ func TestCheckStatus_Ready(t *testing.T) {
 			ID: uuid.New().String(),
 			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
 				NodeName:           "node1",
-				ProviderId:         "aws:///us-east-1",
 				NodeStatus:         castai.ActionCheckNodeStatus_READY,
 				WaitTimeoutSeconds: &timeout,
 			},

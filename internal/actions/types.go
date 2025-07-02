@@ -17,10 +17,7 @@ const (
 	ActionIDLogField = "id"
 )
 
-var (
-	errAction       = errors.New("not valid action")
-	errNodeNotFound = errors.New("node not found")
-)
+var errAction = errors.New("not valid action")
 
 func newUnexpectedTypeErr(value, expectedType interface{}) error {
 	return fmt.Errorf("unexpected type %T, expected %T %w", value, expectedType, errAction)
