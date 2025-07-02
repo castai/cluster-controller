@@ -77,6 +77,10 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 					log.Info("node not found, skipping delete")
 					return false, nil
 				}
+				if errors.Is(err, errNodeNotValid) {
+					log.Info("node not valid, skipping delete")
+					return false, nil
+				}
 				return true, fmt.Errorf("error getting node: %w", err)
 			}
 
