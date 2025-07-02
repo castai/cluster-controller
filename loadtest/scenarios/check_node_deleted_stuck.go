@@ -114,8 +114,7 @@ func (s *checkNodeDeletedStuckScenario) Run(ctx context.Context, _ string, _ kub
 			ID:        uuid.NewString(),
 			CreatedAt: time.Now().UTC(),
 			ActionCheckNodeDeleted: &castai.ActionCheckNodeDeleted{
-				NodeName:   node.Name,
-				ProviderId: node.Spec.ProviderID,
+				NodeName: node.Name,
 			},
 		})
 	}
