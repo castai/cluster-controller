@@ -87,7 +87,7 @@ func patchNodeStatus(ctx context.Context, log logrus.FieldLogger, clientset kube
 	return nil
 }
 
-func getNodeByIDs(ctx context.Context, clientSet corev1.NodeInterface, nodeName, nodeID, providerID string) (*v1.Node, error) {
+func getNodeByIDs(ctx context.Context, clientSet corev1.NodeInterface, nodeName, nodeID, providerID string, log logrus.FieldLogger) (*v1.Node, error) {
 	if nodeID == "" && providerID == "" {
 		return nil, fmt.Errorf("node and provider IDs are empty %w", errAction)
 	}
@@ -104,7 +104,7 @@ func getNodeByIDs(ctx context.Context, clientSet corev1.NodeInterface, nodeName,
 		return nil, errNodeNotFound
 	}
 
-	if err := isNodeIDProviderIDValid(n, nodeID, providerID); err != nil {
+	if err := isNodeIDProviderIDValid(n, nodeID, providerID, log); err != nil {
 		return nil, fmt.Errorf("requested node ID %s, provider ID %s for node name: %s %w",
 			nodeID, providerID, n.Name, err)
 	}
@@ -112,8 +112,20 @@ func getNodeByIDs(ctx context.Context, clientSet corev1.NodeInterface, nodeName,
 	return n, nil
 }
 
-func isNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string) error {
+func isNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string, log logrus.FieldLogger) error {
 	var currentNodeID string
+
+	validProviderID := false
+	if providerID != "" && node.Spec.ProviderID != "" && node.Spec.ProviderID == providerID {
+		validProviderID = true
+	} else {
+		log.Errorf("node %v has provider ID %s, but requested provider ID is %s", node.Name, node.Spec.ProviderID, providerID)
+	}
+
+	if nodeID == "" && validProviderID {
+		return nil
+	}
+
 	if nodeID != "" {
 		if currentNodeID, ok := node.Labels[castai.LabelNodeID]; ok {
 			if currentNodeID == nodeID {
@@ -122,11 +134,7 @@ func isNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string) error {
 		}
 	}
 
-	if providerID != "" && node.Spec.ProviderID != "" && node.Spec.ProviderID == providerID {
-		return nil
-	}
-
-	return fmt.Errorf("node %v has ID %s and provider ID %s %w", node.Name, currentNodeID, node.Spec.ProviderID, errNodeDoesNotMatch)
+	return fmt.Errorf("node %v has ID %s and provider ID %s: %w", node.Name, currentNodeID, node.Spec.ProviderID, errNodeDoesNotMatch)
 }
 
 // executeBatchPodActions executes the action for each pod in the list.

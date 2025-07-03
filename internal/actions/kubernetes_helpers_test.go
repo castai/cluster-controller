@@ -12,6 +12,7 @@ import (
 	mock_actions "github.com/castai/cluster-controller/internal/actions/mock"
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/golang/mock/gomock"
+	"github.com/sirupsen/logrus"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"reflect"
 )
@@ -119,8 +120,8 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isNodeIDProviderIDValid(tt.args.node, tt.args.nodeID, tt.args.providerID)
-			require.Equal(t, tt.wantErr != nil, got != nil, "isNodeIDProviderIDValid() error mismatch", got)
+			got := isNodeIDProviderIDValid(tt.args.node, tt.args.nodeID, tt.args.providerID, logrus.New())
+			require.Equal(t, tt.wantErr != nil, got != nil, "error mismatch", got)
 			require.ErrorIs(t, got, tt.wantErr)
 		})
 	}
@@ -238,7 +239,7 @@ func Test_getNodeByIDs(t *testing.T) {
 				tt.args.tuneNodeV1Interface(clientSet)
 			}
 
-			got, err := getNodeByIDs(context.Background(), clientSet, tt.args.nodeName, tt.args.nodeID, tt.args.providerID)
+			got, err := getNodeByIDs(context.Background(), clientSet, tt.args.nodeName, tt.args.nodeID, tt.args.providerID, logrus.New())
 			require.ErrorIs(t, err, tt.wantErr)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("getNodeByIDs() got = %v, want %v", got, tt.want)

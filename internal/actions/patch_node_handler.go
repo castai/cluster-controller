@@ -129,7 +129,7 @@ func (h *PatchNodeHandler) getNodeForPatching(ctx context.Context, nodeName, nod
 		5,
 		func(ctx context.Context) (bool, error) {
 			var err error
-			node, err = getNodeByIDs(ctx, h.clientset.CoreV1().Nodes(), nodeName, nodeID, providerID)
+			node, err = getNodeByIDs(ctx, h.clientset.CoreV1().Nodes(), nodeName, nodeID, providerID, h.log)
 			if err != nil {
 				return true, err
 			}

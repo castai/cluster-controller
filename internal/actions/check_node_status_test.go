@@ -2,7 +2,6 @@ package actions
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -17,219 +16,359 @@ import (
 	k8stest "k8s.io/client-go/testing"
 
 	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/samber/lo"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 )
 
-// nolint:goconst
-func TestCheckStatus_Deleted(t *testing.T) {
-	log := logrus.New()
-	log.SetLevel(logrus.DebugLevel)
+func TestCheckNodeStatusHandler_Handle_Deleted(t *testing.T) {
+	t.Parallel()
+	type fields struct {
+		tuneFakeObjects []runtime.Object
+	}
+	type args struct {
+		action *castai.ClusterAction
+	}
 
-	t.Run("return error when node is not deleted", func(t *testing.T) {
-		r := require.New(t)
-		nodeName := "node1"
-		node := &v1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: nodeName,
-				Labels: map[string]string{
-					castai.LabelNodeID: "old-node-id",
+	nodeName := "node1"
+	nodeID := "node-id-123"
+	nodeObject := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: nodeName,
+			Labels: map[string]string{
+				castai.LabelNodeID: nodeID,
+			},
+		},
+	}
+
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr error
+	}{
+		{
+			name:    "action is nil",
+			wantErr: errAction,
+		},
+		{
+			name: "return error when node is not deleted",
+			fields: fields{
+				tuneFakeObjects: []runtime.Object{
+					nodeObject,
 				},
 			},
-		}
-		clientset := fake.NewClientset(node)
-
-		h := CheckNodeStatusHandler{
-			log:       log,
-			clientset: clientset,
-		}
-
-		action := &castai.ClusterAction{
-			ID: uuid.New().String(),
-			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
-				NodeName:   "node1",
-				NodeStatus: castai.ActionCheckNodeStatus_DELETED,
-				NodeID:     "old-node-id",
-			},
-		}
-
-		err := h.Handle(context.Background(), action)
-		r.True(errors.Is(err, errNodeNotDeleted))
-	})
-
-	t.Run("return error when node is not deleted with no label (backwards compatibility)", func(t *testing.T) {
-		r := require.New(t)
-		nodeName := "node1"
-		node := &v1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: nodeName,
-			},
-		}
-		clientset := fake.NewClientset(node)
-
-		h := CheckNodeStatusHandler{
-			log:       log,
-			clientset: clientset,
-		}
-
-		action := &castai.ClusterAction{
-			ID: uuid.New().String(),
-			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
-				NodeName:   "node1",
-				NodeStatus: castai.ActionCheckNodeStatus_DELETED,
-				NodeID:     "old-node-id",
-			},
-		}
-
-		err := h.Handle(context.Background(), action)
-		r.EqualError(err, errNodeDoesNotMatch.Error())
-	})
-
-	t.Run("handle check successfully when node is not found", func(t *testing.T) {
-		r := require.New(t)
-		clientset := fake.NewClientset()
-
-		h := CheckNodeStatusHandler{
-			log:       log,
-			clientset: clientset,
-		}
-
-		action := &castai.ClusterAction{
-			ID: uuid.New().String(),
-			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
-				NodeName:   "node1",
-				NodeStatus: castai.ActionCheckNodeStatus_DELETED,
-				NodeID:     "old-node-id",
-			},
-		}
-
-		err := h.Handle(context.Background(), action)
-		r.NoError(err)
-	})
-
-	t.Run("handle check successfully when node name was reused but id mismatch", func(t *testing.T) {
-		r := require.New(t)
-		node := &v1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "node1",
-				Labels: map[string]string{
-					castai.LabelNodeID: "old-node-id",
+			args: args{
+				action: &castai.ClusterAction{
+					ID: uuid.New().String(),
+					ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
+						WaitTimeoutSeconds: lo.ToPtr(int32(100)),
+						NodeName:           nodeName,
+						NodeStatus:         castai.ActionCheckNodeStatus_DELETED,
+						NodeID:             nodeID,
+					},
 				},
 			},
-		}
-		clientset := fake.NewClientset(node)
-
-		h := CheckNodeStatusHandler{
-			log:       log,
-			clientset: clientset,
-		}
-
-		action := &castai.ClusterAction{
-			ID: uuid.New().String(),
-			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
-				NodeName:   "node1",
-				NodeStatus: castai.ActionCheckNodeStatus_DELETED,
-				NodeID:     "im-a-different-node",
+			wantErr: errNodeNotDeleted,
+		},
+		{
+			name: "node is deleted, if node with the same name exists but id does not match",
+			fields: fields{
+				tuneFakeObjects: []runtime.Object{
+					nodeObject,
+				},
 			},
-		}
+			args: args{
+				action: &castai.ClusterAction{
+					ID: uuid.New().String(),
+					ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
+						NodeName:   nodeName,
+						NodeStatus: castai.ActionCheckNodeStatus_DELETED,
+						NodeID:     "different-node-id",
+					},
+				},
+			},
+		},
+		{
+			name: "handle check successfully when node is not found",
+			args: args{
+				action: &castai.ClusterAction{
+					ID: uuid.New().String(),
+					ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
+						NodeName:   nodeName,
+						NodeStatus: castai.ActionCheckNodeStatus_DELETED,
+						NodeID:     nodeID,
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			clientSet := fake.NewClientset(tt.fields.tuneFakeObjects...)
+			log := logrus.New()
+			log.SetLevel(logrus.DebugLevel)
+			h := NewCheckNodeStatusHandler(
+				log, clientSet)
+			err := h.Handle(context.Background(), tt.args.action)
+			require.ErrorIs(t, err, tt.wantErr, "unexpected error: %v", err)
+		})
+	}
+}
 
-		err := h.Handle(context.Background(), action)
-		r.EqualError(err, errNodeDoesNotMatch.Error())
-	})
+func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
+	t.Parallel()
+	type tuneFakeObjects struct {
+		event  watch.EventType
+		object runtime.Object
+	}
+	type fields struct {
+		tuneFakeObjects []tuneFakeObjects
+	}
+	type args struct {
+		action *castai.ClusterAction
+	}
+
+	nodeName := "node1"
+	nodeID := "node-id-123"
+	nodeUID := types.UID(uuid.New().String())
+	var nodeObjectNotReady, nodeObjectReady, nodeObjectReadyTainted, node2ObjectReadyAnotherNodeID runtime.Object
+	nodeObjectNotReady = &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			UID:  nodeUID,
+			Name: nodeName,
+			Labels: map[string]string{
+				castai.LabelNodeID: nodeID,
+			},
+		},
+		Status: v1.NodeStatus{
+			Conditions: []v1.NodeCondition{},
+		},
+	}
+	nodeObjectReadyTainted = &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			UID:  nodeUID,
+			Name: nodeName,
+			Labels: map[string]string{
+				castai.LabelNodeID: nodeID,
+			},
+		},
+		Spec: v1.NodeSpec{
+			Taints: []v1.Taint{taintCloudProviderUninitialized},
+		},
+		Status: v1.NodeStatus{
+			Conditions: []v1.NodeCondition{
+				{
+					Type:   v1.NodeReady,
+					Status: v1.ConditionTrue,
+				},
+			},
+		},
+	}
+
+	nodeObjectReady = &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			UID:  nodeUID,
+			Name: nodeName,
+			Labels: map[string]string{
+				castai.LabelNodeID: nodeID,
+			},
+		},
+		Status: v1.NodeStatus{
+			Conditions: []v1.NodeCondition{
+				{
+					Type:   v1.NodeReady,
+					Status: v1.ConditionTrue,
+				},
+			},
+		},
+	}
+
+	node2ObjectReadyAnotherNodeID = &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			UID:  types.UID(uuid.New().String()),
+			Name: nodeName,
+			Labels: map[string]string{
+				castai.LabelNodeID: "another-node-id",
+			},
+		},
+		Status: v1.NodeStatus{
+			Conditions: []v1.NodeCondition{
+				{
+					Type:   v1.NodeReady,
+					Status: v1.ConditionTrue,
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr error
+	}{
+		{
+			name:    "action is nil",
+			wantErr: errAction,
+		},
+		{
+			name: "return error when ctx timeout",
+			args: args{
+				action: &castai.ClusterAction{
+					ID: uuid.New().String(),
+					ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
+						NodeName:           "node1",
+						NodeStatus:         castai.ActionCheckNodeStatus_READY,
+						WaitTimeoutSeconds: lo.ToPtr(int32(1)),
+					},
+				},
+			},
+			wantErr: context.DeadlineExceeded,
+		},
+		{
+			name: "return error when ctx timeout: node not ready",
+			fields: fields{
+				tuneFakeObjects: []tuneFakeObjects{
+					{
+						event:  watch.Modified,
+						object: nodeObjectNotReady,
+					},
+				},
+			},
+			args: args{
+				action: &castai.ClusterAction{
+					ID: uuid.New().String(),
+					ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
+						NodeName:           nodeName,
+						NodeID:             nodeID,
+						NodeStatus:         castai.ActionCheckNodeStatus_READY,
+						WaitTimeoutSeconds: lo.ToPtr(int32(2)),
+					},
+				},
+			},
+			wantErr: context.DeadlineExceeded,
+		},
+		{
+			name: "return error when ctx timeout: node is ready but has different match ID",
+			fields: fields{
+				tuneFakeObjects: []tuneFakeObjects{
+					{
+						event:  watch.Modified,
+						object: node2ObjectReadyAnotherNodeID,
+					},
+					{
+						event:  watch.Modified,
+						object: node2ObjectReadyAnotherNodeID,
+					},
+				},
+			},
+			args: args{
+				action: &castai.ClusterAction{
+					ID: uuid.New().String(),
+					ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
+						NodeName:           nodeName,
+						NodeID:             nodeID,
+						NodeStatus:         castai.ActionCheckNodeStatus_READY,
+						WaitTimeoutSeconds: lo.ToPtr(int32(2)),
+					},
+				},
+			},
+			wantErr: context.DeadlineExceeded,
+		},
+		{
+			name: "return error when ctx timeout: node is ready but tainted",
+			fields: fields{
+				tuneFakeObjects: []tuneFakeObjects{
+					{
+						event:  watch.Modified,
+						object: nodeObjectReadyTainted,
+					},
+					{
+						event:  watch.Modified,
+						object: node2ObjectReadyAnotherNodeID,
+					},
+				},
+			},
+			args: args{
+				action: &castai.ClusterAction{
+					ID: uuid.New().String(),
+					ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
+						NodeName:           nodeName,
+						NodeID:             nodeID,
+						NodeStatus:         castai.ActionCheckNodeStatus_READY,
+						WaitTimeoutSeconds: lo.ToPtr(int32(2)),
+					},
+				},
+			},
+			wantErr: context.DeadlineExceeded,
+		},
+		{
+			name: "handle check successfully when node become ready",
+			fields: fields{
+				tuneFakeObjects: []tuneFakeObjects{
+					{
+						event:  watch.Modified,
+						object: nodeObjectNotReady,
+					},
+					{
+						event:  watch.Modified,
+						object: nodeObjectReadyTainted,
+					},
+					{
+						event:  watch.Modified,
+						object: nodeObjectReady,
+					},
+				},
+			},
+			args: args{
+				action: &castai.ClusterAction{
+					ID: uuid.New().String(),
+					ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
+						NodeName:           nodeName,
+						NodeID:             nodeID,
+						NodeStatus:         castai.ActionCheckNodeStatus_READY,
+						WaitTimeoutSeconds: lo.ToPtr(int32(10)),
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			clientSet := fake.NewClientset()
+			watcher := watch.NewFake()
+			defer watcher.Stop()
+
+			go func() {
+				if len(tt.fields.tuneFakeObjects) == 0 {
+					return
+				}
+				watcher.Add(nodeObjectNotReady)
+				watcher.Add(node2ObjectReadyAnotherNodeID)
+				for _, obj := range tt.fields.tuneFakeObjects {
+					watcher.Action(obj.event, obj.object)
+				}
+			}()
+			clientSet.PrependWatchReactor("nodes", k8stest.DefaultWatchReactor(watcher, nil))
+
+			log := logrus.New()
+			log.SetLevel(logrus.DebugLevel)
+			h := NewCheckNodeStatusHandler(log, clientSet)
+
+			err := h.Handle(context.Background(), tt.args.action)
+			require.ErrorIs(t, err, tt.wantErr, "unexpected error: %v", err)
+		})
+	}
 }
 
 func TestCheckStatus_Ready(t *testing.T) {
 	log := logrus.New()
 	log.SetLevel(logrus.DebugLevel)
-
-	t.Run("return error when node is not found", func(t *testing.T) {
-		r := require.New(t)
-		clientset := fake.NewClientset()
-
-		h := CheckNodeStatusHandler{
-			log:       log,
-			clientset: clientset,
-		}
-
-		watcher := watch.NewFake()
-
-		clientset.PrependWatchReactor("nodes", k8stest.DefaultWatchReactor(watcher, nil))
-		go func() {
-			time.Sleep(time.Second)
-			watcher.Stop()
-		}()
-
-		timeout := int32(1)
-		action := &castai.ClusterAction{
-			ID: uuid.New().String(),
-			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
-				NodeName:           "node1",
-				NodeStatus:         castai.ActionCheckNodeStatus_READY,
-				WaitTimeoutSeconds: &timeout,
-			},
-		}
-
-		err := h.Handle(context.Background(), action)
-		r.EqualError(err, "timeout waiting for node node1 to become ready")
-	})
-
-	t.Run("handle check successfully when node become ready", func(t *testing.T) {
-		r := require.New(t)
-		nodeName := "node1"
-		node := &v1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: nodeName,
-				Labels: map[string]string{
-					castai.LabelNodeID: "node1-id",
-				},
-			},
-			Spec: v1.NodeSpec{
-				ProviderID: "aws:///us-east-1",
-			},
-			Status: v1.NodeStatus{
-				Conditions: []v1.NodeCondition{
-					{
-						Type:   v1.NodeReady,
-						Status: v1.ConditionFalse,
-					},
-				},
-			},
-		}
-		clientset := fake.NewClientset(node)
-
-		h := CheckNodeStatusHandler{
-			log:       log,
-			clientset: clientset,
-		}
-
-		timeout := int32(60)
-		action := &castai.ClusterAction{
-			ID: uuid.New().String(),
-			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
-				NodeName:           "node1",
-				NodeID:             "node1-id",
-				ProviderId:         "aws:///us-east-1",
-				NodeStatus:         castai.ActionCheckNodeStatus_READY,
-				WaitTimeoutSeconds: &timeout,
-			},
-		}
-
-		var wg sync.WaitGroup
-		wg.Add(2)
-		var err error
-		go func() {
-			err = h.Handle(context.Background(), action)
-			wg.Done()
-		}()
-
-		go func() {
-			time.Sleep(1 * time.Second)
-			node.Status.Conditions[0].Status = v1.ConditionTrue
-			_, _ = clientset.CoreV1().Nodes().Update(context.Background(), node, metav1.UpdateOptions{})
-			wg.Done()
-		}()
-		wg.Wait()
-
-		r.NoError(err)
-	})
 
 	t.Run("handle check successfully when node become ready - removed taint", func(t *testing.T) {
 		r := require.New(t)
@@ -288,111 +427,4 @@ func TestCheckStatus_Ready(t *testing.T) {
 		r.NoError(err)
 	})
 
-	t.Run("handle error when node is not ready", func(t *testing.T) {
-		r := require.New(t)
-		nodeName := "node1"
-		node := &v1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: nodeName,
-			},
-			Status: v1.NodeStatus{
-				Conditions: []v1.NodeCondition{},
-			},
-		}
-		clientset := fake.NewClientset(node)
-		watcher := watch.NewFake()
-
-		clientset.PrependWatchReactor("nodes", k8stest.DefaultWatchReactor(watcher, nil))
-		go func() {
-			time.Sleep(time.Second)
-			watcher.Stop()
-		}()
-
-		h := CheckNodeStatusHandler{
-			log:       log,
-			clientset: clientset,
-		}
-
-		action := &castai.ClusterAction{
-			ID: uuid.New().String(),
-			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
-				NodeName:   "node1",
-				NodeStatus: castai.ActionCheckNodeStatus_READY,
-			},
-		}
-
-		err := h.Handle(context.Background(), action)
-		r.Error(err)
-		r.EqualError(err, "timeout waiting for node node1 to become ready")
-	})
-
-	t.Run("handle check successfully when reusing node names happens and node is replaced", func(t *testing.T) {
-		r := require.New(t)
-		nodeName := "node1"
-		node := &v1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: nodeName,
-				Labels: map[string]string{
-					castai.LabelNodeID: "old-node-id",
-				},
-			},
-			Status: v1.NodeStatus{
-				Conditions: []v1.NodeCondition{
-					{
-						Type:   v1.NodeReady,
-						Status: v1.ConditionFalse,
-					},
-				},
-			},
-		}
-		clientset := fake.NewClientset(node)
-
-		h := CheckNodeStatusHandler{
-			log:       log,
-			clientset: clientset,
-		}
-
-		timeout := int32(60)
-		action := &castai.ClusterAction{
-			ID: uuid.New().String(),
-			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
-				NodeName:           "node1",
-				NodeStatus:         castai.ActionCheckNodeStatus_READY,
-				WaitTimeoutSeconds: &timeout,
-				NodeID:             "new-node-id",
-			},
-		}
-
-		// simulate node replacement
-		// 1. node is deleted
-		// 2. new node is created with the same name and different id
-		// 3. node is ready
-		// 4. checkNodeStatusHandler.Handle() is called.
-		var wg sync.WaitGroup
-		wg.Add(2)
-		var err error
-		go func() {
-			err = h.Handle(context.Background(), action)
-			wg.Done()
-		}()
-
-		go func() {
-			time.Sleep(1 * time.Second)
-			_ = clientset.CoreV1().Nodes().Delete(context.Background(), nodeName, metav1.DeleteOptions{})
-
-			time.Sleep(1 * time.Second)
-			newNode := node.DeepCopy()
-			newNode.Labels[castai.LabelNodeID] = "new-node-id"
-
-			_, _ = clientset.CoreV1().Nodes().Create(context.Background(), newNode, metav1.CreateOptions{})
-
-			time.Sleep(5 * time.Second)
-			newNode.Status.Conditions[0].Status = v1.ConditionTrue
-			_, _ = clientset.CoreV1().Nodes().UpdateStatus(context.Background(), newNode, metav1.UpdateOptions{})
-			wg.Done()
-		}()
-		wg.Wait()
-
-		r.NoError(err)
-	})
 }
