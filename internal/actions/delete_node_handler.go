@@ -71,7 +71,7 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 		b,
 		h.cfg.deleteRetries,
 		func(ctx context.Context) (bool, error) {
-			current, err := getNodeByIDs(ctx, h.clientset, req.NodeName, req.NodeID, req.ProviderId)
+			current, err := getNodeByIDs(ctx, h.clientset.CoreV1().Nodes(), req.NodeName, req.NodeID, req.ProviderId)
 			if err != nil {
 				if errors.Is(err, errNodeNotFound) {
 					log.Info("node not found, skipping delete")

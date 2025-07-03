@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
+	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/waitext"
@@ -86,12 +87,12 @@ func patchNodeStatus(ctx context.Context, log logrus.FieldLogger, clientset kube
 	return nil
 }
 
-func getNodeByIDs(ctx context.Context, clientset kubernetes.Interface, nodeName, nodeID, providerID string) (*v1.Node, error) {
+func getNodeByIDs(ctx context.Context, clientSet corev1.NodeInterface, nodeName, nodeID, providerID string) (*v1.Node, error) {
 	if nodeID == "" && providerID == "" {
-		return nil, fmt.Errorf("node ID is empty %w", errAction)
+		return nil, fmt.Errorf("node and provider IDs are empty %w", errAction)
 	}
 
-	n, err := clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	n, err := clientSet.Get(ctx, nodeName, metav1.GetOptions{})
 	if err != nil && k8serrors.IsNotFound(err) {
 		return nil, errNodeNotFound
 	}
@@ -100,22 +101,24 @@ func getNodeByIDs(ctx context.Context, clientset kubernetes.Interface, nodeName,
 	}
 
 	if n == nil {
-		return nil, nil
+		return nil, errNodeNotFound
 	}
 
 	if err := isNodeIDProviderIDValid(n, nodeID, providerID); err != nil {
-		return nil, fmt.Errorf("node %s not valid %w", n.Name, err)
+		return nil, fmt.Errorf("requested node ID %s, provider ID %s for node name: %s %w",
+			nodeID, providerID, n.Name, err)
 	}
 
 	return n, nil
 }
 
-var errNodeNotValid = fmt.Errorf("node is not valid")
+var errNodeNotValid = fmt.Errorf("node does not match")
 
 func isNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string) error {
+	var currentNodeID string
 	if nodeID != "" {
-		if val, ok := node.Labels[castai.LabelNodeID]; ok {
-			if val == nodeID {
+		if currentNodeID, ok := node.Labels[castai.LabelNodeID]; ok {
+			if currentNodeID == nodeID {
 				return nil
 			}
 		}
@@ -125,7 +128,7 @@ func isNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string) error {
 		return nil
 	}
 
-	return fmt.Errorf("node ID %s or provider ID %s does not match node %s: %w", nodeID, providerID, node.Name, errNodeNotValid)
+	return fmt.Errorf("node %v has ID %s and provider ID %s %w", node.Name, currentNodeID, node.Spec.ProviderID, errNodeNotValid)
 }
 
 // executeBatchPodActions executes the action for each pod in the list.

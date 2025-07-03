@@ -1,5 +1,6 @@
 //go:generate mockgen -destination ./mock/handler.go . ActionHandler
 //go:generate mockgen -package=mock_actions -destination ./mock/kubernetes.go k8s.io/client-go/kubernetes Interface
+//go:generate mockgen -package=mock_actions -destination ./mock/corev1.go k8s.io/client-go/kubernetes/typed/core/v1 NodeInterface
 
 package actions
 

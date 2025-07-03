@@ -72,7 +72,7 @@ func (h *CheckNodeStatusHandler) checkNodeDeleted(ctx context.Context, log *logr
 		b,
 		waitext.Forever,
 		func(ctx context.Context) (bool, error) {
-			n, err := getNodeByIDs(ctx, h.clientset, req.NodeName, req.NodeID, req.ProviderId)
+			n, err := getNodeByIDs(ctx, h.clientset.CoreV1().Nodes(), req.NodeName, req.NodeID, req.ProviderId)
 			if n != nil {
 				return false, errNodeNotDeleted
 			}
