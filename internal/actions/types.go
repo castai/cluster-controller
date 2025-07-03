@@ -19,8 +19,9 @@ const (
 )
 
 var (
-	errAction       = errors.New("not valid action")
-	errNodeNotFound = errors.New("node not found")
+	errAction           = errors.New("not valid action")
+	errNodeNotFound     = errors.New("node not found")
+	errNodeDoesNotMatch = fmt.Errorf("node does not match")
 )
 
 func newUnexpectedTypeErr(value, expectedType interface{}) error {

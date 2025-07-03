@@ -32,7 +32,7 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 			args: args{
 				node: &v1.Node{},
 			},
-			wantErr: errNodeNotValid,
+			wantErr: errNodeDoesNotMatch,
 		},
 		{
 			name: "node ID matches label",
@@ -96,7 +96,7 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 				nodeID:     "node-id-123",
 				providerID: "",
 			},
-			wantErr: errNodeNotValid,
+			wantErr: errNodeDoesNotMatch,
 		},
 		{
 			name: "node ID and provider ID do not match",
@@ -114,7 +114,7 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 				nodeID:     "node-id-123",
 				providerID: "provider-id-456",
 			},
-			wantErr: errNodeNotValid,
+			wantErr: errNodeDoesNotMatch,
 		},
 	}
 	for _, tt := range tests {
@@ -175,7 +175,7 @@ func Test_getNodeByIDs(t *testing.T) {
 						}, nil)
 				},
 			},
-			wantErr: errNodeNotValid,
+			wantErr: errNodeDoesNotMatch,
 		},
 		{
 			name: "k8s node getter return error",

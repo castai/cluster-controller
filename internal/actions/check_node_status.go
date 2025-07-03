@@ -77,13 +77,13 @@ func (h *CheckNodeStatusHandler) checkNodeDeleted(ctx context.Context, log *logr
 				return false, errNodeNotDeleted
 			}
 
-			if errors.Is(err, errNodeNotValid) {
+			if errors.Is(err, errNodeDoesNotMatch) {
 				log.WithFields(map[string]interface{}{
 					"node":        req.NodeName,
 					"node_id":     req.NodeID,
 					"provider_id": req.ProviderId,
 				}).Warnf("node is not valid")
-				return false, errNodeNotValid
+				return false, errNodeDoesNotMatch
 			}
 
 			if errors.Is(err, errNodeNotFound) {

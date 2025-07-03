@@ -112,8 +112,6 @@ func getNodeByIDs(ctx context.Context, clientSet corev1.NodeInterface, nodeName,
 	return n, nil
 }
 
-var errNodeNotValid = fmt.Errorf("node does not match")
-
 func isNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string) error {
 	var currentNodeID string
 	if nodeID != "" {
@@ -128,7 +126,7 @@ func isNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string) error {
 		return nil
 	}
 
-	return fmt.Errorf("node %v has ID %s and provider ID %s %w", node.Name, currentNodeID, node.Spec.ProviderID, errNodeNotValid)
+	return fmt.Errorf("node %v has ID %s and provider ID %s %w", node.Name, currentNodeID, node.Spec.ProviderID, errNodeDoesNotMatch)
 }
 
 // executeBatchPodActions executes the action for each pod in the list.
