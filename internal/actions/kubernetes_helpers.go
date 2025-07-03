@@ -113,10 +113,14 @@ func getNodeByIDs(ctx context.Context, clientSet corev1.NodeInterface, nodeName,
 }
 
 func isNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string, log logrus.FieldLogger) error {
-	var currentNodeID string
+	if nodeID == "" && providerID == "" {
+		return fmt.Errorf("node and provider IDs are empty %w", errAction)
+	}
 
 	validProviderID := false
-	if providerID != "" && node.Spec.ProviderID != "" && node.Spec.ProviderID == providerID {
+
+	// validate provider id only if non-empty in request
+	if providerID == "" || node.Spec.ProviderID == providerID {
 		validProviderID = true
 	} else {
 		log.Errorf("node %v has provider ID %s, but requested provider ID is %s", node.Name, node.Spec.ProviderID, providerID)
@@ -126,9 +130,10 @@ func isNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string, log logru
 		return nil
 	}
 
+	var currentNodeID string
 	if nodeID != "" {
 		if currentNodeID, ok := node.Labels[castai.LabelNodeID]; ok {
-			if currentNodeID == nodeID {
+			if currentNodeID == nodeID && validProviderID {
 				return nil
 			}
 		}
