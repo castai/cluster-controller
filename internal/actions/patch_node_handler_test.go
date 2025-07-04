@@ -3,6 +3,7 @@ package actions
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/samber/lo"
@@ -24,6 +25,7 @@ func TestPatchNodeHandler(t *testing.T) {
 
 	t.Run("patch successfully", func(t *testing.T) {
 		nodeName := "node1"
+		providerID := "provider-id-123"
 		node := &v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: nodeName,
@@ -35,6 +37,7 @@ func TestPatchNodeHandler(t *testing.T) {
 				},
 			},
 			Spec: v1.NodeSpec{
+				ProviderID: providerID,
 				Taints: []v1.Taint{
 					{
 						Key:    "t1",
@@ -59,7 +62,8 @@ func TestPatchNodeHandler(t *testing.T) {
 		action := &castai.ClusterAction{
 			ID: uuid.New().String(),
 			ActionPatchNode: &castai.ActionPatchNode{
-				NodeName: "node1",
+				NodeName:   "node1",
+				ProviderId: providerID,
 				Labels: map[string]string{
 					"-l1": "",
 					"l2":  "v2",
@@ -113,6 +117,7 @@ func TestPatchNodeHandler(t *testing.T) {
 
 	t.Run("skip patch when node not found", func(t *testing.T) {
 		nodeName := "node1"
+		nodeID := "node-id-123"
 		node := &v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: nodeName,
@@ -124,11 +129,13 @@ func TestPatchNodeHandler(t *testing.T) {
 			ID: uuid.New().String(),
 			ActionPatchNode: &castai.ActionPatchNode{
 				NodeName: "already-deleted-node",
+				NodeID:   nodeID,
 			},
 		}
 		h := PatchNodeHandler{
-			log:       log,
-			clientset: clientset,
+			retryTimeout: time.Millisecond,
+			log:          log,
+			clientset:    clientset,
 		}
 
 		err := h.Handle(context.Background(), action)
@@ -140,9 +147,13 @@ func TestPatchNodeHandler(t *testing.T) {
 
 	t.Run("cordoning node", func(t *testing.T) {
 		nodeName := "node1"
+		nodeID := "node-id-123"
 		node := &v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: nodeName,
+				Labels: map[string]string{
+					castai.LabelNodeID: nodeID,
+				},
 			},
 			Spec: v1.NodeSpec{
 				Unschedulable: false,
@@ -159,6 +170,7 @@ func TestPatchNodeHandler(t *testing.T) {
 			ID: uuid.New().String(),
 			ActionPatchNode: &castai.ActionPatchNode{
 				NodeName:      "node1",
+				NodeID:        nodeID,
 				Unschedulable: lo.ToPtr(true),
 			},
 		}
