@@ -116,30 +116,35 @@ func isNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string, log logru
 	if nodeID == "" && providerID == "" {
 		return fmt.Errorf("node and provider IDs are empty %w", errAction)
 	}
-
+	emptyProviderID := providerID == "" || node.Spec.ProviderID == ""
 	validProviderID := false
 
-	// validate provider id only if non-empty in request
-	if providerID == "" || node.Spec.ProviderID == providerID {
+	// validate provider id only if non-empty in request and in Node spec
+	// Azure provider: provider id can be empty even if node is Ready
+	if !emptyProviderID && node.Spec.ProviderID == providerID {
 		validProviderID = true
-	} else {
+	} else if !emptyProviderID && node.Spec.ProviderID != providerID {
 		log.Errorf("node %v has provider ID %s, but requested provider ID is %s", node.Name, node.Spec.ProviderID, providerID)
 	}
 
-	if nodeID == "" && validProviderID {
-		return nil
-	}
-
-	var currentNodeID string
-	if nodeID != "" {
-		if currentNodeID, ok := node.Labels[castai.LabelNodeID]; ok {
-			if currentNodeID == nodeID && validProviderID {
+	currentNodeID, ok := node.Labels[castai.LabelNodeID]
+	if ok && currentNodeID != "" {
+		if currentNodeID == nodeID {
+			if validProviderID {
+				return nil
+			}
+			if emptyProviderID {
 				return nil
 			}
 		}
 	}
+	if (!ok || currentNodeID == "") && validProviderID {
+		// if node ID is not set in labels, but provider ID is valid, we can still proceed
+		return nil
+	}
 
-	return fmt.Errorf("node %v has ID %s and provider ID %s: %w", node.Name, currentNodeID, node.Spec.ProviderID, errNodeDoesNotMatch)
+	return fmt.Errorf("node %v has ID %s and provider ID %s: %w",
+		node.Name, currentNodeID, node.Spec.ProviderID, errNodeDoesNotMatch)
 }
 
 // executeBatchPodActions executes the action for each pod in the list.

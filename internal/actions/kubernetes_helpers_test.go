@@ -1,23 +1,25 @@
 package actions
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/require"
-	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"context"
 	"fmt"
-	mock_actions "github.com/castai/cluster-controller/internal/actions/mock"
-	"github.com/castai/cluster-controller/internal/castai"
+	"reflect"
+	"testing"
+
 	"github.com/golang/mock/gomock"
 	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/require"
+	v1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	"reflect"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	mock_actions "github.com/castai/cluster-controller/internal/actions/mock"
+	"github.com/castai/cluster-controller/internal/castai"
 )
 
 func Test_isNodeIDProviderIDValid(t *testing.T) {
+	t.Parallel()
+
 	type args struct {
 		node       *v1.Node
 		nodeID     string
@@ -29,7 +31,7 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name: "empty node ID and provider id",
+			name: "empty node ID and provider id in request",
 			args: args{
 				node:       &v1.Node{},
 				providerID: "",
@@ -38,13 +40,44 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 			wantErr: errAction,
 		},
 		{
-			name: "node ID is empty but provider ID matches",
+			name: "request node ID is empty but node id exists in node labels",
 			args: args{
 				node: &v1.Node{
 					ObjectMeta: metav1.ObjectMeta{
 						Labels: map[string]string{
-							castai.LabelNodeID: "node-id-123-not-matching",
+							castai.LabelNodeID: "node-id-123-existed",
 						},
+					},
+					Spec: v1.NodeSpec{
+						ProviderID: "provider-id-456",
+					},
+				},
+				providerID: "provider-id-456",
+			},
+			wantErr: errNodeDoesNotMatch,
+		},
+		{
+			name: "request and labels node ID are empty but provider ID matches",
+			args: args{
+				node: &v1.Node{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							castai.LabelNodeID: "",
+						},
+					},
+					Spec: v1.NodeSpec{
+						ProviderID: "provider-id-456",
+					},
+				},
+				providerID: "provider-id-456",
+			},
+		},
+		{
+			name: "request node ID is empty and no labels but provider ID matches",
+			args: args{
+				node: &v1.Node{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{},
 					},
 					Spec: v1.NodeSpec{
 						ProviderID: "provider-id-456",
@@ -88,7 +121,6 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 			},
 			wantErr: errNodeDoesNotMatch,
 		},
-
 		{
 			name: "node ID does not match label, provider ID empty",
 			args: args{
@@ -126,7 +158,7 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 			wantErr: errNodeDoesNotMatch,
 		},
 		{
-			name: "node ID is match and provider ID is empty",
+			name: "node ID is match and request provider ID is empty",
 			args: args{
 				node: &v1.Node{
 					ObjectMeta: metav1.ObjectMeta{
@@ -142,9 +174,28 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 				providerID: "",
 			},
 		},
+		{
+			name: "node ID is match and provider ID is empty in Node spec",
+			args: args{
+				node: &v1.Node{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							castai.LabelNodeID: "node-id-123",
+						},
+					},
+					Spec: v1.NodeSpec{
+						ProviderID: "",
+					},
+				},
+				nodeID:     "node-id-123",
+				providerID: "provider-id-456",
+			},
+		},
 	}
 	for _, tt := range tests {
+		tt := tt // capture range variable
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := isNodeIDProviderIDValid(tt.args.node, tt.args.nodeID, tt.args.providerID, logrus.New())
 			require.Equal(t, tt.wantErr != nil, got != nil, "error mismatch", got)
 			require.ErrorIs(t, got, tt.wantErr)

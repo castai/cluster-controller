@@ -7,18 +7,18 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/fake"
 	k8stest "k8s.io/client-go/testing"
 
 	"github.com/castai/cluster-controller/internal/castai"
-	"github.com/samber/lo"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 )
 
 func TestCheckNodeStatusHandler_Handle_Deleted(t *testing.T) {
@@ -426,5 +426,4 @@ func TestCheckStatus_Ready(t *testing.T) {
 
 		r.NoError(err)
 	})
-
 }

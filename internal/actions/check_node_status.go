@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,7 +15,6 @@ import (
 
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/waitext"
-	"github.com/samber/lo"
 )
 
 var _ ActionHandler = &CheckNodeStatusHandler{}
