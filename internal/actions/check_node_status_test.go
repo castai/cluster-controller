@@ -21,6 +21,8 @@ import (
 	"github.com/castai/cluster-controller/internal/castai"
 )
 
+const nodeName = "node1"
+
 func TestCheckNodeStatusHandler_Handle_Deleted(t *testing.T) {
 	t.Parallel()
 	type fields struct {
@@ -30,7 +32,6 @@ func TestCheckNodeStatusHandler_Handle_Deleted(t *testing.T) {
 		action *castai.ClusterAction
 	}
 
-	nodeName := "node1"
 	nodeID := "node-id-123"
 	nodeObject := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
@@ -131,7 +132,6 @@ func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
 		action *castai.ClusterAction
 	}
 
-	nodeName := "node1"
 	nodeID := "node-id-123"
 	nodeUID := types.UID(uuid.New().String())
 	var nodeObjectNotReady, nodeObjectReady, nodeObjectReadyTainted, node2ObjectReadyAnotherNodeID runtime.Object
@@ -372,7 +372,6 @@ func TestCheckStatus_Ready(t *testing.T) {
 
 	t.Run("handle check successfully when node become ready - removed taint", func(t *testing.T) {
 		r := require.New(t)
-		nodeName := "node1"
 		node := &v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: nodeName,
