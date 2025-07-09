@@ -74,6 +74,9 @@ type DrainNodeHandler struct {
 }
 
 func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+	if action == nil {
+		return fmt.Errorf("action is nil %w", errAction)
+	}
 	req, ok := action.Data().(*castai.ActionDrainNode)
 	if !ok {
 		return newUnexpectedTypeErr(action.Data(), req)
@@ -87,6 +90,10 @@ func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 		"action":         reflect.TypeOf(action.Data().(*castai.ActionDrainNode)).String(),
 		ActionIDLogField: action.ID,
 	})
+
+	if req.NodeID == "" && req.ProviderId == "" {
+		return fmt.Errorf("node ID and provider ID are empty %w", errAction)
+	}
 
 	node, err := getNodeByIDs(ctx, h.clientset.CoreV1().Nodes(), req.NodeName, req.NodeID, req.ProviderId, log)
 	if errors.Is(err, errNodeNotFound) {

@@ -23,7 +23,6 @@ func TestDeleteNodeHandler(t *testing.T) {
 
 	t.Run("delete successfully", func(t *testing.T) {
 		r := require.New(t)
-		nodeName := "node1"
 		node := &v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: nodeName,
@@ -58,7 +57,6 @@ func TestDeleteNodeHandler(t *testing.T) {
 
 	t.Run("skip delete when node not found", func(t *testing.T) {
 		r := require.New(t)
-		nodeName := "node1"
 		node := &v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: nodeName,
@@ -89,7 +87,6 @@ func TestDeleteNodeHandler(t *testing.T) {
 
 	t.Run("skip delete when node id do not match", func(t *testing.T) {
 		r := require.New(t)
-		nodeName := "node1"
 		node := &v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: nodeName,
@@ -124,10 +121,7 @@ func TestDeleteNodeHandler(t *testing.T) {
 
 	t.Run("delete node with pods", func(t *testing.T) {
 		r := require.New(t)
-		nodeName := "node1"
-		nodeID := "node-id"
-		podName := "pod1"
-		clientset := setupFakeClientWithNodePodEviction(nodeName, nodeID, podName)
+		clientset := setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
 
 		action := &castai.ClusterAction{
 			ID: uuid.New().String(),
