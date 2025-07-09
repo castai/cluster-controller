@@ -258,6 +258,29 @@ func Test_getNodeByIDs(t *testing.T) {
 			wantErr: errNodeDoesNotMatch,
 		},
 		{
+			name: "not matching provider ID",
+			args: args{
+				nodeName:   nodeName,
+				nodeID:     nodeID,
+				providerID: providerID,
+				tuneNodeV1Interface: func(m *mock_actions.MockNodeInterface) {
+					m.EXPECT().Get(gomock.Any(), nodeName, metav1.GetOptions{}).
+						Return(&v1.Node{
+							ObjectMeta: metav1.ObjectMeta{
+								Name: nodeName,
+								Labels: map[string]string{
+									castai.LabelNodeID: nodeID,
+								},
+							},
+							Spec: v1.NodeSpec{
+								ProviderID: "another-provider-id",
+							},
+						}, nil)
+				},
+			},
+			wantErr: errNodeDoesNotMatch,
+		},
+		{
 			name: "node id at request is empty but provider ID matches",
 			args: args{
 				nodeName:   nodeName,
@@ -285,6 +308,27 @@ func Test_getNodeByIDs(t *testing.T) {
 			args: args{
 				nodeName:   nodeName,
 				nodeID:     nodeID,
+				providerID: providerID,
+				tuneNodeV1Interface: func(m *mock_actions.MockNodeInterface) {
+					m.EXPECT().Get(gomock.Any(), nodeName, metav1.GetOptions{}).
+						Return(&v1.Node{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:   nodeName,
+								Labels: map[string]string{},
+							},
+							Spec: v1.NodeSpec{
+								ProviderID: providerID,
+							},
+						}, nil)
+				},
+			},
+			wantNode: true,
+		},
+		{
+			name: "node id is empty at request and Node but provider ID matches",
+			args: args{
+				nodeName:   nodeName,
+				nodeID:     "",
 				providerID: providerID,
 				tuneNodeV1Interface: func(m *mock_actions.MockNodeInterface) {
 					m.EXPECT().Get(gomock.Any(), nodeName, metav1.GetOptions{}).
@@ -341,6 +385,29 @@ func Test_getNodeByIDs(t *testing.T) {
 							},
 							Spec: v1.NodeSpec{
 								ProviderID: providerID,
+							},
+						}, nil)
+				},
+			},
+			wantNode: true,
+		},
+		{
+			name: "provider id is empty at request and Node but node ID matches",
+			args: args{
+				nodeName:   nodeName,
+				nodeID:     nodeID,
+				providerID: "",
+				tuneNodeV1Interface: func(m *mock_actions.MockNodeInterface) {
+					m.EXPECT().Get(gomock.Any(), nodeName, metav1.GetOptions{}).
+						Return(&v1.Node{
+							ObjectMeta: metav1.ObjectMeta{
+								Name: nodeName,
+								Labels: map[string]string{
+									castai.LabelNodeID: nodeID,
+								},
+							},
+							Spec: v1.NodeSpec{
+								ProviderID: "",
 							},
 						}, nil)
 				},
