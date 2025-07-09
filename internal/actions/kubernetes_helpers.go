@@ -127,6 +127,11 @@ func isNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string, log logru
 		log.Errorf("node %v has provider ID %s, but requested provider ID is %s", node.Name, node.Spec.ProviderID, providerID)
 	}
 
+	if nodeID == "" && validProviderID {
+		// if node ID is not set in labels, but provider ID is valid, we can still proceed
+		return nil
+	}
+
 	currentNodeID, ok := node.Labels[castai.LabelNodeID]
 	if ok && currentNodeID != "" {
 		if currentNodeID == nodeID {

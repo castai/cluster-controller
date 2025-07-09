@@ -76,6 +76,84 @@ func TestCheckNodeDeletedHandler_Handle(t *testing.T) {
 			},
 		},
 		{
+			name: "provider id of Node is empty but nodeID matches",
+			args: args{
+				action: newActionCheckNodeDeleted(nodeName, nodeID, providerID),
+				tuneFakeObjects: []runtime.Object{
+					&v1.Node{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: nodeName,
+							Labels: map[string]string{
+								castai.LabelNodeID: nodeID,
+							},
+						},
+						Spec: v1.NodeSpec{
+							ProviderID: "",
+						},
+					},
+				},
+			},
+			wantErr: errNodeNotDeleted,
+		},
+		{
+			name: "provider id of request is empty but nodeID matches",
+			args: args{
+				action: newActionCheckNodeDeleted(nodeName, nodeID, ""),
+				tuneFakeObjects: []runtime.Object{
+					&v1.Node{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: nodeName,
+							Labels: map[string]string{
+								castai.LabelNodeID: nodeID,
+							},
+						},
+						Spec: v1.NodeSpec{
+							ProviderID: providerID,
+						},
+					},
+				},
+			},
+			wantErr: errNodeNotDeleted,
+		},
+		{
+			name: "node id at label is empty but provider ID matches",
+			args: args{
+				action: newActionCheckNodeDeleted(nodeName, nodeID, providerID),
+				tuneFakeObjects: []runtime.Object{
+					&v1.Node{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:   nodeName,
+							Labels: map[string]string{},
+						},
+						Spec: v1.NodeSpec{
+							ProviderID: providerID,
+						},
+					},
+				},
+			},
+			wantErr: errNodeNotDeleted,
+		},
+		{
+			name: "node id at request is empty but provider ID matches",
+			args: args{
+				action: newActionCheckNodeDeleted(nodeName, "", providerID),
+				tuneFakeObjects: []runtime.Object{
+					&v1.Node{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: nodeName,
+							Labels: map[string]string{
+								castai.LabelNodeID: nodeID,
+							},
+						},
+						Spec: v1.NodeSpec{
+							ProviderID: providerID,
+						},
+					},
+				},
+			},
+			wantErr: errNodeNotDeleted,
+		},
+		{
 			name: "node found and matches IDs",
 			args: args{
 				action: newActionCheckNodeDeleted(nodeName, nodeID, providerID),
