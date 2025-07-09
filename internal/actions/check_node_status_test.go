@@ -2,10 +2,6 @@ package actions
 
 import (
 	"context"
-	"sync"
-	"testing"
-	"time"
-
 	"github.com/google/uuid"
 	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
@@ -17,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/fake"
 	k8stest "k8s.io/client-go/testing"
+	"testing"
 
 	"github.com/castai/cluster-controller/internal/castai"
 )
@@ -225,6 +222,9 @@ func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
 				castai.LabelNodeID: nodeID,
 			},
 		},
+		Spec: v1.NodeSpec{
+			ProviderID: providerID,
+		},
 		Status: v1.NodeStatus{
 			Conditions: []v1.NodeCondition{},
 		},
@@ -238,7 +238,8 @@ func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
 			},
 		},
 		Spec: v1.NodeSpec{
-			Taints: []v1.Taint{taintCloudProviderUninitialized},
+			Taints:     []v1.Taint{taintCloudProviderUninitialized},
+			ProviderID: providerID,
 		},
 		Status: v1.NodeStatus{
 			Conditions: []v1.NodeCondition{
@@ -266,6 +267,9 @@ func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
 				},
 			},
 		},
+		Spec: v1.NodeSpec{
+			ProviderID: providerID,
+		},
 	}
 
 	node2ObjectReadyAnotherNodeID = &v1.Node{
@@ -284,6 +288,9 @@ func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
 				},
 			},
 		},
+		Spec: v1.NodeSpec{
+			ProviderID: providerID,
+		},
 	}
 
 	tests := []struct {
@@ -299,14 +306,7 @@ func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
 		{
 			name: "return error when ctx timeout",
 			args: args{
-				action: &castai.ClusterAction{
-					ID: uuid.New().String(),
-					ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
-						NodeName:           "node1",
-						NodeStatus:         castai.ActionCheckNodeStatus_READY,
-						WaitTimeoutSeconds: lo.ToPtr(int32(1)),
-					},
-				},
+				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(1))),
 			},
 			wantErr: context.DeadlineExceeded,
 		},
@@ -321,15 +321,7 @@ func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
 				},
 			},
 			args: args{
-				action: &castai.ClusterAction{
-					ID: uuid.New().String(),
-					ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
-						NodeName:           nodeName,
-						NodeID:             nodeID,
-						NodeStatus:         castai.ActionCheckNodeStatus_READY,
-						WaitTimeoutSeconds: lo.ToPtr(int32(2)),
-					},
-				},
+				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(2))),
 			},
 			wantErr: context.DeadlineExceeded,
 		},
@@ -348,15 +340,7 @@ func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
 				},
 			},
 			args: args{
-				action: &castai.ClusterAction{
-					ID: uuid.New().String(),
-					ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
-						NodeName:           nodeName,
-						NodeID:             nodeID,
-						NodeStatus:         castai.ActionCheckNodeStatus_READY,
-						WaitTimeoutSeconds: lo.ToPtr(int32(2)),
-					},
-				},
+				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(2))),
 			},
 			wantErr: context.DeadlineExceeded,
 		},
@@ -375,15 +359,7 @@ func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
 				},
 			},
 			args: args{
-				action: &castai.ClusterAction{
-					ID: uuid.New().String(),
-					ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
-						NodeName:           nodeName,
-						NodeID:             nodeID,
-						NodeStatus:         castai.ActionCheckNodeStatus_READY,
-						WaitTimeoutSeconds: lo.ToPtr(int32(2)),
-					},
-				},
+				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(2))),
 			},
 			wantErr: context.DeadlineExceeded,
 		},
@@ -406,16 +382,34 @@ func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
 				},
 			},
 			args: args{
-				action: &castai.ClusterAction{
-					ID: uuid.New().String(),
-					ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
-						NodeName:           nodeName,
-						NodeID:             nodeID,
-						NodeStatus:         castai.ActionCheckNodeStatus_READY,
-						WaitTimeoutSeconds: lo.ToPtr(int32(10)),
+				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(10))),
+			},
+		},
+		{
+			name: "handle check successfully when node become ready: request with empty provider ID",
+			fields: fields{
+				tuneFakeObjects: []tuneFakeObjects{
+					{
+						event:  watch.Modified,
+						object: nodeObjectNotReady,
+					},
+					{
+						event:  watch.Modified,
+						object: nodeObjectReadyTainted,
+					},
+					{
+						event:  watch.Modified,
+						object: nodeObjectReady,
 					},
 				},
 			},
+			args: args{
+				action: newActionCheckNodeStatus(nodeName, nodeID, "", castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(10))),
+			},
+		},
+		{
+			name:   "handle check successfully when node become ready - removed taint",
+			fields: fields{},
 		},
 	}
 	for _, tt := range tests {
@@ -446,67 +440,6 @@ func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
 			require.ErrorIs(t, err, tt.wantErr, "unexpected error: %v", err)
 		})
 	}
-}
-
-func TestCheckStatus_Ready(t *testing.T) {
-	log := logrus.New()
-	log.SetLevel(logrus.DebugLevel)
-
-	t.Run("handle check successfully when node become ready - removed taint", func(t *testing.T) {
-		r := require.New(t)
-		node := &v1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: nodeName,
-			},
-			Status: v1.NodeStatus{
-				Conditions: []v1.NodeCondition{
-					{
-						Type:   v1.NodeReady,
-						Status: v1.ConditionTrue,
-					},
-				},
-			},
-			Spec: v1.NodeSpec{
-				Taints:     []v1.Taint{taintCloudProviderUninitialized},
-				ProviderID: "aws:///us-east-1",
-			},
-		}
-		clientset := fake.NewClientset(node)
-
-		h := CheckNodeStatusHandler{
-			log:       log,
-			clientset: clientset,
-		}
-
-		timeout := int32(60)
-		action := &castai.ClusterAction{
-			ID: uuid.New().String(),
-			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
-				NodeName:           "node1",
-				ProviderId:         "aws:///us-east-1",
-				NodeStatus:         castai.ActionCheckNodeStatus_READY,
-				WaitTimeoutSeconds: &timeout,
-			},
-		}
-
-		var wg sync.WaitGroup
-		wg.Add(2)
-		var err error
-		go func() {
-			err = h.Handle(context.Background(), action)
-			wg.Done()
-		}()
-
-		go func() {
-			time.Sleep(1 * time.Second)
-			node.Spec.Taints = []v1.Taint{}
-			_, _ = clientset.CoreV1().Nodes().Update(context.Background(), node, metav1.UpdateOptions{})
-			wg.Done()
-		}()
-		wg.Wait()
-
-		r.NoError(err)
-	})
 }
 
 func newActionCheckNodeStatus(nodeName, nodeID, providerID string, status castai.ActionCheckNodeStatus_Status, timeout *int32) *castai.ClusterAction {
