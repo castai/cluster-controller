@@ -12,6 +12,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCheckNodeDeletedHandler_Handle(t *testing.T) {
@@ -27,77 +28,77 @@ func TestCheckNodeDeletedHandler_Handle(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		wantErr bool
+		wantErr error
 	}{
 		{
 			name: "return error when action data is not ActionCheckNodeDeleted",
 			args: args{
 				action: &castai.ClusterAction{},
 			},
-			wantErr: true,
+			wantErr: errAction,
 		},
 		{
-			name: "return error when node is not deleted (nodeID is matching)",
+			name: "nodeID is not matching",
 			args: args{
-				action: &castai.ClusterAction{
-					ID: uuid.New().String(),
-					ActionCheckNodeDeleted: &castai.ActionCheckNodeDeleted{
-						NodeName:   "node1",
-						ProviderId: "providerID",
-						NodeID:     "node1",
-					},
-				},
+				action: newActionCheckNodeDeleted(nodeName, nodeID, providerID),
 				tuneFakeObjects: []runtime.Object{
 					&v1.Node{
 						ObjectMeta: metav1.ObjectMeta{
-							Name: "node1",
+							Name: nodeName,
 							Labels: map[string]string{
-								castai.LabelNodeID: "node1",
-							},
-						},
-					},
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "return error when node is not deleted (provider ID is matching)",
-			args: args{
-				action: &castai.ClusterAction{
-					ID: uuid.New().String(),
-					ActionCheckNodeDeleted: &castai.ActionCheckNodeDeleted{
-						NodeName:   "node1",
-						ProviderId: "providerID",
-						NodeID:     "node1",
-					},
-				},
-				tuneFakeObjects: []runtime.Object{
-					&v1.Node{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: "node1",
-							Labels: map[string]string{
-								castai.LabelNodeID: "node1-not-matching",
+								castai.LabelNodeID: "another-node-id",
 							},
 						},
 						Spec: v1.NodeSpec{
-							ProviderID: "providerID",
+							ProviderID: providerID,
 						},
 					},
 				},
 			},
-			wantErr: true,
+		},
+		{
+			name: "provider is not matching",
+			args: args{
+				action: newActionCheckNodeDeleted(nodeName, nodeID, providerID),
+				tuneFakeObjects: []runtime.Object{
+					&v1.Node{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: nodeName,
+							Labels: map[string]string{
+								castai.LabelNodeID: nodeID,
+							},
+						},
+						Spec: v1.NodeSpec{
+							ProviderID: "another-provider-id",
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "node found and matches IDs",
+			args: args{
+				action: newActionCheckNodeDeleted(nodeName, nodeID, providerID),
+				tuneFakeObjects: []runtime.Object{
+					&v1.Node{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: nodeName,
+							Labels: map[string]string{
+								castai.LabelNodeID: nodeID,
+							},
+						},
+						Spec: v1.NodeSpec{
+							ProviderID: providerID,
+						},
+					},
+				},
+			},
+			wantErr: errNodeNotDeleted,
 		},
 		{
 			name: "handle check successfully when node is not found",
 			args: args{
-				action: &castai.ClusterAction{
-					ID: uuid.New().String(),
-					ActionCheckNodeDeleted: &castai.ActionCheckNodeDeleted{
-						NodeName:   "node1",
-						ProviderId: "providerID",
-						NodeID:     "node1-id",
-					},
-				},
+				action: newActionCheckNodeDeleted(nodeName, nodeID, providerID),
 			},
 		},
 	}
@@ -111,9 +112,22 @@ func TestCheckNodeDeletedHandler_Handle(t *testing.T) {
 				clientset: clientSet,
 				cfg:       tt.fields.cfg,
 			}
-			if err := h.Handle(context.Background(), tt.args.action); (err != nil) != tt.wantErr {
-				t.Errorf("Handle() error = %v, wantErr %v", err, tt.wantErr)
+			err := h.Handle(context.Background(), tt.args.action)
+			require.Equal(t, tt.wantErr != nil, err != nil, "Handle() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr, "Handle() error mismatch")
 			}
 		})
+	}
+}
+
+func newActionCheckNodeDeleted(nodeName, nodeID, providerID string) *castai.ClusterAction {
+	return &castai.ClusterAction{
+		ID: uuid.New().String(),
+		ActionCheckNodeDeleted: &castai.ActionCheckNodeDeleted{
+			NodeName:   nodeName,
+			ProviderId: providerID,
+			NodeID:     nodeID,
+		},
 	}
 }

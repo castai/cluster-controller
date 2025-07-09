@@ -65,6 +65,9 @@ func (h *CheckNodeDeletedHandler) Handle(ctx context.Context, action *castai.Clu
 			if errors.Is(err, errNodeNotFound) {
 				return false, nil
 			}
+			if errors.Is(err, errNodeDoesNotMatch) {
+				return false, nil
+			}
 			if err != nil {
 				return true, err
 			}
