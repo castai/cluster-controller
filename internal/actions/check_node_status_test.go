@@ -21,10 +21,12 @@ import (
 	"github.com/castai/cluster-controller/internal/castai"
 )
 
-const nodeName = "node1"
-const nodeID = "node-id"
-const providerID = "aws:///us-east-1"
-const podName = "pod1"
+const (
+	nodeName   = "node1"
+	nodeID     = "node-id"
+	providerID = "aws:///us-east-1"
+	podName    = "pod1"
+)
 
 func TestCheckNodeStatusHandler_Handle_Deleted(t *testing.T) {
 	t.Parallel()

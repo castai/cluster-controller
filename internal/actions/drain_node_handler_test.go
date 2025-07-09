@@ -15,6 +15,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 	ktest "k8s.io/client-go/testing"
 
@@ -240,6 +241,7 @@ func addEvictionSupport(c *fake.Clientset) {
 	c.Resources = append(c.Resources, coreResources)
 }
 
+// nolint: gocognit
 func TestDrainNodeHandler_Handle(t *testing.T) {
 	podFailedDeletionErr := &podFailedActionError{}
 	t.Parallel()
@@ -563,25 +565,26 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 			}
 
 			n, err := h.clientset.CoreV1().Nodes().Get(context.Background(), tt.args.action.ActionDrainNode.NodeName, metav1.GetOptions{})
-			if err != nil {
-				require.True(t, apierrors.IsNotFound(err), "expected node to be not found, got: %v", err)
-			} else {
-				require.NoError(t, err)
-				require.True(t, n.Spec.Unschedulable == !tt.wantNodeNotCordoned, "expected node to be cordoned, got: %v", n.Spec.Unschedulable)
-			}
+			require.True(t, (err != nil && apierrors.IsNotFound(err)) ||
+				(err == nil && n.Spec.Unschedulable == !tt.wantNodeNotCordoned),
+				"expected node to be not found or cordoned, got: %v", err)
 
 			_, err = h.clientset.CoreV1().Pods("default").Get(context.Background(), podName, metav1.GetOptions{})
 			require.True(t, (tt.wantPodIsNotFound && apierrors.IsNotFound(err)) || (!tt.wantPodIsNotFound && err == nil), "expected pod to be not found, got: %v", err)
-			// Daemon set and static pods and job should not be drained.
-			_, err = h.clientset.CoreV1().Pods("default").Get(context.Background(), "ds-pod", metav1.GetOptions{})
-			require.NoError(t, err)
-			_, err = h.clientset.CoreV1().Pods("default").Get(context.Background(), "static-pod", metav1.GetOptions{})
-			require.NoError(t, err)
-			_, err = h.clientset.CoreV1().Pods("default").Get(context.Background(), "job-pod", metav1.GetOptions{})
-			require.NoError(t, err)
+
+			checkPods(t, h.clientset, "ds-pod", "static-pod", "job-pod")
 		})
 	}
 }
+
+func checkPods(t *testing.T, clientset kubernetes.Interface, podNames ...string) {
+	t.Helper()
+	for _, podName := range podNames {
+		_, err := clientset.CoreV1().Pods("default").Get(context.Background(), podName, metav1.GetOptions{})
+		require.NoError(t, err, "expected pod %s to be found", podName)
+	}
+}
+
 func newActionDrainNode(nodeName, nodeID, providerID string, drainTimeoutSeconds int, force bool) *castai.ClusterAction {
 	return &castai.ClusterAction{
 		ID: uuid.New().String(),
