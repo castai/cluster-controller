@@ -61,18 +61,7 @@ func (h *CheckNodeDeletedHandler) Handle(ctx context.Context, action *castai.Clu
 		boff,
 		h.cfg.retries,
 		func(ctx context.Context) (bool, error) {
-			_, err := getNodeByIDs(ctx, h.clientset.CoreV1().Nodes(), req.NodeName, req.NodeID, req.ProviderId, log)
-			if errors.Is(err, errNodeNotFound) {
-				return false, nil
-			}
-			if errors.Is(err, errNodeDoesNotMatch) {
-				return false, nil
-			}
-			if err != nil {
-				return true, err
-			}
-
-			return false, errNodeNotDeleted
+			return checkNodeDeleted(ctx, h.clientset.CoreV1().Nodes(), req.NodeName, req.NodeID, req.ProviderId, log)
 		},
 		func(err error) {
 			log.Warnf("node deletion check failed, will retry: %v", err)

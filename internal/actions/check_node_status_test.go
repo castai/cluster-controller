@@ -37,13 +37,15 @@ func TestCheckNodeStatusHandler_Handle_Deleted(t *testing.T) {
 		action *castai.ClusterAction
 	}
 
-	nodeID := "node-id-123"
 	nodeObject := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: nodeName,
 			Labels: map[string]string{
 				castai.LabelNodeID: nodeID,
 			},
+		},
+		Spec: v1.NodeSpec{
+			ProviderID: providerID,
 		},
 	}
 
@@ -53,9 +55,124 @@ func TestCheckNodeStatusHandler_Handle_Deleted(t *testing.T) {
 		args    args
 		wantErr error
 	}{
+
 		{
 			name:    "action is nil",
 			wantErr: errAction,
+		},
+		{
+			name: "return error when action data with wrong action type",
+			args: args{
+				action: &castai.ClusterAction{
+					ActionDrainNode: &castai.ActionDrainNode{},
+				},
+			},
+			wantErr: errAction,
+		},
+		{
+			name: "provider is not matching",
+			args: args{
+				action: newActionCheckNodeStatus(nodeName, nodeID, "another-provider-id", castai.ActionCheckNodeStatus_DELETED, nil),
+			},
+			fields: fields{
+				tuneFakeObjects: []runtime.Object{
+					nodeObject,
+				},
+			},
+		},
+		{
+			name: "provider id of Node is empty but nodeID matches",
+			args: args{
+				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_DELETED, nil),
+			},
+			fields: fields{
+				tuneFakeObjects: []runtime.Object{
+					&v1.Node{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: nodeName,
+							Labels: map[string]string{
+								castai.LabelNodeID: nodeID,
+							},
+						},
+						Spec: v1.NodeSpec{
+							ProviderID: "",
+						},
+					},
+				},
+			},
+			wantErr: errNodeNotDeleted,
+		},
+		{
+			name: "provider id of request is empty but nodeID matches",
+			args: args{
+				action: newActionCheckNodeStatus(nodeName, nodeID, "", castai.ActionCheckNodeStatus_DELETED, nil),
+			},
+			fields: fields{
+				tuneFakeObjects: []runtime.Object{
+					nodeObject,
+				},
+			},
+			wantErr: errNodeNotDeleted,
+		},
+		{
+			name: "node id at label is empty but provider ID matches",
+			args: args{
+				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_DELETED, nil),
+			},
+			fields: fields{
+				tuneFakeObjects: []runtime.Object{
+					&v1.Node{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:   nodeName,
+							Labels: map[string]string{},
+						},
+						Spec: v1.NodeSpec{
+							ProviderID: providerID,
+						},
+					},
+				},
+			},
+			wantErr: errNodeNotDeleted,
+		},
+		{
+			name: "node id at request is empty but provider ID matches",
+			args: args{
+				action: newActionCheckNodeStatus(nodeName, "", providerID, castai.ActionCheckNodeStatus_DELETED, nil),
+			},
+			fields: fields{
+				tuneFakeObjects: []runtime.Object{
+					nodeObject,
+				},
+			},
+			wantErr: errNodeNotDeleted,
+		},
+		{
+			name: "node with the same name exists but IDs does not match",
+			fields: fields{
+				tuneFakeObjects: []runtime.Object{
+					nodeObject,
+				},
+			},
+			args: args{
+				action: newActionCheckNodeStatus(nodeName, "another-node-id", "another-provider-id", castai.ActionCheckNodeStatus_DELETED, nil),
+			},
+		},
+		{
+			name: "node with the same name exists but node id does not match (provider matches)",
+			fields: fields{
+				tuneFakeObjects: []runtime.Object{
+					nodeObject,
+				},
+			},
+			args: args{
+				action: newActionCheckNodeStatus(nodeName, "another-node-id", providerID, castai.ActionCheckNodeStatus_DELETED, nil),
+			},
+		},
+		{
+			name: "handle check successfully when node is not found",
+			args: args{
+				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_DELETED, nil),
+			},
 		},
 		{
 			name: "return error when node is not deleted",
@@ -65,48 +182,9 @@ func TestCheckNodeStatusHandler_Handle_Deleted(t *testing.T) {
 				},
 			},
 			args: args{
-				action: &castai.ClusterAction{
-					ID: uuid.New().String(),
-					ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
-						WaitTimeoutSeconds: lo.ToPtr(int32(100)),
-						NodeName:           nodeName,
-						NodeStatus:         castai.ActionCheckNodeStatus_DELETED,
-						NodeID:             nodeID,
-					},
-				},
+				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_DELETED, nil),
 			},
 			wantErr: errNodeNotDeleted,
-		},
-		{
-			name: "node is deleted, if node with the same name exists but id does not match",
-			fields: fields{
-				tuneFakeObjects: []runtime.Object{
-					nodeObject,
-				},
-			},
-			args: args{
-				action: &castai.ClusterAction{
-					ID: uuid.New().String(),
-					ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
-						NodeName:   nodeName,
-						NodeStatus: castai.ActionCheckNodeStatus_DELETED,
-						NodeID:     "different-node-id",
-					},
-				},
-			},
-		},
-		{
-			name: "handle check successfully when node is not found",
-			args: args{
-				action: &castai.ClusterAction{
-					ID: uuid.New().String(),
-					ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
-						NodeName:   nodeName,
-						NodeStatus: castai.ActionCheckNodeStatus_DELETED,
-						NodeID:     nodeID,
-					},
-				},
-			},
 		},
 	}
 	for _, tt := range tests {
@@ -137,7 +215,6 @@ func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
 		action *castai.ClusterAction
 	}
 
-	nodeID := "node-id-123"
 	nodeUID := types.UID(uuid.New().String())
 	var nodeObjectNotReady, nodeObjectReady, nodeObjectReadyTainted, node2ObjectReadyAnotherNodeID runtime.Object
 	nodeObjectNotReady = &v1.Node{
@@ -430,4 +507,17 @@ func TestCheckStatus_Ready(t *testing.T) {
 
 		r.NoError(err)
 	})
+}
+
+func newActionCheckNodeStatus(nodeName, nodeID, providerID string, status castai.ActionCheckNodeStatus_Status, timeout *int32) *castai.ClusterAction {
+	return &castai.ClusterAction{
+		ID: uuid.New().String(),
+		ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
+			NodeName:           nodeName,
+			NodeID:             nodeID,
+			ProviderId:         providerID,
+			NodeStatus:         status,
+			WaitTimeoutSeconds: timeout,
+		},
+	}
 }

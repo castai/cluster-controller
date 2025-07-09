@@ -2,7 +2,6 @@ package actions
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"reflect"
 	"time"
@@ -12,7 +11,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/typed/core/v1"
 
+	"errors"
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
@@ -76,31 +77,34 @@ func (h *CheckNodeStatusHandler) checkNodeDeleted(ctx context.Context, log *logr
 		b,
 		waitext.Forever,
 		func(ctx context.Context) (bool, error) {
-			n, err := getNodeByIDs(ctx, h.clientset.CoreV1().Nodes(), req.NodeName, req.NodeID, req.ProviderId, log)
-			if n != nil {
-				return false, errNodeNotDeleted
-			}
-
-			if errors.Is(err, errNodeDoesNotMatch) {
-				log.WithFields(map[string]interface{}{
-					"node":        req.NodeName,
-					"node_id":     req.NodeID,
-					"provider_id": req.ProviderId,
-				}).Warnf("request node name %v", err.Error())
-				// it means that node with given name exists, but it does not match requested node ID or provider ID.
-				return false, nil
-			}
-
-			if errors.Is(err, errNodeNotFound) {
-				return false, nil
-			}
-
-			return true, err
+			return checkNodeDeleted(ctx, h.clientset.CoreV1().Nodes(), req.NodeName, req.NodeID, req.ProviderId, log)
 		},
 		func(err error) {
 			log.Warnf("check node %s status failed, will retry: %v", req.NodeName, err)
 		},
 	)
+}
+
+func checkNodeDeleted(ctx context.Context, clientSet v1.NodeInterface, nodeName, nodeID, providerID string, log logrus.FieldLogger) (bool, error) {
+	n, err := getNodeByIDs(ctx, clientSet, nodeName, nodeID, providerID, log)
+	if errors.Is(err, errNodeDoesNotMatch) {
+		// it means that node with given name exists, but it does not match requested node ID or provider ID.
+		return false, nil
+	}
+
+	if errors.Is(err, errNodeNotFound) {
+		return false, nil
+	}
+
+	if err != nil {
+		return true, err
+	}
+
+	if n == nil {
+		return false, nil
+	}
+
+	return false, errNodeNotDeleted
 }
 
 func (h *CheckNodeStatusHandler) checkNodeReady(ctx context.Context, _ *logrus.Entry, req *castai.ActionCheckNodeStatus) error {
