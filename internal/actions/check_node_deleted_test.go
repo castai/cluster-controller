@@ -6,13 +6,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/castai/cluster-controller/internal/castai"
-	"github.com/stretchr/testify/require"
 )
 
 func TestCheckNodeDeletedHandler_Handle(t *testing.T) {
@@ -34,6 +34,13 @@ func TestCheckNodeDeletedHandler_Handle(t *testing.T) {
 			name: "return error when action data is not ActionCheckNodeDeleted",
 			args: args{
 				action: &castai.ClusterAction{},
+			},
+			wantErr: errAction,
+		},
+		{
+			name: "empty node name",
+			args: args{
+				action: newActionCheckNodeDeleted("", nodeID, providerID),
 			},
 			wantErr: errAction,
 		},

@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"time"
@@ -13,7 +14,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/typed/core/v1"
 
-	"errors"
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
@@ -50,6 +50,9 @@ func (h *CheckNodeStatusHandler) Handle(ctx context.Context, action *castai.Clus
 		ActionIDLogField: action.ID,
 	})
 
+	if req.NodeName == "" {
+		return fmt.Errorf("node name is empty %w", errAction)
+	}
 	switch req.NodeStatus {
 	case castai.ActionCheckNodeStatus_READY:
 		log.Info("checking node ready")

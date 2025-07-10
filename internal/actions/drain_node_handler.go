@@ -91,7 +91,7 @@ func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 		ActionIDLogField: action.ID,
 	})
 
-	if req.NodeID == "" && req.ProviderId == "" {
+	if req.NodeName == "" || req.NodeID == "" && req.ProviderId == "" {
 		return fmt.Errorf("node ID and provider ID are empty %w", errAction)
 	}
 

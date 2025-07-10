@@ -159,3 +159,11 @@ func TestDeleteNodeHandler(t *testing.T) {
 		r.Len(va.Items, 0)
 	})
 }
+
+//{
+//name: "empty node name",
+//args: args{
+//action: newActionCheckNodeStatus("", nodeID, providerID, castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(1))),
+//},
+//wantErr: errAction,
+//},

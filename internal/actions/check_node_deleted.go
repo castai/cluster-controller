@@ -9,6 +9,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
 
+	"fmt"
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
@@ -52,6 +53,10 @@ func (h *CheckNodeDeletedHandler) Handle(ctx context.Context, action *castai.Clu
 		"provider_id":    req.ProviderId,
 		ActionIDLogField: action.ID,
 	})
+	if req.NodeName == "" {
+		return fmt.Errorf("node name is empty %w", errAction)
+	}
+
 	log.Info("checking if node is deleted")
 
 	boff := waitext.NewConstantBackoff(h.cfg.retryWait)

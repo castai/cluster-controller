@@ -2,6 +2,8 @@ package actions
 
 import (
 	"context"
+	"testing"
+
 	"github.com/google/uuid"
 	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
@@ -13,7 +15,6 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/fake"
 	k8stest "k8s.io/client-go/testing"
-	"testing"
 
 	"github.com/castai/cluster-controller/internal/castai"
 )
@@ -52,7 +53,6 @@ func TestCheckNodeStatusHandler_Handle_Deleted(t *testing.T) {
 		args    args
 		wantErr error
 	}{
-
 		{
 			name:    "action is nil",
 			wantErr: errAction,
@@ -301,6 +301,13 @@ func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
 	}{
 		{
 			name:    "action is nil",
+			wantErr: errAction,
+		},
+		{
+			name: "empty node name",
+			args: args{
+				action: newActionCheckNodeStatus("", nodeID, providerID, castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(1))),
+			},
 			wantErr: errAction,
 		},
 		{
