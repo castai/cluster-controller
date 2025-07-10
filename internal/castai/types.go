@@ -162,8 +162,9 @@ type ActionDrainNode struct {
 }
 
 type ActionEvictPod struct {
-	Namespace string `json:"namespace"`
-	PodName   string `json:"podName"`
+	Namespace      string `json:"namespace"`
+	PodName        string `json:"podName"`
+	TimeoutSeconds int    `json:"timeoutSeconds"`
 }
 
 type ActionPatchNode struct {

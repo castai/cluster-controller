@@ -49,11 +49,17 @@ func (h *EvictPodHandler) Handle(ctx context.Context, action *castai.ClusterActi
 		"namespace":      req.Namespace,
 		"pod":            req.PodName,
 	})
-	return h.handle(ctx, log, req)
+	return h.handle(ctx, log, action, req)
 }
 
-func (h *EvictPodHandler) handle(ctx context.Context, log logrus.FieldLogger, req *castai.ActionEvictPod) error {
-	log.Infof("evicting pod")
+func (h *EvictPodHandler) handle(ctx context.Context, log logrus.FieldLogger, action *castai.ClusterAction, req *castai.ActionEvictPod) error {
+	deadline, deadlineStr := h.computeDeadline(action, req)
+	if !deadline.IsZero() {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithDeadline(ctx, deadline)
+		defer cancel()
+	}
+	log.WithField("deadline", deadlineStr).Infof("evicting pod")
 	err := h.evictPod(ctx, log, req.Namespace, req.PodName)
 	if err != nil {
 		return fmt.Errorf("evict pod: %w", err)
@@ -159,4 +165,13 @@ func (h *EvictPodHandler) isPodDeleted(ctx context.Context, namespace, name stri
 		return true, "", nil
 	}
 	return false, p.Status.Phase, nil
+}
+
+func (h *EvictPodHandler) computeDeadline(action *castai.ClusterAction, req *castai.ActionEvictPod) (time.Time, string) {
+	if req.TimeoutSeconds > 0 {
+		deadline := action.CreatedAt.Add(time.Duration(req.TimeoutSeconds) * time.Second).UTC()
+		deadlineStr := deadline.Format(time.RFC3339)
+		return deadline, deadlineStr
+	}
+	return time.Time{}, "-"
 }

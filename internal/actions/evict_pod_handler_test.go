@@ -42,13 +42,37 @@ func TestEvictPodHandler(t *testing.T) {
 		)
 
 		action := newEvictPodAction(&castai.ActionEvictPod{
-			Namespace: pod.Namespace,
-			PodName:   pod.Name,
+			Namespace:      pod.Namespace,
+			PodName:        pod.Name,
+			TimeoutSeconds: 120,
 		})
 		err := h.Handle(ctx, action)
 		require.NoError(t, err)
 
 		requirePodNotExists(t, ctx, clientset, pod.Namespace, pod.Name)
+	})
+
+	t.Run("stops trying after the timeout", func(t *testing.T) {
+		t.Parallel()
+
+		clientset, pod := setupFakeClientWithPodEviction()
+
+		reactionErr := &apierrors.StatusError{ErrStatus: metav1.Status{Reason: metav1.StatusReasonTooManyRequests}}
+		reaction := failingPodEvictionReaction(reactionErr, 1000, nil)
+		prependPodEvictionReaction(clientset, reaction)
+
+		h := NewEvictPodHandler(
+			log,
+			clientset,
+		)
+
+		action := newEvictPodAction(&castai.ActionEvictPod{
+			Namespace:      pod.Namespace,
+			PodName:        pod.Name,
+			TimeoutSeconds: 1,
+		})
+		err := h.Handle(ctx, action)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
 	})
 
 	t.Run("retries on TooManyRequests status", func(t *testing.T) {
