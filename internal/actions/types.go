@@ -1,5 +1,6 @@
 //go:generate mockgen -destination ./mock/handler.go . ActionHandler
 //go:generate mockgen -package=mock_actions -destination ./mock/kubernetes.go k8s.io/client-go/kubernetes Interface
+//go:generate mockgen -package=mock_actions -destination ./mock/corev1.go k8s.io/client-go/kubernetes/typed/core/v1 NodeInterface
 
 package actions
 
@@ -17,7 +18,12 @@ const (
 	ActionIDLogField = "id"
 )
 
-var errAction = errors.New("not valid action")
+var (
+	errAction            = errors.New("not valid action")
+	errNodeNotFound      = errors.New("node not found")
+	errNodeDoesNotMatch  = fmt.Errorf("node does not match")
+	errNodeWatcherClosed = fmt.Errorf("node watcher closed, no more events will be received")
+)
 
 func newUnexpectedTypeErr(value, expectedType interface{}) error {
 	return fmt.Errorf("unexpected type %T, expected %T %w", value, expectedType, errAction)

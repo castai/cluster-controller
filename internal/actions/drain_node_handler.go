@@ -74,6 +74,9 @@ type DrainNodeHandler struct {
 }
 
 func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+	if action == nil {
+		return fmt.Errorf("action is nil %w", errAction)
+	}
 	req, ok := action.Data().(*castai.ActionDrainNode)
 	if !ok {
 		return newUnexpectedTypeErr(action.Data(), req)
@@ -83,16 +86,23 @@ func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	log := h.log.WithFields(logrus.Fields{
 		"node_name":      req.NodeName,
 		"node_id":        req.NodeID,
+		"provider_id":    req.ProviderId,
 		"action":         reflect.TypeOf(action.Data().(*castai.ActionDrainNode)).String(),
 		ActionIDLogField: action.ID,
 	})
 
-	node, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
+	log.Info("draining kubernetes node")
+	if req.NodeName == "" ||
+		(req.NodeID == "" && req.ProviderId == "") {
+		return fmt.Errorf("node name or node ID/provider ID is empty %w", errAction)
+	}
+
+	node, err := getNodeByIDs(ctx, h.clientset.CoreV1().Nodes(), req.NodeName, req.NodeID, req.ProviderId, log)
+	if errors.Is(err, errNodeNotFound) {
+		log.Info("node not found, skipping draining")
+		return nil
+	}
 	if err != nil {
-		if apierrors.IsNotFound(err) {
-			log.Info("node not found, skipping draining")
-			return nil
-		}
 		return err
 	}
 
@@ -339,6 +349,7 @@ func (h *DrainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.F
 			continue
 		}
 
+		// skip pods created on the node with the same name.
 		if !isDaemonSetPod(&p) && !isStaticPod(&p) {
 			podsToEvict = append(podsToEvict, p)
 		}
