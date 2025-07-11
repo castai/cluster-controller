@@ -12,10 +12,10 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/castai/cluster-controller/internal/castai"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
 func TestPatchNodeHandler_Handle(t *testing.T) {
@@ -272,9 +272,11 @@ func TestPatchNodeHandler_Handle(t *testing.T) {
 	}
 }
 
-func newPatchNodeAction(nodeName, nodeID, providerID string,
+func newPatchNodeAction(
+	nodeName, nodeID, providerID string,
 	labels, annotations map[string]string, taints []castai.NodeTaint, capacity map[v1.ResourceName]resource.Quantity,
-	unschedulable *bool) *castai.ClusterAction {
+	unschedulable *bool,
+) *castai.ClusterAction {
 	return &castai.ClusterAction{
 		ID: uuid.New().String(),
 		ActionPatchNode: &castai.ActionPatchNode{

@@ -3,13 +3,13 @@ package actions
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"time"
 
 	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
 
-	"fmt"
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
