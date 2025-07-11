@@ -262,6 +262,35 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 		wantNodeNotCordoned bool
 	}{
 		{
+			name:    "nil",
+			args:    args{},
+			wantErr: errAction,
+		},
+		{
+			name: "wrong action type",
+			args: args{
+				action: &castai.ClusterAction{
+					ActionDeleteNode: &castai.ActionDeleteNode{},
+				},
+			},
+			wantErr: errAction,
+		},
+		{
+			name: "empty node name",
+			args: args{
+				action: newActionDrainNode("", nodeID, providerID, 1, true),
+			},
+			wantErr: errAction,
+		},
+		{
+			name: "empty node ID and provider ID",
+			args: args{
+				action: newPatchNodeAction(nodeName, "", "",
+					nil, nil, nil, nil, nil),
+			},
+			wantErr: errAction,
+		},
+		{
 			name: "action without node id and provider id",
 			fields: fields{
 				clientSet: func() *fake.Clientset {
