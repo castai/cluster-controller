@@ -44,14 +44,15 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 				node: &v1.Node{
 					ObjectMeta: metav1.ObjectMeta{
 						Labels: map[string]string{
-							castai.LabelNodeID: "node-id-123-existed",
+							castai.LabelNodeID: nodeID,
 						},
 					},
 					Spec: v1.NodeSpec{
-						ProviderID: "provider-id-456",
+						ProviderID: providerID,
 					},
 				},
-				providerID: "provider-id-456",
+				providerID: providerID,
+				nodeID:     "",
 			},
 			wantErr: errNodeDoesNotMatch,
 		},
@@ -65,10 +66,11 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 						},
 					},
 					Spec: v1.NodeSpec{
-						ProviderID: "provider-id-456",
+						ProviderID: providerID,
 					},
 				},
-				providerID: "provider-id-456",
+				providerID: providerID,
+				nodeID:     "",
 			},
 		},
 		{
@@ -79,10 +81,11 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 						Labels: map[string]string{},
 					},
 					Spec: v1.NodeSpec{
-						ProviderID: "provider-id-456",
+						ProviderID: providerID,
 					},
 				},
-				providerID: "provider-id-456",
+				providerID: providerID,
+				nodeID:     "",
 			},
 		},
 		{
@@ -96,8 +99,8 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 						ProviderID: "",
 					},
 				},
-				nodeID:     "node-id-123",
-				providerID: "provider-id-456",
+				nodeID:     nodeID,
+				providerID: providerID,
 			},
 			wantErr: errNodeDoesNotMatch,
 		},
@@ -109,11 +112,11 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 						Labels: map[string]string{},
 					},
 					Spec: v1.NodeSpec{
-						ProviderID: "provider-id-456",
+						ProviderID: providerID,
 					},
 				},
-				nodeID:     "node-id-123",
-				providerID: "provider-id-456",
+				nodeID:     nodeID,
+				providerID: providerID,
 			},
 		},
 		{
@@ -122,15 +125,15 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 				node: &v1.Node{
 					ObjectMeta: metav1.ObjectMeta{
 						Labels: map[string]string{
-							castai.LabelNodeID: "node-id-123",
+							castai.LabelNodeID: nodeID,
 						},
 					},
 					Spec: v1.NodeSpec{
 						ProviderID: "",
 					},
 				},
-				nodeID:     "node-id-123",
-				providerID: "provider-id-456",
+				nodeID:     nodeID,
+				providerID: providerID,
 			},
 		},
 		{
@@ -139,15 +142,15 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 				node: &v1.Node{
 					ObjectMeta: metav1.ObjectMeta{
 						Labels: map[string]string{
-							castai.LabelNodeID: "node-id-123",
+							castai.LabelNodeID: nodeID,
 						},
 					},
 					Spec: v1.NodeSpec{
-						ProviderID: "provider-id-456",
+						ProviderID: providerID,
 					},
 				},
-				nodeID:     "node-id-123",
-				providerID: "provider-id-456",
+				nodeID:     nodeID,
+				providerID: providerID,
 			},
 		},
 		{
@@ -160,11 +163,11 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 						},
 					},
 					Spec: v1.NodeSpec{
-						ProviderID: "provider-id-456",
+						ProviderID: providerID,
 					},
 				},
-				nodeID:     "node-id-123",
-				providerID: "provider-id-456",
+				nodeID:     nodeID,
+				providerID: providerID,
 			},
 			wantErr: errNodeDoesNotMatch,
 		},
@@ -178,10 +181,10 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 						},
 					},
 					Spec: v1.NodeSpec{
-						ProviderID: "provider-id-456",
+						ProviderID: providerID,
 					},
 				},
-				nodeID:     "node-id-123",
+				nodeID:     nodeID,
 				providerID: "",
 			},
 			wantErr: errNodeDoesNotMatch,
@@ -199,8 +202,26 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 						ProviderID: "provider-id-456-not-matching",
 					},
 				},
-				nodeID:     "node-id-123",
-				providerID: "provider-id-456",
+				nodeID:     nodeID,
+				providerID: providerID,
+			},
+			wantErr: errNodeDoesNotMatch,
+		},
+		{
+			name: "node ID is match and provider ID does not match",
+			args: args{
+				node: &v1.Node{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							castai.LabelNodeID: nodeID,
+						},
+					},
+					Spec: v1.NodeSpec{
+						ProviderID: "provider-id-456-not-matching",
+					},
+				},
+				nodeID:     nodeID,
+				providerID: providerID,
 			},
 			wantErr: errNodeDoesNotMatch,
 		},
@@ -210,14 +231,14 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 				node: &v1.Node{
 					ObjectMeta: metav1.ObjectMeta{
 						Labels: map[string]string{
-							castai.LabelNodeID: "node-id-123",
+							castai.LabelNodeID: nodeID,
 						},
 					},
 					Spec: v1.NodeSpec{
-						ProviderID: "provider-id-456-not-matching",
+						ProviderID: providerID,
 					},
 				},
-				nodeID:     "node-id-123",
+				nodeID:     nodeID,
 				providerID: "",
 			},
 		},
@@ -227,15 +248,15 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 				node: &v1.Node{
 					ObjectMeta: metav1.ObjectMeta{
 						Labels: map[string]string{
-							castai.LabelNodeID: "node-id-123",
+							castai.LabelNodeID: nodeID,
 						},
 					},
 					Spec: v1.NodeSpec{
 						ProviderID: "",
 					},
 				},
-				nodeID:     "node-id-123",
-				providerID: "provider-id-456",
+				nodeID:     nodeID,
+				providerID: providerID,
 			},
 		},
 	}
