@@ -415,8 +415,22 @@ func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
 			},
 		},
 		{
-			name:   "handle check successfully when node become ready - removed taint",
-			fields: fields{},
+			name: "handle check successfully when node become ready - removed taint",
+			fields: fields{
+				tuneFakeObjects: []tuneFakeObjects{
+					{
+						event:  watch.Modified,
+						object: nodeObjectReadyTainted,
+					},
+					{
+						event:  watch.Modified,
+						object: nodeObjectReady,
+					},
+				},
+			},
+			args: args{
+				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(1))),
+			},
 		},
 	}
 	for _, tt := range tests {
