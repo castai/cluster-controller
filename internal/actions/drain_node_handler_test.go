@@ -262,8 +262,13 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 		wantNodeNotCordoned bool
 	}{
 		{
-			name:    "nil",
-			args:    args{},
+			name: "nil",
+			args: args{},
+			fields: fields{
+				clientSet: func() *fake.Clientset {
+					return fake.NewClientset()
+				},
+			},
 			wantErr: errAction,
 		},
 		{
@@ -273,12 +278,22 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 					ActionDeleteNode: &castai.ActionDeleteNode{},
 				},
 			},
+			fields: fields{
+				clientSet: func() *fake.Clientset {
+					return fake.NewClientset()
+				},
+			},
 			wantErr: errAction,
 		},
 		{
 			name: "empty node name",
 			args: args{
 				action: newActionDrainNode("", nodeID, providerID, 1, true),
+			},
+			fields: fields{
+				clientSet: func() *fake.Clientset {
+					return setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
+				},
 			},
 			wantErr: errAction,
 		},
@@ -570,6 +585,10 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 			if tt.wantErr != nil {
 				require.ErrorAs(t, err, &tt.wantErr)
 				require.ErrorContains(t, err, tt.wantErrorContains)
+			}
+
+			if err != nil {
+				return
 			}
 
 			n, err := h.clientset.CoreV1().Nodes().Get(context.Background(), tt.args.action.ActionDrainNode.NodeName, metav1.GetOptions{})
