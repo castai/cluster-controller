@@ -39,7 +39,7 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 			wantErr: errAction,
 		},
 		{
-			name: "request node ID is empty but node id exists in node labels",
+			name: "request node ID is empty but node id exists in node labels and provider ID matches",
 			args: args{
 				node: &v1.Node{
 					ObjectMeta: metav1.ObjectMeta{
@@ -54,7 +54,6 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 				providerID: providerID,
 				nodeID:     "",
 			},
-			wantErr: errNodeDoesNotMatch,
 		},
 		{
 			name: "request and labels node ID are empty but provider ID matches",

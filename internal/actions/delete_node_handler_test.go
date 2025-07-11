@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
@@ -14,6 +13,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
+
+	"github.com/castai/cluster-controller/internal/castai"
 )
 
 func TestDeleteNodeHandler_Handle(t *testing.T) {
@@ -168,7 +169,6 @@ func TestDeleteNodeHandler_Handle(t *testing.T) {
 			} else {
 				require.NoError(t, err, "node should not be deleted, but got: %v", err)
 			}
-
 		})
 	}
 }
