@@ -81,15 +81,11 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 		func(ctx context.Context) (bool, error) {
 			current, err := getNodeByIDs(ctx, h.clientset.CoreV1().Nodes(), req.NodeName, req.NodeID, req.ProviderId, log)
 			if err != nil {
-				if errors.Is(err, errNodeNotFound) {
-					log.Info("node not found, skipping delete")
-					return false, nil
+				if errors.Is(err, errNodeNotFound) || errors.Is(err, errNodeDoesNotMatch) {
+					return false, err
 				}
-				if errors.Is(err, errNodeDoesNotMatch) {
-					log.Info("node not valid, skipping delete")
-					return false, nil
-				}
-				return true, fmt.Errorf("error getting node: %w", err)
+
+				return true, err
 			}
 
 			err = h.clientset.CoreV1().Nodes().Delete(ctx, current.Name, metav1.DeleteOptions{
@@ -98,8 +94,7 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 				},
 			})
 			if apierrors.IsNotFound(err) {
-				log.Info("node not found, skipping delete")
-				return false, nil
+				return false, errNodeNotFound
 			}
 			return true, err
 		},
@@ -107,7 +102,14 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 			h.log.Warnf("error deleting kubernetes node, will retry: %v", err)
 		},
 	)
+
+	if errors.Is(err, errNodeNotFound) || errors.Is(err, errNodeDoesNotMatch) {
+		log.Infof("node already deleted or does not match the requested node ID/provider ID")
+		return nil
+	}
+
 	if err != nil {
+		log.Errorf("error deleting kubernetes node: %v", err)
 		return fmt.Errorf("error removing node %w", err)
 	}
 
