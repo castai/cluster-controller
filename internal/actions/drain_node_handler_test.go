@@ -303,6 +303,11 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 				action: newPatchNodeAction(nodeName, "", "",
 					nil, nil, nil, nil, nil),
 			},
+			fields: fields{
+				clientSet: func() *fake.Clientset {
+					return setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
+				},
+			},
 			wantErr: errAction,
 		},
 		{
