@@ -51,6 +51,9 @@ type DeleteNodeHandler struct {
 }
 
 func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+	if action == nil {
+		return fmt.Errorf("action is nil %w", errAction)
+	}
 	req, ok := action.Data().(*castai.ActionDeleteNode)
 	if !ok {
 		return newUnexpectedTypeErr(action.Data(), req)

@@ -160,10 +160,138 @@ func TestDeleteNodeHandler(t *testing.T) {
 	})
 }
 
-//{
-//name: "empty node name",
-//args: args{
-//action: newActionCheckNodeStatus("", nodeID, providerID, castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(1))),
-//},
-//wantErr: errAction,
-//},
+func TestDeleteNodeHandler_Handle(t *testing.T) {
+	t.Parallel()
+
+	type fields struct {
+		DrainNodeHandler DrainNodeHandler
+		clientSet        func() *fake.Clientset
+		cfg              deleteNodeConfig
+	}
+	type args struct {
+		action *castai.ClusterAction
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr error
+	}{
+		{
+			name: "nil",
+			args: args{},
+			fields: fields{
+				clientSet: func() *fake.Clientset {
+					return fake.NewClientset()
+				},
+			},
+			wantErr: errAction,
+		},
+		{
+			name: "wrong action type",
+			args: args{
+				action: &castai.ClusterAction{
+					ActionDrainNode: &castai.ActionDrainNode{},
+				},
+			},
+			fields: fields{
+				clientSet: func() *fake.Clientset {
+					return fake.NewClientset()
+				},
+			},
+			wantErr: errAction,
+		},
+		{
+			name: "empty node name",
+			args: args{
+				action: newActionDeleteNode("", nodeID, providerID),
+			},
+			fields: fields{
+				clientSet: func() *fake.Clientset {
+					return setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
+				},
+			},
+			wantErr: errAction,
+		},
+		{
+			name: "empty node ID and provider ID",
+			args: args{
+				action: newActionDeleteNode(nodeName, "", ""),
+			},
+			fields: fields{
+				clientSet: func() *fake.Clientset {
+					return setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
+				},
+			},
+			wantErr: errAction,
+		},
+		{
+			name: "action with another node id and provider id - node not found",
+			fields: fields{
+				clientSet: func() *fake.Clientset {
+					return setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
+				},
+			},
+			args: args{
+				action: newActionDeleteNode(nodeName, "another-node-id", "another-provider-id"),
+			},
+			wantErr: errNodeDoesNotMatch,
+		},
+		{
+			name: "action with proper node id and another provider id - node not found",
+			fields: fields{
+				clientSet: func() *fake.Clientset {
+					return setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
+				},
+			},
+			args: args{
+				action: newActionDrainNode(nodeName, nodeID, "another-provider-id", 1, true),
+			},
+			wantErr: errNodeDoesNotMatch,
+		},
+		{
+			name: "action with another node id and proper provider id - node not found",
+			fields: fields{
+				clientSet: func() *fake.Clientset {
+					return setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
+				},
+			},
+			args: args{
+				action: newActionDrainNode(nodeName, nodeID, "another-provider-id", 1, true),
+			},
+			wantErr: errNodeDoesNotMatch,
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			h := &DeleteNodeHandler{
+				DrainNodeHandler: tt.fields.DrainNodeHandler,
+				log:              logrus.New(),
+				clientset:        tt.fields.clientSet(),
+				cfg:              tt.fields.cfg,
+			}
+			err := h.Handle(context.Background(), tt.args.action)
+			require.Equal(t, tt.wantErr != nil, err != nil, "expected error: %v, got: %v", tt.wantErr, err)
+			if tt.wantErr != nil {
+				require.ErrorAs(t, err, &tt.wantErr)
+			}
+
+			if err != nil {
+				return
+			}
+
+		})
+	}
+}
+
+func newActionDeleteNode(nodeName, nodeID, providerID string) *castai.ClusterAction {
+	return &castai.ClusterAction{
+		ActionDeleteNode: &castai.ActionDeleteNode{
+			NodeName:   nodeName,
+			NodeID:     nodeID,
+			ProviderId: providerID,
+		},
+	}
+}
