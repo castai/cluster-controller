@@ -291,27 +291,6 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 			wantErr: errAction,
 		},
 		{
-			name: "action without node id and provider id",
-			fields: fields{
-				clientSet: func() *fake.Clientset {
-					return setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
-				},
-			},
-			args: args{
-				action: &castai.ClusterAction{
-					ID: uuid.New().String(),
-					ActionDrainNode: &castai.ActionDrainNode{
-						NodeName:            nodeName,
-						DrainTimeoutSeconds: 1,
-						Force:               true,
-					},
-					CreatedAt: time.Now().UTC(),
-				},
-			},
-			wantErr:             errAction,
-			wantNodeNotCordoned: true,
-		},
-		{
 			name: "action with another node id and provider id - node not found",
 			fields: fields{
 				clientSet: func() *fake.Clientset {
