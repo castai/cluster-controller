@@ -91,8 +91,10 @@ func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 		ActionIDLogField: action.ID,
 	})
 
-	if req.NodeName == "" || req.NodeID == "" && req.ProviderId == "" {
-		return fmt.Errorf("node ID and provider ID are empty %w", errAction)
+	log.Info("draining kubernetes node")
+	if req.NodeName == "" ||
+		(req.NodeID == "" && req.ProviderId == "") {
+		return fmt.Errorf("node name or node ID/provider ID is empty %w", errAction)
 	}
 
 	node, err := getNodeByIDs(ctx, h.clientset.CoreV1().Nodes(), req.NodeName, req.NodeID, req.ProviderId, log)

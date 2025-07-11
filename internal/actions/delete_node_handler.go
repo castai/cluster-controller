@@ -63,10 +63,11 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 		"type":           reflect.TypeOf(action.Data().(*castai.ActionDeleteNode)).String(),
 		ActionIDLogField: action.ID,
 	})
-	log.Info("deleting kubernetes node")
 
-	if req.NodeName == "" {
-		return fmt.Errorf("node name is empty %w", errAction)
+	log.Info("deleting kubernetes node")
+	if req.NodeName == "" ||
+		(req.NodeID == "" && req.ProviderId == "") {
+		return fmt.Errorf("node name or node ID/provider ID is empty %w", errAction)
 	}
 
 	b := waitext.NewConstantBackoff(h.cfg.deleteRetryWait)

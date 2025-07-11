@@ -15,171 +15,277 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/castai/cluster-controller/internal/castai"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
-func TestPatchNodeHandler(t *testing.T) {
-	r := require.New(t)
-
-	log := logrus.New()
-	log.SetLevel(logrus.DebugLevel)
-
-	t.Run("patch successfully", func(t *testing.T) {
-		nodeName := "node1"
-		providerID := "provider-id-123"
-		node := &v1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: nodeName,
-				Labels: map[string]string{
-					"l1": "v1",
-				},
-				Annotations: map[string]string{
-					"a1": "v1",
+func TestPatchNodeHandler_Handle(t *testing.T) {
+	t.Parallel()
+	type fields struct {
+		retryTimeout    time.Duration
+		tuneFakeObjects []runtime.Object
+	}
+	type args struct {
+		action *castai.ClusterAction
+	}
+	tests := []struct {
+		name              string
+		fields            fields
+		args              args
+		wantErr           error
+		wantLabels        map[string]string
+		wantAnnotations   map[string]string
+		wantTaints        []v1.Taint
+		wantCapacity      v1.ResourceList
+		wantUnschedulable bool
+	}{
+		{
+			name:    "nil",
+			args:    args{},
+			wantErr: errAction,
+		},
+		{
+			name: "wrong action type",
+			args: args{
+				action: &castai.ClusterAction{
+					ActionDeleteNode: &castai.ActionDeleteNode{},
 				},
 			},
-			Spec: v1.NodeSpec{
-				ProviderID: providerID,
-				Taints: []v1.Taint{
-					{
-						Key:    "t1",
-						Value:  "v1",
-						Effect: v1.TaintEffectNoSchedule,
+			wantErr: errAction,
+		},
+		{
+			name: "labels contain entry with empty key",
+			args: args{
+				action: newPatchNodeAction(nodeName, nodeID, providerID,
+					map[string]string{
+						"": "v1",
 					},
-					{
-						Key:    "t2",
-						Value:  "v2",
-						Effect: v1.TaintEffectNoSchedule,
+					nil, nil, nil, nil),
+			},
+			wantErr: errAction,
+		},
+		{
+			name: "annotations contain entry with empty key",
+			args: args{
+				action: newPatchNodeAction(nodeName, nodeID, providerID,
+					nil,
+					map[string]string{
+						"": "v1",
+					},
+					nil, nil, nil),
+			},
+			wantErr: errAction,
+		},
+		{
+			name: "taints contain entry with empty key",
+			args: args{
+				action: newPatchNodeAction(nodeName, nodeID, providerID,
+					nil, nil,
+					[]castai.NodeTaint{
+						{
+							Key:   "",
+							Value: "v1",
+						},
+					},
+					nil, nil),
+			},
+			wantErr: errAction,
+		},
+		{
+			name: "empty node name",
+			args: args{
+				action: newPatchNodeAction("", nodeID, providerID,
+					nil, nil, nil, nil, nil),
+			},
+			wantErr: errAction,
+		},
+		{
+			name: "empty node ID and provider ID",
+			args: args{
+				action: newPatchNodeAction(nodeName, "", "",
+					nil, nil, nil, nil, nil),
+			},
+			wantErr: errAction,
+		},
+		{
+			name: "empty node ID and provider ID at Node", // for Azure legacy nodes it is real case, we consider it as error
+			fields: fields{
+				retryTimeout: time.Millisecond,
+				tuneFakeObjects: []runtime.Object{
+					&v1.Node{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: nodeName,
+						},
 					},
 				},
 			},
-		}
-		clientset := fake.NewSimpleClientset(node)
-
-		h := PatchNodeHandler{
-			log:       log,
-			clientset: clientset,
-		}
-
-		action := &castai.ClusterAction{
-			ID: uuid.New().String(),
-			ActionPatchNode: &castai.ActionPatchNode{
-				NodeName:   "node1",
-				ProviderId: providerID,
-				Labels: map[string]string{
-					"-l1": "",
-					"l2":  "v2",
-				},
-				Annotations: map[string]string{
-					"-a1": "",
-					"a2":  "",
-				},
-				Taints: []castai.NodeTaint{
-					{
-						Key:    "t3",
-						Value:  "t3",
-						Effect: string(v1.TaintEffectNoSchedule),
+			args: args{
+				action: newPatchNodeAction(nodeName, nodeID, providerID,
+					nil, nil, nil, nil, nil),
+			},
+			wantErr: errNodeDoesNotMatch,
+		},
+		{
+			name: "patch node successfully",
+			fields: fields{
+				retryTimeout: time.Millisecond,
+				tuneFakeObjects: []runtime.Object{
+					&v1.Node{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: nodeName,
+							Labels: map[string]string{
+								"l1": "v1",
+							},
+							Annotations: map[string]string{
+								"a1": "v1",
+							},
+						},
+						Spec: v1.NodeSpec{
+							ProviderID: providerID,
+							Taints: []v1.Taint{
+								{
+									Key:    "t1",
+									Value:  "v1",
+									Effect: v1.TaintEffectNoSchedule,
+								},
+								{
+									Key:    "t2",
+									Value:  "v2",
+									Effect: v1.TaintEffectNoSchedule,
+								},
+							},
+						},
 					},
-					{
-						Key:    "-t2",
-						Value:  "",
-						Effect: string(v1.TaintEffectNoSchedule),
+				},
+			},
+			args: args{
+				action: newPatchNodeAction(nodeName, nodeID, providerID,
+					map[string]string{
+						"-l1": "",
+						"l2":  "v2",
+					},
+					map[string]string{
+						"-a1": "",
+						"a2":  "",
+					},
+					[]castai.NodeTaint{
+						{
+							Key:    "t3",
+							Value:  "t3",
+							Effect: string(v1.TaintEffectNoSchedule),
+						},
+						{
+							Key:    "-t2",
+							Value:  "",
+							Effect: string(v1.TaintEffectNoSchedule),
+						},
+					},
+					map[v1.ResourceName]resource.Quantity{
+						"foo": resource.MustParse("123"),
+					},
+					nil,
+				),
+			},
+			wantLabels: map[string]string{
+				"l2": "v2",
+			},
+			wantAnnotations: map[string]string{
+				"a2": "",
+			},
+			wantTaints: []v1.Taint{
+				{Key: "t1", Value: "v1", Effect: "NoSchedule", TimeAdded: (*metav1.Time)(nil)},
+				{Key: "t3", Value: "t3", Effect: "NoSchedule", TimeAdded: (*metav1.Time)(nil)},
+			},
+			wantCapacity: map[v1.ResourceName]resource.Quantity{
+				"foo": resource.MustParse("123"),
+			},
+		},
+		{
+			name: "skip patch when node not found",
+			fields: fields{
+				retryTimeout: time.Millisecond,
+				tuneFakeObjects: []runtime.Object{
+					&v1.Node{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: nodeName,
+						},
 					},
 				},
-				Capacity: map[v1.ResourceName]resource.Quantity{
-					"foo": resource.MustParse("123"),
+			},
+			args: args{
+				action: newPatchNodeAction("notFoundNodeName", nodeID, providerID,
+					nil, nil, nil, nil, nil),
+			},
+		},
+		{
+			name: "cordoning node",
+			fields: fields{
+				retryTimeout: time.Millisecond,
+				tuneFakeObjects: []runtime.Object{
+					&v1.Node{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: nodeName,
+							Labels: map[string]string{
+								castai.LabelNodeID: nodeID,
+							},
+						},
+						Spec: v1.NodeSpec{
+							Unschedulable: false,
+						},
+					},
 				},
 			},
-		}
-
-		err := h.Handle(context.Background(), action)
-		r.NoError(err)
-
-		n, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
-		r.NoError(err)
-
-		expectedLabels := map[string]string{
-			"l2": "v2",
-		}
-		r.Equal(expectedLabels, n.Labels)
-
-		expectedAnnotations := map[string]string{
-			"a2": "",
-		}
-		r.Equal(expectedAnnotations, n.Annotations)
-
-		expectedTaints := []v1.Taint{
-			{Key: "t1", Value: "v1", Effect: "NoSchedule", TimeAdded: (*metav1.Time)(nil)},
-			{Key: "t3", Value: "t3", Effect: "NoSchedule", TimeAdded: (*metav1.Time)(nil)},
-		}
-		r.Equal(expectedTaints, n.Spec.Taints)
-
-		r.Equal(action.ActionPatchNode.Capacity["foo"], n.Status.Capacity["foo"])
-	})
-
-	t.Run("skip patch when node not found", func(t *testing.T) {
-		nodeName := "node1"
-		nodeID := "node-id-123"
-		node := &v1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: nodeName,
+			args: args{
+				action: newPatchNodeAction(nodeName, nodeID, providerID,
+					nil, nil, nil, nil, lo.ToPtr(true)),
 			},
-		}
-		clientset := fake.NewSimpleClientset(node)
-
-		action := &castai.ClusterAction{
-			ID: uuid.New().String(),
-			ActionPatchNode: &castai.ActionPatchNode{
-				NodeName: "already-deleted-node",
-				NodeID:   nodeID,
+			wantLabels: map[string]string{
+				castai.LabelNodeID: nodeID,
 			},
-		}
-		h := PatchNodeHandler{
-			retryTimeout: time.Millisecond,
-			log:          log,
-			clientset:    clientset,
-		}
+			wantUnschedulable: true,
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			clientSet := fake.NewClientset(tt.fields.tuneFakeObjects...)
+			h := &PatchNodeHandler{
+				retryTimeout: tt.fields.retryTimeout,
+				log:          logrus.New(),
+				clientset:    clientSet,
+			}
+			err := h.Handle(context.Background(), tt.args.action)
+			require.Equal(t, tt.wantErr != nil, err != nil, "Handle() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr, "Handle() error mismatch")
+			} else {
+				n, err := clientSet.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
+				require.NoError(t, err)
 
-		err := h.Handle(context.Background(), action)
-		r.NoError(err)
+				require.Equal(t, tt.wantLabels, n.Labels, "labels mismatch")
+				require.Equal(t, tt.wantAnnotations, n.Annotations, "annotations mismatch")
+				require.Equal(t, tt.wantTaints, n.Spec.Taints, "taints mismatch")
+				require.Equal(t, tt.wantCapacity, n.Status.Capacity, "capacity mismatch")
+				require.Equal(t, tt.wantUnschedulable, n.Spec.Unschedulable, "unschedulable mismatch")
+			}
+		})
+	}
+}
 
-		_, err = clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
-		r.NoError(err)
-	})
-
-	t.Run("cordoning node", func(t *testing.T) {
-		nodeName := "node1"
-		nodeID := "node-id-123"
-		node := &v1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: nodeName,
-				Labels: map[string]string{
-					castai.LabelNodeID: nodeID,
-				},
-			},
-			Spec: v1.NodeSpec{
-				Unschedulable: false,
-			},
-		}
-		clientset := fake.NewSimpleClientset(node)
-
-		h := PatchNodeHandler{
-			log:       log,
-			clientset: clientset,
-		}
-
-		action := &castai.ClusterAction{
-			ID: uuid.New().String(),
-			ActionPatchNode: &castai.ActionPatchNode{
-				NodeName:      "node1",
-				NodeID:        nodeID,
-				Unschedulable: lo.ToPtr(true),
-			},
-		}
-
-		err := h.Handle(context.Background(), action)
-		r.NoError(err)
-
-		n, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
-		r.NoError(err)
-		r.True(n.Spec.Unschedulable)
-	})
+func newPatchNodeAction(nodeName, nodeID, providerID string,
+	labels, annotations map[string]string, taints []castai.NodeTaint, capacity map[v1.ResourceName]resource.Quantity,
+	unschedulable *bool) *castai.ClusterAction {
+	return &castai.ClusterAction{
+		ID: uuid.New().String(),
+		ActionPatchNode: &castai.ActionPatchNode{
+			NodeName:      nodeName,
+			NodeID:        nodeID,
+			ProviderId:    providerID,
+			Labels:        labels,
+			Annotations:   annotations,
+			Taints:        taints,
+			Capacity:      capacity,
+			Unschedulable: unschedulable,
+		},
+	}
 }

@@ -53,8 +53,11 @@ func (h *CheckNodeDeletedHandler) Handle(ctx context.Context, action *castai.Clu
 		"provider_id":    req.ProviderId,
 		ActionIDLogField: action.ID,
 	})
-	if req.NodeName == "" {
-		return fmt.Errorf("node name is empty %w", errAction)
+
+	log.Info("checking if node is deleted")
+	if req.NodeName == "" ||
+		(req.NodeID == "" && req.ProviderId == "") {
+		return fmt.Errorf("node name or node ID/provider ID is empty %w", errAction)
 	}
 
 	log.Info("checking if node is deleted")

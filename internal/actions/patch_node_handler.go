@@ -34,6 +34,9 @@ type PatchNodeHandler struct {
 }
 
 func (h *PatchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+	if action == nil || action.Data() == nil {
+		return fmt.Errorf("action or action data is nil %w", errAction)
+	}
 	req, ok := action.Data().(*castai.ActionPatchNode)
 	if !ok {
 		return newUnexpectedTypeErr(action.Data(), req)
@@ -61,6 +64,12 @@ func (h *PatchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 		"action":         reflect.TypeOf(action.Data().(*castai.ActionPatchNode)).String(),
 		ActionIDLogField: action.ID,
 	})
+
+	log.Info("patching kubernetes node")
+	if req.NodeName == "" ||
+		(req.NodeID == "" && req.ProviderId == "") {
+		return fmt.Errorf("node name or node ID/provider ID is empty %w", errAction)
+	}
 
 	node, err := h.getNodeForPatching(ctx, req.NodeName, req.NodeID, req.ProviderId)
 	if err != nil {

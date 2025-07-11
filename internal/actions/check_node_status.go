@@ -50,9 +50,12 @@ func (h *CheckNodeStatusHandler) Handle(ctx context.Context, action *castai.Clus
 		ActionIDLogField: action.ID,
 	})
 
-	if req.NodeName == "" {
-		return fmt.Errorf("node name is empty %w", errAction)
+	log.Info("checking status of node")
+	if req.NodeName == "" ||
+		(req.NodeID == "" && req.ProviderId == "") {
+		return fmt.Errorf("node name or node ID/provider ID is empty %w", errAction)
 	}
+
 	switch req.NodeStatus {
 	case castai.ActionCheckNodeStatus_READY:
 		log.Info("checking node ready")
