@@ -20,6 +20,7 @@ import (
 
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/waitext"
+	"strings"
 )
 
 const (
@@ -122,7 +123,7 @@ func isNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string, log logru
 
 	// validate provider id only if non-empty in request and in Node spec
 	// Azure provider: provider id can be empty even if node is Ready
-	validProviderID := !emptyProviderID && node.Spec.ProviderID == providerID
+	validProviderID := !emptyProviderID && strings.EqualFold(node.Spec.ProviderID, providerID)
 
 	if nodeID == "" && validProviderID {
 		// if node ID is not set in labels, but provider ID is valid, node is valid
@@ -131,7 +132,7 @@ func isNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string, log logru
 
 	currentNodeID, ok := node.Labels[castai.LabelNodeID]
 	if ok && currentNodeID != "" {
-		if currentNodeID == nodeID {
+		if strings.EqualFold(currentNodeID, nodeID) {
 			if validProviderID {
 				// if node ID matches and provider ID is valid, node is valid
 				return nil

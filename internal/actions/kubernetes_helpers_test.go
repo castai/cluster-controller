@@ -153,6 +153,23 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 			},
 		},
 		{
+			name: "node ID and provider ID matches - different casing",
+			args: args{
+				node: &v1.Node{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							castai.LabelNodeID: nodeID + "DIFFERENT_CASE",
+						},
+					},
+					Spec: v1.NodeSpec{
+						ProviderID: providerID + "DIFFERENT_CASE",
+					},
+				},
+				nodeID:     nodeID + "different_case",
+				providerID: providerID + "different_case",
+			},
+		},
+		{
 			name: "node ID does not match label but provider ID matches",
 			args: args{
 				node: &v1.Node{
