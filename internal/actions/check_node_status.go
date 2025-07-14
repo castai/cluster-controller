@@ -92,6 +92,10 @@ func (h *CheckNodeStatusHandler) checkNodeDeleted(ctx context.Context, log *logr
 }
 
 func checkNodeDeleted(ctx context.Context, clientSet v1.NodeInterface, nodeName, nodeID, providerID string, log logrus.FieldLogger) (bool, error) {
+	// If node is nil - deleted
+	// If label is present and doesn't match - node was reused - deleted
+	// If label is present and matches - node is not deleted
+	// all other use cases can be found in tests
 	n, err := getNodeByIDs(ctx, clientSet, nodeName, nodeID, providerID, log)
 	if errors.Is(err, errNodeDoesNotMatch) {
 		// it means that node with given name exists, but it does not match requested node ID or provider ID.
