@@ -114,6 +114,7 @@ func getNodeByIDs(ctx context.Context, clientSet corev1.NodeInterface, nodeName,
 
 func isNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string, log logrus.FieldLogger) error {
 	if nodeID == "" && providerID == "" {
+		// if both node ID and provider ID are empty, we can't validate the node
 		return fmt.Errorf("node and provider IDs are empty %w", errAction)
 	}
 	emptyProviderID := providerID == "" || node.Spec.ProviderID == ""
@@ -127,7 +128,7 @@ func isNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string, log logru
 	}
 
 	if nodeID == "" && validProviderID {
-		// if node ID is not set in labels, but provider ID is valid, we can still proceed
+		// if node ID is not set in labels, but provider ID is valid, node is valid
 		return nil
 	}
 
@@ -135,18 +136,21 @@ func isNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string, log logru
 	if ok && currentNodeID != "" {
 		if currentNodeID == nodeID {
 			if validProviderID {
+				// if node ID matches and provider ID is valid, node is valid
 				return nil
 			}
 			if emptyProviderID {
+				// if node ID matches but provider ID is empty, node is valid
 				return nil
 			}
 		}
 	}
 	if (!ok || currentNodeID == "") && validProviderID {
-		// if node ID is not set in labels, but provider ID is valid, we can still proceed
+		// if node ID is not set in labels, but provider ID is valid, node is valid
 		return nil
 	}
 
+	// if we reach here, it means that node ID and/or provider ID does not match
 	return fmt.Errorf("node %v has ID %s and provider ID %s: %w",
 		node.Name, currentNodeID, node.Spec.ProviderID, errNodeDoesNotMatch)
 }
