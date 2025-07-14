@@ -349,7 +349,6 @@ func (h *DrainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.F
 			continue
 		}
 
-		// skip pods created on the node with the same name.
 		if !isDaemonSetPod(&p) && !isStaticPod(&p) {
 			podsToEvict = append(podsToEvict, p)
 		}
