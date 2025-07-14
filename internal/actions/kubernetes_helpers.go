@@ -117,13 +117,12 @@ func isNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string, log logru
 		return fmt.Errorf("node and provider IDs are empty %w", errAction)
 	}
 	emptyProviderID := providerID == "" || node.Spec.ProviderID == ""
-	validProviderID := false
 
 	// validate provider id only if non-empty in request and in Node spec
 	// Azure provider: provider id can be empty even if node is Ready
-	if !emptyProviderID && node.Spec.ProviderID == providerID {
-		validProviderID = true
-	} else if !emptyProviderID && node.Spec.ProviderID != providerID {
+	validProviderID := !emptyProviderID && node.Spec.ProviderID == providerID
+
+	if !emptyProviderID && node.Spec.ProviderID != providerID {
 		log.Errorf("node %v has provider ID %s, but requested provider ID is %s", node.Name, node.Spec.ProviderID, providerID)
 	}
 
