@@ -104,7 +104,7 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 	)
 
 	if errors.Is(err, errNodeNotFound) || errors.Is(err, errNodeDoesNotMatch) {
-		log.Infof("node already deleted or does not match the requested node ID/provider ID")
+		log.Infof("node already deleted or does not match the requested node ID/provider ID %v", err)
 		return nil
 	}
 
