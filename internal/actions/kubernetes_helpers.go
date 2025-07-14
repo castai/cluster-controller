@@ -112,6 +112,7 @@ func getNodeByIDs(ctx context.Context, clientSet corev1.NodeInterface, nodeName,
 	return n, nil
 }
 
+// isNodeIDProviderIDValid checks if the node's ID and provider ID match the requested ones.
 func isNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string, log logrus.FieldLogger) error {
 	if nodeID == "" && providerID == "" {
 		// if both node ID and provider ID are empty, we can't validate the node
