@@ -311,7 +311,7 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 			wantErr: errAction,
 		},
 		{
-			name: "action with another node id and provider id - node not found",
+			name: "action with another node id and provider id - skip drain",
 			fields: fields{
 				clientSet: func() *fake.Clientset {
 					return setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
@@ -320,11 +320,10 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 			args: args{
 				action: newActionDrainNode(nodeName, "another-node-id", "another-provider-id", 1, true),
 			},
-			wantErr:             errNodeDoesNotMatch,
 			wantNodeNotCordoned: true,
 		},
 		{
-			name: "action with proper node id and another provider id - node not found",
+			name: "action with proper node id and another provider id - skip drain",
 			fields: fields{
 				clientSet: func() *fake.Clientset {
 					return setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
@@ -333,11 +332,10 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 			args: args{
 				action: newActionDrainNode(nodeName, nodeID, "another-provider-id", 1, true),
 			},
-			wantErr:             errNodeDoesNotMatch,
 			wantNodeNotCordoned: true,
 		},
 		{
-			name: "action with another node id and proper provider id - node not found",
+			name: "action with another node id and proper provider id - skip drain",
 			fields: fields{
 				clientSet: func() *fake.Clientset {
 					return setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
@@ -346,7 +344,6 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 			args: args{
 				action: newActionDrainNode(nodeName, nodeID, "another-provider-id", 1, true),
 			},
-			wantErr:             errNodeDoesNotMatch,
 			wantNodeNotCordoned: true,
 		},
 		{

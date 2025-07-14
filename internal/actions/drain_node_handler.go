@@ -98,7 +98,7 @@ func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	}
 
 	node, err := getNodeByIDs(ctx, h.clientset.CoreV1().Nodes(), req.NodeName, req.NodeID, req.ProviderId, log)
-	if errors.Is(err, errNodeNotFound) {
+	if errors.Is(err, errNodeNotFound) || errors.Is(err, errNodeDoesNotMatch) {
 		log.Info("node not found, skipping draining")
 		return nil
 	}
