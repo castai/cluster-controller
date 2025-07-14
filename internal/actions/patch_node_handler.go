@@ -3,33 +3,40 @@ package actions
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/waitext"
 )
 
 var _ ActionHandler = &PatchNodeHandler{}
 
 func NewPatchNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface) *PatchNodeHandler {
 	return &PatchNodeHandler{
-		log:       log,
-		clientset: clientset,
+		retryTimeout: 5 * time.Second, // default timeout for retrying node patching
+		log:          log,
+		clientset:    clientset,
 	}
 }
 
 type PatchNodeHandler struct {
-	log       logrus.FieldLogger
-	clientset kubernetes.Interface
+	retryTimeout time.Duration
+	log          logrus.FieldLogger
+	clientset    kubernetes.Interface
 }
 
 func (h *PatchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+	if action == nil || action.Data() == nil {
+		return fmt.Errorf("action or action data is nil %w", errAction)
+	}
 	req, ok := action.Data().(*castai.ActionPatchNode)
 	if !ok {
 		return newUnexpectedTypeErr(action.Data(), req)
@@ -53,13 +60,20 @@ func (h *PatchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	log := h.log.WithFields(logrus.Fields{
 		"node_name":      req.NodeName,
 		"node_id":        req.NodeID,
+		"provider_id":    req.ProviderId,
 		"action":         reflect.TypeOf(action.Data().(*castai.ActionPatchNode)).String(),
 		ActionIDLogField: action.ID,
 	})
 
-	node, err := getNodeForPatching(ctx, h.log, h.clientset, req.NodeName)
+	log.Info("patching kubernetes node")
+	if req.NodeName == "" ||
+		(req.NodeID == "" && req.ProviderId == "") {
+		return fmt.Errorf("node name or node ID/provider ID is empty %w", errAction)
+	}
+
+	node, err := h.getNodeForPatching(ctx, req.NodeName, req.NodeID, req.ProviderId)
 	if err != nil {
-		if apierrors.IsNotFound(err) {
+		if errors.Is(err, errNodeNotFound) {
 			log.WithError(err).Infof("node not found, skipping patch")
 			return nil
 		}
@@ -105,6 +119,39 @@ func (h *PatchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 		return patchNodeStatus(ctx, h.log, h.clientset, node.Name, patch)
 	}
 	return nil
+}
+
+func (h *PatchNodeHandler) getNodeForPatching(ctx context.Context, nodeName, nodeID, providerID string) (*v1.Node, error) {
+	// on GKE we noticed that sometimes the node is not found, even though it is in the cluster
+	// as a result was returned from watch. But subsequent get request returns not found.
+	// This is likely due to clientset's caching that's meant to alleviate API's load.
+	// So we give enough time for cache to sync - ~10s max.
+
+	var node *v1.Node
+
+	boff := waitext.DefaultExponentialBackoff()
+	boff.Duration = h.retryTimeout
+
+	err := waitext.Retry(
+		ctx,
+		boff,
+		5,
+		func(ctx context.Context) (bool, error) {
+			var err error
+			node, err = getNodeByIDs(ctx, h.clientset.CoreV1().Nodes(), nodeName, nodeID, providerID, h.log)
+			if err != nil {
+				return true, err
+			}
+			return false, nil
+		},
+		func(err error) {
+			h.log.Warnf("getting node, will retry: %v", err)
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return node, nil
 }
 
 func patchNodeMapField(values, patch map[string]string) map[string]string {

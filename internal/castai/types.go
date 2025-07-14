@@ -148,13 +148,15 @@ type ActionDelete struct {
 }
 
 type ActionDeleteNode struct {
-	NodeName string `json:"nodeName"`
-	NodeID   string `json:"nodeId"`
+	NodeName   string `json:"nodeName"`
+	NodeID     string `json:"nodeId"`
+	ProviderId string `json:"providerId"`
 }
 
 type ActionDrainNode struct {
 	NodeName            string `json:"nodeName"`
 	NodeID              string `json:"nodeId"`
+	ProviderId          string `json:"providerId"`
 	DrainTimeoutSeconds int    `json:"drainTimeoutSeconds"`
 	Force               bool   `json:"force"`
 }
@@ -168,6 +170,7 @@ type ActionEvictPod struct {
 type ActionPatchNode struct {
 	NodeName      string            `json:"nodeName"`
 	NodeID        string            `json:"nodeId"`
+	ProviderId    string            `json:"providerId"`
 	Labels        map[string]string `json:"labels"`
 	Taints        []NodeTaint       `json:"taints"`
 	Annotations   map[string]string `json:"annotations"`
@@ -196,8 +199,9 @@ type ActionCreateEvent struct {
 type ActionDisconnectCluster struct{}
 
 type ActionCheckNodeDeleted struct {
-	NodeName string `json:"nodeName"`
-	NodeID   string `json:"nodeId"`
+	NodeName   string `json:"nodeName"`
+	NodeID     string `json:"nodeId"`
+	ProviderId string `json:"providerId"`
 }
 
 type ActionCheckNodeStatus_Status string
@@ -210,6 +214,7 @@ const (
 type ActionCheckNodeStatus struct {
 	NodeName           string                       `json:"nodeName"`
 	NodeID             string                       `json:"nodeId"`
+	ProviderId         string                       `json:"providerId"`
 	NodeStatus         ActionCheckNodeStatus_Status `json:"nodeStatus,omitempty"`
 	WaitTimeoutSeconds *int32                       `json:"waitTimeoutSeconds,omitempty"`
 }

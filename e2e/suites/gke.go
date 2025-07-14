@@ -148,7 +148,7 @@ func (ts *gkeTestSuite) Run(ctx context.Context, t *testing.T) {
 		}
 
 		if deployment.Status.UnavailableReplicas != 1 {
-			return fmt.Errorf("nginx replica running")
+			return fmt.Errorf("%v replica running: %v", deployment.Name, deployment.Status.UnavailableReplicas)
 		}
 
 		return nil

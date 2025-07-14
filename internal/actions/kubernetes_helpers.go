@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,7 +17,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
+	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 
+	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
 
@@ -85,37 +88,74 @@ func patchNodeStatus(ctx context.Context, log logrus.FieldLogger, clientset kube
 	return nil
 }
 
-func getNodeForPatching(ctx context.Context, log logrus.FieldLogger, clientset kubernetes.Interface, nodeName string) (*v1.Node, error) {
-	// on GKE we noticed that sometimes the node is not found, even though it is in the cluster
-	// as a result was returned from watch. But subsequent get request returns not found.
-	// This is likely due to clientset's caching that's meant to alleviate API's load.
-	// So we give enough time for cache to sync - ~10s max.
+func getNodeByIDs(ctx context.Context, clientSet corev1.NodeInterface, nodeName, nodeID, providerID string, log logrus.FieldLogger) (*v1.Node, error) {
+	if nodeID == "" && providerID == "" {
+		return nil, fmt.Errorf("node and provider IDs are empty %w", errAction)
+	}
 
-	var node *v1.Node
-
-	boff := waitext.DefaultExponentialBackoff()
-	boff.Duration = 5 * time.Second
-
-	err := waitext.Retry(
-		ctx,
-		boff,
-		5,
-		func(ctx context.Context) (bool, error) {
-			var err error
-			node, err = clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
-			if err != nil {
-				return true, err
-			}
-			return false, nil
-		},
-		func(err error) {
-			log.Warnf("getting node, will retry: %v", err)
-		},
-	)
+	n, err := clientSet.Get(ctx, nodeName, metav1.GetOptions{})
+	if err != nil && k8serrors.IsNotFound(err) {
+		return nil, errNodeNotFound
+	}
 	if err != nil {
 		return nil, err
 	}
-	return node, nil
+
+	if n == nil {
+		return nil, errNodeNotFound
+	}
+
+	if err := isNodeIDProviderIDValid(n, nodeID, providerID, log); err != nil {
+		return nil, fmt.Errorf("requested node ID %s, provider ID %s for node name: %s %w",
+			nodeID, providerID, n.Name, err)
+	}
+
+	return n, nil
+}
+
+// isNodeIDProviderIDValid checks if the node's ID and provider ID match the requested ones.
+func isNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string, log logrus.FieldLogger) error {
+	if nodeID == "" && providerID == "" {
+		// if both node ID and provider ID are empty, we can't validate the node
+		return fmt.Errorf("node and provider IDs are empty %w", errAction)
+	}
+	emptyProviderID := providerID == "" || node.Spec.ProviderID == ""
+
+	// validate provider id only if non-empty in request and in Node spec
+	// Azure provider: provider id can be empty even if node is Ready
+	validProviderID := !emptyProviderID && strings.EqualFold(node.Spec.ProviderID, providerID)
+
+	if nodeID == "" && validProviderID {
+		// if node ID is not set in labels, but provider ID is valid, node is valid
+		return nil
+	}
+
+	currentNodeID, ok := node.Labels[castai.LabelNodeID]
+	if ok && currentNodeID != "" {
+		if strings.EqualFold(currentNodeID, nodeID) {
+			if validProviderID {
+				// if node ID matches and provider ID is valid, node is valid
+				return nil
+			}
+			if emptyProviderID {
+				// if node ID matches but provider ID is empty, node is valid
+				return nil
+			}
+		}
+	}
+	if (!ok || currentNodeID == "") && validProviderID {
+		// if node ID is not set in labels, but provider ID is valid, node is valid
+		return nil
+	}
+
+	if !emptyProviderID && node.Spec.ProviderID != providerID {
+		// if provider ID is not empty in request and does not match node's provider ID, log err for investigations
+		log.Errorf("node %v has provider ID %s, but requested provider ID is %s", node.Name, node.Spec.ProviderID, providerID)
+	}
+
+	// if we reach here, it means that node ID and/or provider ID does not match
+	return fmt.Errorf("node %v has ID %s and provider ID %s: %w",
+		node.Name, currentNodeID, node.Spec.ProviderID, errNodeDoesNotMatch)
 }
 
 // executeBatchPodActions executes the action for each pod in the list.

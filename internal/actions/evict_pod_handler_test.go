@@ -84,10 +84,12 @@ func TestEvictPodHandler(t *testing.T) {
 		reaction := failingPodEvictionReaction(reactionErr, 2, normalPodEvictionReaction(t, ctx, clientset, 0))
 		prependPodEvictionReaction(clientset, reaction)
 
-		h := NewEvictPodHandler(
-			log,
-			clientset,
-		)
+		h := &EvictPodHandler{
+			log:                           log,
+			clientset:                     clientset,
+			podEvictRetryDelay:            5 * time.Millisecond,
+			podsTerminationWaitRetryDelay: 10 * time.Millisecond,
+		}
 
 		action := newEvictPodAction(&castai.ActionEvictPod{
 			Namespace: pod.Namespace,

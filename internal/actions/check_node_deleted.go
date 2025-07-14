@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/internal/castai"
@@ -43,6 +41,9 @@ type CheckNodeDeletedHandler struct {
 var errNodeNotDeleted = errors.New("node is not deleted")
 
 func (h *CheckNodeDeletedHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+	if action == nil {
+		return fmt.Errorf("action is nil %w", errAction)
+	}
 	req, ok := action.Data().(*castai.ActionCheckNodeDeleted)
 	if !ok {
 		return newUnexpectedTypeErr(action.Data(), req)
@@ -52,8 +53,17 @@ func (h *CheckNodeDeletedHandler) Handle(ctx context.Context, action *castai.Clu
 		"node_name":      req.NodeName,
 		"node_id":        req.NodeID,
 		"type":           reflect.TypeOf(action.Data().(*castai.ActionCheckNodeDeleted)).String(),
+		"provider_id":    req.ProviderId,
 		ActionIDLogField: action.ID,
 	})
+
+	log.Info("checking if node is deleted")
+	if req.NodeName == "" ||
+		(req.NodeID == "" && req.ProviderId == "") {
+		return fmt.Errorf("node name %v or node ID: %v or provider ID: %v is empty %w",
+			req.NodeName, req.NodeID, req.ProviderId, errAction)
+	}
+
 	log.Info("checking if node is deleted")
 
 	boff := waitext.NewConstantBackoff(h.cfg.retryWait)
@@ -63,34 +73,7 @@ func (h *CheckNodeDeletedHandler) Handle(ctx context.Context, action *castai.Clu
 		boff,
 		h.cfg.retries,
 		func(ctx context.Context) (bool, error) {
-			n, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
-			if apierrors.IsNotFound(err) {
-				return false, nil
-			}
-
-			if n == nil {
-				return false, nil
-			}
-
-			currentNodeID, ok := n.Labels[castai.LabelNodeID]
-			if !ok {
-				log.Info("node doesn't have castai node id label")
-			}
-			if currentNodeID != "" {
-				if currentNodeID != req.NodeID {
-					log.Info("node name was reused. Original node is deleted")
-					return false, nil
-				}
-				if currentNodeID == req.NodeID {
-					return false, fmt.Errorf("current node id = request node ID %w", errNodeNotDeleted)
-				}
-			}
-
-			if n != nil {
-				return false, errNodeNotDeleted
-			}
-
-			return true, err
+			return checkNodeDeleted(ctx, h.clientset.CoreV1().Nodes(), req.NodeName, req.NodeID, req.ProviderId, log)
 		},
 		func(err error) {
 			log.Warnf("node deletion check failed, will retry: %v", err)

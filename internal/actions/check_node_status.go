@@ -2,15 +2,17 @@ package actions
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"time"
 
+	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/typed/core/v1"
 
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/waitext"
@@ -31,6 +33,9 @@ type CheckNodeStatusHandler struct {
 }
 
 func (h *CheckNodeStatusHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+	if action == nil {
+		return fmt.Errorf("action is nil %w", errAction)
+	}
 	req, ok := action.Data().(*castai.ActionCheckNodeStatus)
 	if !ok {
 		return newUnexpectedTypeErr(action.Data(), req)
@@ -39,10 +44,17 @@ func (h *CheckNodeStatusHandler) Handle(ctx context.Context, action *castai.Clus
 	log := h.log.WithFields(logrus.Fields{
 		"node_name":      req.NodeName,
 		"node_id":        req.NodeID,
+		"provider_id":    req.ProviderId,
 		"node_status":    req.NodeStatus,
 		"type":           reflect.TypeOf(action.Data().(*castai.ActionCheckNodeStatus)).String(),
 		ActionIDLogField: action.ID,
 	})
+
+	log.Info("checking status of node")
+	if req.NodeName == "" ||
+		(req.NodeID == "" && req.ProviderId == "") {
+		return fmt.Errorf("node name or node ID/provider ID is empty %w", errAction)
+	}
 
 	switch req.NodeStatus {
 	case castai.ActionCheckNodeStatus_READY:
@@ -71,52 +83,51 @@ func (h *CheckNodeStatusHandler) checkNodeDeleted(ctx context.Context, log *logr
 		b,
 		waitext.Forever,
 		func(ctx context.Context) (bool, error) {
-			n, err := h.clientset.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
-			if apierrors.IsNotFound(err) {
-				return false, nil
-			}
-
-			// If node is nil - deleted
-			// If label is present and doesn't match - node was reused - deleted
-			// If label is present and matches - node is not deleted
-			// If label is not present and node is not nil - node is not deleted (potentially corrupted state).
-
-			if n == nil {
-				return false, nil
-			}
-
-			currentNodeID, ok := n.Labels[castai.LabelNodeID]
-			if !ok {
-				log.Info("node doesn't have castai node id label")
-			}
-			if currentNodeID != "" {
-				if currentNodeID != req.NodeID {
-					log.Info("node name was reused. Original node is deleted")
-					return false, nil
-				}
-				if currentNodeID == req.NodeID {
-					return false, fmt.Errorf("current node id is equal to requested node id: %v %w", req.NodeID, errNodeNotDeleted)
-				}
-			}
-
-			if n != nil {
-				return false, errNodeNotDeleted
-			}
-
-			return true, err
+			return checkNodeDeleted(ctx, h.clientset.CoreV1().Nodes(), req.NodeName, req.NodeID, req.ProviderId, log)
 		},
 		func(err error) {
-			h.log.Warnf("check node %s status failed, will retry: %v", req.NodeName, err)
+			log.Warnf("check node %s status failed, will retry: %v", req.NodeName, err)
 		},
 	)
 }
 
+func checkNodeDeleted(ctx context.Context, clientSet v1.NodeInterface, nodeName, nodeID, providerID string, log logrus.FieldLogger) (bool, error) {
+	// If node is nil - deleted
+	// If providerID or label have mismatch, then it's reused and deleted
+	// If label is present and matches - node is not deleted
+	// All other use cases can be found in tests
+	n, err := getNodeByIDs(ctx, clientSet, nodeName, nodeID, providerID, log)
+	if errors.Is(err, errNodeDoesNotMatch) {
+		// it means that node with given name exists, but it does not match requested node ID or provider ID.
+		return false, nil
+	}
+
+	if errors.Is(err, errNodeNotFound) {
+		return false, nil
+	}
+
+	if err != nil {
+		return true, err
+	}
+
+	if n == nil {
+		return false, nil
+	}
+
+	return false, errNodeNotDeleted
+}
+
 func (h *CheckNodeStatusHandler) checkNodeReady(ctx context.Context, _ *logrus.Entry, req *castai.ActionCheckNodeStatus) error {
 	timeout := 9 * time.Minute
-	watchObject := metav1.SingleObject(metav1.ObjectMeta{Name: req.NodeName})
 	if req.WaitTimeoutSeconds != nil {
 		timeout = time.Duration(*req.WaitTimeoutSeconds) * time.Second
 	}
+
+	watchObject := metav1.SingleObject(metav1.ObjectMeta{
+		Name: req.NodeName,
+	})
+	watchObject.TimeoutSeconds = lo.ToPtr(int64(timeout.Seconds()))
+
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -124,27 +135,37 @@ func (h *CheckNodeStatusHandler) checkNodeReady(ctx context.Context, _ *logrus.E
 	if err != nil {
 		return fmt.Errorf("creating node watch: %w", err)
 	}
-
 	defer watch.Stop()
-	for r := range watch.ResultChan() {
-		if node, ok := r.Object.(*corev1.Node); ok {
-			if isNodeReady(node, req.NodeID) {
-				return nil
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("node %s request timeout: %v %w", req.NodeName, timeout, ctx.Err())
+		case r, ok := <-watch.ResultChan():
+			if !ok {
+				return fmt.Errorf("node %s request timeout: %v %w", req.NodeName, timeout, errNodeWatcherClosed)
+			}
+			if node, ok := r.Object.(*corev1.Node); ok {
+				if h.isNodeReady(node, req.NodeID, req.ProviderId) {
+					return nil
+				}
 			}
 		}
 	}
-
-	return fmt.Errorf("timeout waiting for node %s to become ready", req.NodeName)
 }
 
-func isNodeReady(node *corev1.Node, castNodeID string) bool {
+func (h *CheckNodeStatusHandler) isNodeReady(node *corev1.Node, castNodeID, providerID string) bool {
 	// if node has castai node id label, check if it matches the one we are waiting for
 	// if it doesn't match, we can skip this node.
-	if val, ok := node.Labels[castai.LabelNodeID]; ok {
-		if val != "" && val != castNodeID {
-			return false
-		}
+	if err := isNodeIDProviderIDValid(node, castNodeID, providerID, h.log); err != nil {
+		h.log.WithFields(logrus.Fields{
+			"node":        node.Name,
+			"node_id":     castNodeID,
+			"provider_id": providerID,
+		}).Warnf("node does not match requested node ID or provider ID: %v", err)
+		return false
 	}
+
 	for _, cond := range node.Status.Conditions {
 		if cond.Type == corev1.NodeReady && cond.Status == corev1.ConditionTrue && !containsUninitializedNodeTaint(node.Spec.Taints) {
 			return true
