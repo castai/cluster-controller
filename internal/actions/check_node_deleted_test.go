@@ -31,6 +31,10 @@ func TestCheckNodeDeletedHandler_Handle(t *testing.T) {
 		wantErr error
 	}{
 		{
+			name:    "nil action",
+			wantErr: errAction,
+		},
+		{
 			name: "wrong action type",
 			args: args{
 				action: &castai.ClusterAction{},

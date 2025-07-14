@@ -41,6 +41,9 @@ type CheckNodeDeletedHandler struct {
 var errNodeNotDeleted = errors.New("node is not deleted")
 
 func (h *CheckNodeDeletedHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
+	if action == nil {
+		return fmt.Errorf("action is nil %w", errAction)
+	}
 	req, ok := action.Data().(*castai.ActionCheckNodeDeleted)
 	if !ok {
 		return newUnexpectedTypeErr(action.Data(), req)
@@ -57,7 +60,8 @@ func (h *CheckNodeDeletedHandler) Handle(ctx context.Context, action *castai.Clu
 	log.Info("checking if node is deleted")
 	if req.NodeName == "" ||
 		(req.NodeID == "" && req.ProviderId == "") {
-		return fmt.Errorf("node name or node ID/provider ID is empty %w", errAction)
+		return fmt.Errorf("node name %v or node ID: %v or provider ID: %v is empty %w",
+			req.NodeName, req.NodeID, req.ProviderId, errAction)
 	}
 
 	log.Info("checking if node is deleted")
