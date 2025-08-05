@@ -55,6 +55,7 @@ func NewClient(log *logrus.Logger, rest *resty.Client, clusterID, podName string
 		log:       log,
 		rest:      rest,
 		clusterID: clusterID,
+		podName:   podName,
 	}
 }
 
