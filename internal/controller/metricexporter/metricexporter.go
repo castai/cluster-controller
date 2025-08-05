@@ -67,9 +67,6 @@ func (me *MetricsExporter) Run(ctx context.Context) {
 			me.log.Infof("stopping down metrics exporter: %v", ctx.Err())
 			return
 		case <-t.C:
-			// TODO: remove, only for testing
-			metrics.ActionFinished("drain_node", true)
-
 			if err := me.exportMetrics(ctx); err != nil {
 				me.log.Errorf("exporting metrics failed: %v", err)
 				continue
