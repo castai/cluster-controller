@@ -14,17 +14,44 @@ type MetricSender interface {
 	SendMetrics(ctx context.Context, gatherTime time.Time, metricFamilies []*dto.MetricFamily) error
 }
 
+type MetricGatherer func() ([]*dto.MetricFamily, time.Time, error)
+
+func DefaultMetricGatherer() ([]*dto.MetricFamily, time.Time, error) {
+	families, err := metrics.Gather()
+	return families, time.Now(), err
+}
+
 type MetricsExporter struct {
 	log            *logrus.Entry
 	sender         MetricSender
+	gatherer       MetricGatherer
 	exportInterval time.Duration
 }
 
-func New(log *logrus.Entry, sender MetricSender, exportInterval time.Duration) *MetricsExporter {
-	return &MetricsExporter{
+func New(
+	log *logrus.Entry,
+	sender MetricSender,
+	exportInterval time.Duration,
+	opts ...func(*MetricsExporter),
+) *MetricsExporter {
+	exp := &MetricsExporter{
 		log:            log.WithField("component", "metrics_exporter"),
 		sender:         sender,
+		gatherer:       DefaultMetricGatherer,
 		exportInterval: exportInterval,
+	}
+	for _, opt := range opts {
+		opt(exp)
+	}
+	return exp
+}
+
+func WithMetricGatherer(g MetricGatherer) func(*MetricsExporter) {
+	return func(me *MetricsExporter) {
+		if g == nil {
+			return
+		}
+		me.gatherer = g
 	}
 }
 
@@ -52,11 +79,10 @@ func (me *MetricsExporter) Run(ctx context.Context) {
 }
 
 func (me *MetricsExporter) exportMetrics(ctx context.Context) error {
-	families, err := metrics.Gather()
+	families, gatherTime, err := me.gatherer()
 	if err != nil {
 		return fmt.Errorf("failed to gather metrics: %w", err)
 	}
-	gatherTime := time.Now()
 
 	if err := me.sender.SendMetrics(ctx, gatherTime, families); err != nil {
 		return fmt.Errorf("failed to send metrics: %w", err)
