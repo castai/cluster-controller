@@ -144,45 +144,7 @@ func (c *Client) SendLog(ctx context.Context, e *LogEntry) error {
 }
 
 func (c *Client) SendMetrics(ctx context.Context, gatherTime time.Time, metricFamilies []*dto.MetricFamily) error {
-	timestamp := gatherTime.UnixMilli()
-
-	timeseries := []PrometheusTimeseries{}
-	for _, family := range metricFamilies {
-		for _, metric := range family.Metric {
-			timeserie := PrometheusTimeseries{
-				Labels: []PrometheusLabel{
-					{
-						Name:  "__name__",
-						Value: family.GetName(),
-					},
-				},
-			}
-			for _, label := range metric.Label {
-				if label.Name == nil {
-					continue
-				}
-
-				timeserie.Labels = append(timeserie.Labels, PrometheusLabel{
-					Name:  *label.Name,
-					Value: lo.FromPtr(label.Value),
-				})
-			}
-
-			if metric.Counter != nil {
-				timeserie.Samples = []PrometheusSample{}
-				timeserie.Samples = append(timeserie.Samples, PrometheusSample{
-					Timestamp: timestamp,
-					Value:     metric.Counter.GetValue(),
-				})
-			}
-
-			timeseries = append(timeseries, timeserie)
-		}
-	}
-
-	req := &PrometheusWriteRequest{
-		Timeseries: timeseries,
-	}
+	req := convertPrometheusMetricFamilies(gatherTime, metricFamilies)
 
 	resp, err := c.rest.R().
 		SetBody(req).
@@ -226,4 +188,46 @@ func (c *Client) AckAction(ctx context.Context, actionID string, req *AckCluster
 		return fmt.Errorf("ack cluster-actions: request error status_code=%d body=%s", resp.StatusCode(), resp.Body())
 	}
 	return nil
+}
+
+func convertPrometheusMetricFamilies(gatherTime time.Time, metricFamilies []*dto.MetricFamily) *PrometheusWriteRequest {
+	timestamp := gatherTime.UnixMilli()
+
+	timeseries := []PrometheusTimeseries{}
+	for _, family := range metricFamilies {
+		for _, metric := range family.Metric {
+			timeserie := PrometheusTimeseries{
+				Labels: []PrometheusLabel{
+					{
+						Name:  "__name__",
+						Value: family.GetName(),
+					},
+				},
+			}
+			for _, label := range metric.Label {
+				if label.Name == nil {
+					continue
+				}
+
+				timeserie.Labels = append(timeserie.Labels, PrometheusLabel{
+					Name:  *label.Name,
+					Value: lo.FromPtr(label.Value),
+				})
+			}
+
+			if metric.Counter != nil {
+				timeserie.Samples = []PrometheusSample{}
+				timeserie.Samples = append(timeserie.Samples, PrometheusSample{
+					Timestamp: timestamp,
+					Value:     metric.Counter.GetValue(),
+				})
+			}
+
+			timeseries = append(timeseries, timeserie)
+		}
+	}
+
+	return &PrometheusWriteRequest{
+		Timeseries: timeseries,
+	}
 }

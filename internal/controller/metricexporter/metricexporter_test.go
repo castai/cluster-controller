@@ -6,11 +6,12 @@ import (
 	"testing"
 	"time"
 
-	mock_castai "github.com/castai/cluster-controller/internal/castai/mock"
 	"github.com/golang/mock/gomock"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
+
+	mock_castai "github.com/castai/cluster-controller/internal/castai/mock"
 )
 
 func TestRun_ExportsMetricsOnInterval(t *testing.T) {

@@ -160,8 +160,10 @@ func runController(
 		}
 	}()
 
-	metricExporter := metricexporter.New(log, client, 30*time.Second)
-	go metricExporter.Run(ctx)
+	if cfg.Metrics.ExportEnabled {
+		metricExporter := metricexporter.New(log, client, cfg.Metrics.ExportInterval)
+		go metricExporter.Run(ctx)
+	}
 
 	httpMux := http.NewServeMux()
 	var checks []healthz.HealthChecker

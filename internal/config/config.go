@@ -57,6 +57,7 @@ type TLS struct {
 
 type Metrics struct {
 	Port           int
+	ExportEnabled  bool
 	ExportInterval time.Duration
 }
 
@@ -104,6 +105,7 @@ func Get() Config {
 	_ = viper.BindEnv("max_action_in_progress", "MAX_ACTIONS_IN_PROGRESS")
 	_ = viper.BindEnv("autoscaling_disabled", "AUTOSCALING_DISABLED")
 	_ = viper.BindEnv("metrics.port", "METRICS_PORT")
+	_ = viper.BindEnv("metrics.exportenabled", "METRICS_EXPORT_ENABLED")
 	_ = viper.BindEnv("metrics.exportinterval", "METRICS_EXPORT_INTERVAL")
 
 	cfg = &Config{}

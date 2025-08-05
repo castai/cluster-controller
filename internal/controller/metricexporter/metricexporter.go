@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/castai/cluster-controller/internal/metrics"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/sirupsen/logrus"
+
+	"github.com/castai/cluster-controller/internal/metrics"
 )
 
 type MetricSender interface {
