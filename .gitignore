@@ -1,6 +1,9 @@
+.DS_Store
 .idea
 .run
 *.iml
 bin
 .env
 e2e/**/castai-*.json
+
+.aider*

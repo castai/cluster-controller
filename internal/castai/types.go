@@ -259,3 +259,22 @@ func (c *ChartSource) Validate() error {
 	}
 	return nil
 }
+
+type PrometheusWriteRequest struct {
+	Timeseries []PrometheusTimeseries `json:"timeseries"`
+}
+
+type PrometheusTimeseries struct {
+	Labels  []PrometheusLabel  `json:"labels"`
+	Samples []PrometheusSample `json:"samples"`
+}
+
+type PrometheusLabel struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+type PrometheusSample struct {
+	Timestamp int64   `json:"timestamp"`
+	Value     float64 `json:"value"`
+}

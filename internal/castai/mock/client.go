@@ -7,9 +7,11 @@ package mock_castai
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 
 	castai "github.com/castai/cluster-controller/internal/castai"
 	gomock "github.com/golang/mock/gomock"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
 // MockCastAIClient is a mock of CastAIClient interface.
@@ -76,4 +78,18 @@ func (m *MockCastAIClient) SendLog(arg0 context.Context, arg1 *castai.LogEntry) 
 func (mr *MockCastAIClientMockRecorder) SendLog(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendLog", reflect.TypeOf((*MockCastAIClient)(nil).SendLog), arg0, arg1)
+}
+
+// SendMetrics mocks base method.
+func (m *MockCastAIClient) SendMetrics(arg0 context.Context, arg1 time.Time, arg2 []*io_prometheus_client.MetricFamily) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SendMetrics", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SendMetrics indicates an expected call of SendMetrics.
+func (mr *MockCastAIClientMockRecorder) SendMetrics(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendMetrics", reflect.TypeOf((*MockCastAIClient)(nil).SendMetrics), arg0, arg1, arg2)
 }

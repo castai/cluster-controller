@@ -56,7 +56,8 @@ type TLS struct {
 }
 
 type Metrics struct {
-	Port int
+	Port           int
+	ExportInterval time.Duration
 }
 
 type LeaderElection struct {
@@ -103,6 +104,7 @@ func Get() Config {
 	_ = viper.BindEnv("max_action_in_progress", "MAX_ACTIONS_IN_PROGRESS")
 	_ = viper.BindEnv("autoscaling_disabled", "AUTOSCALING_DISABLED")
 	_ = viper.BindEnv("metrics.port", "METRICS_PORT")
+	_ = viper.BindEnv("metrics.exportinterval", "METRICS_EXPORT_INTERVAL")
 
 	cfg = &Config{}
 	if err := viper.Unmarshal(&cfg); err != nil {
@@ -159,6 +161,12 @@ func Get() Config {
 
 	if cfg.Metrics.Port == 0 {
 		cfg.Metrics.Port = 9090
+	}
+
+	if cfg.Metrics.ExportInterval < 15*time.Second {
+		// We do not want to export metrics too often
+		// and also protect against accidental misconfiguration.
+		cfg.Metrics.ExportInterval = 30 * time.Second
 	}
 
 	return *cfg

@@ -5,6 +5,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	dto "github.com/prometheus/client_model/go"
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
@@ -23,4 +24,8 @@ func NewMetricsMux() *http.ServeMux {
 	})
 
 	return metricsMux
+}
+
+func Gather() ([]*dto.MetricFamily, error) {
+	return registry.Gather()
 }

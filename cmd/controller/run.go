@@ -30,6 +30,7 @@ import (
 	"github.com/castai/cluster-controller/internal/config"
 	"github.com/castai/cluster-controller/internal/controller"
 	"github.com/castai/cluster-controller/internal/controller/logexporter"
+	"github.com/castai/cluster-controller/internal/controller/metricexporter"
 	"github.com/castai/cluster-controller/internal/helm"
 	"github.com/castai/cluster-controller/internal/k8sversion"
 	"github.com/castai/cluster-controller/internal/metrics"
@@ -158,6 +159,9 @@ func runController(
 			log.Errorf("failed to close controller service: %v", err)
 		}
 	}()
+
+	metricExporter := metricexporter.New(log, client, 30*time.Second)
+	go metricExporter.Run(ctx)
 
 	httpMux := http.NewServeMux()
 	var checks []healthz.HealthChecker

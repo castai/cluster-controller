@@ -155,6 +155,7 @@ func (s *Controller) handleActions(ctx context.Context, clusterActions []*castai
 			defer s.finishProcessing(action.ID)
 
 			var err error
+
 			handleErr := s.handleAction(ctx, action)
 			if errors.Is(handleErr, context.Canceled) {
 				// Action should be handled again on context canceled errors.

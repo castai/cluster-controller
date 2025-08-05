@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
+	dto "github.com/prometheus/client_model/go"
+	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/http2"
 
@@ -28,6 +30,7 @@ type CastAIClient interface {
 	GetActions(ctx context.Context, k8sVersion string) ([]*ClusterAction, error)
 	AckAction(ctx context.Context, actionID string, req *AckClusterActionRequest) error
 	SendLog(ctx context.Context, e *LogEntry) error
+	SendMetrics(ctx context.Context, gatherTime time.Time, metricFamilies []*dto.MetricFamily) error
 }
 
 type LogEntry struct {
@@ -135,6 +138,61 @@ func (c *Client) SendLog(ctx context.Context, e *LogEntry) error {
 	}
 	if resp.IsError() {
 		return fmt.Errorf("sending logs: request error status_code=%d body=%s", resp.StatusCode(), resp.Body())
+	}
+
+	return nil
+}
+
+func (c *Client) SendMetrics(ctx context.Context, gatherTime time.Time, metricFamilies []*dto.MetricFamily) error {
+	timestamp := gatherTime.UnixMilli()
+
+	timeseries := []PrometheusTimeseries{}
+	for _, family := range metricFamilies {
+		for _, metric := range family.Metric {
+			timeserie := PrometheusTimeseries{
+				Labels: []PrometheusLabel{
+					{
+						Name:  "__name__",
+						Value: family.GetName(),
+					},
+				},
+			}
+			for _, label := range metric.Label {
+				if label.Name == nil {
+					continue
+				}
+
+				timeserie.Labels = append(timeserie.Labels, PrometheusLabel{
+					Name:  *label.Name,
+					Value: lo.FromPtr(label.Value),
+				})
+			}
+
+			if metric.Counter != nil {
+				timeserie.Samples = []PrometheusSample{}
+				timeserie.Samples = append(timeserie.Samples, PrometheusSample{
+					Timestamp: timestamp,
+					Value:     metric.Counter.GetValue(),
+				})
+			}
+
+			timeseries = append(timeseries, timeserie)
+		}
+	}
+
+	req := &PrometheusWriteRequest{
+		Timeseries: timeseries,
+	}
+
+	resp, err := c.rest.R().
+		SetBody(req).
+		SetContext(ctx).
+		Post(fmt.Sprintf("/v1/clusters/%s/components/%s/metrics", c.clusterID, "cluster-controller"))
+	if err != nil {
+		return fmt.Errorf("sending metrics: %w", err)
+	}
+	if resp.IsError() {
+		return fmt.Errorf("sending metrics: request error status_code=%d body=%s", resp.StatusCode(), resp.Body())
 	}
 
 	return nil
