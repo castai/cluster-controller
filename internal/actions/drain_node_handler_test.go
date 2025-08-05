@@ -246,7 +246,7 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 	podFailedDeletionErr := &podFailedActionError{}
 	t.Parallel()
 	type fields struct {
-		clientSet func() *fake.Clientset
+		clientSet func(t *testing.T) *fake.Clientset
 	}
 	type args struct {
 		action *castai.ClusterAction
@@ -265,7 +265,7 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 			name: "nil",
 			args: args{},
 			fields: fields{
-				clientSet: func() *fake.Clientset {
+				clientSet: func(t *testing.T) *fake.Clientset {
 					return fake.NewClientset()
 				},
 			},
@@ -279,7 +279,7 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 				},
 			},
 			fields: fields{
-				clientSet: func() *fake.Clientset {
+				clientSet: func(t *testing.T) *fake.Clientset {
 					return fake.NewClientset()
 				},
 			},
@@ -291,7 +291,7 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 				action: newActionDrainNode("", nodeID, providerID, 1, true),
 			},
 			fields: fields{
-				clientSet: func() *fake.Clientset {
+				clientSet: func(t *testing.T) *fake.Clientset {
 					return setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
 				},
 			},
@@ -304,7 +304,7 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 					nil, nil, nil, nil, nil),
 			},
 			fields: fields{
-				clientSet: func() *fake.Clientset {
+				clientSet: func(t *testing.T) *fake.Clientset {
 					return setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
 				},
 			},
@@ -313,7 +313,7 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 		{
 			name: "action with another node id and provider id - skip drain",
 			fields: fields{
-				clientSet: func() *fake.Clientset {
+				clientSet: func(t *testing.T) *fake.Clientset {
 					return setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
 				},
 			},
@@ -325,7 +325,7 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 		{
 			name: "action with proper node id and another provider id - skip drain",
 			fields: fields{
-				clientSet: func() *fake.Clientset {
+				clientSet: func(t *testing.T) *fake.Clientset {
 					return setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
 				},
 			},
@@ -337,7 +337,7 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 		{
 			name: "action with another node id and proper provider id - skip drain",
 			fields: fields{
-				clientSet: func() *fake.Clientset {
+				clientSet: func(t *testing.T) *fake.Clientset {
 					return setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
 				},
 			},
@@ -349,7 +349,7 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 		{
 			name: "drain node successfully",
 			fields: fields{
-				clientSet: func() *fake.Clientset {
+				clientSet: func(t *testing.T) *fake.Clientset {
 					c := setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
 					prependEvictionReaction(t, c, true, false)
 					return c
@@ -364,7 +364,7 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 		{
 			name: "skip drain when node not found",
 			fields: fields{
-				clientSet: func() *fake.Clientset {
+				clientSet: func(t *testing.T) *fake.Clientset {
 					return setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
 				},
 			},
@@ -376,7 +376,7 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 		{
 			name: "when eviction fails for a pod and force=false, leaves node cordoned and skip deletion",
 			fields: fields{
-				clientSet: func() *fake.Clientset {
+				clientSet: func(t *testing.T) *fake.Clientset {
 					c := setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
 					prependEvictionReaction(t, c, false, false)
 					return c
@@ -392,7 +392,7 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 		{
 			name: "when eviction timeout is reached and force=false, leaves node cordoned and skip deletion",
 			fields: fields{
-				clientSet: func() *fake.Clientset {
+				clientSet: func(t *testing.T) *fake.Clientset {
 					c := setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
 					prependEvictionReaction(t, c, false, true)
 					return c
@@ -408,7 +408,7 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 		{
 			name: "eviction fails and force=true, force remove pods: timeout during eviction",
 			fields: fields{
-				clientSet: func() *fake.Clientset {
+				clientSet: func(*testing.T) *fake.Clientset {
 					c := setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
 					prependEvictionReaction(t, c, false, true)
 					actualCalls := 0
@@ -446,7 +446,7 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 		{
 			name: "eviction fails and force=true, force remove pods: failed pod during eviction",
 			fields: fields{
-				clientSet: func() *fake.Clientset {
+				clientSet: func(t *testing.T) *fake.Clientset {
 					c := setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
 					prependEvictionReaction(t, c, false, false)
 					actualCalls := 0
@@ -484,7 +484,7 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 		{
 			name: "eviction fails and force=true, at least one pod fails to delete due to internal error, should return error",
 			fields: fields{
-				clientSet: func() *fake.Clientset {
+				clientSet: func(t *testing.T) *fake.Clientset {
 					c := setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
 					c.PrependReactor("delete", "pods", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
 						deleteAction := action.(ktest.DeleteActionImpl)
@@ -512,7 +512,7 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 		{
 			name: "eviction fails and force=true, timeout during deletion should be retried and returned",
 			fields: fields{
-				clientSet: func() *fake.Clientset {
+				clientSet: func(t *testing.T) *fake.Clientset {
 					c := setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
 					actualDeleteCalls := 0
 					c.PrependReactor("delete", "pods", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
@@ -541,7 +541,7 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 		{
 			name: "force=true, failed eviction for PDBs should be retried until timeout before deleting",
 			fields: fields{
-				clientSet: func() *fake.Clientset {
+				clientSet: func(t *testing.T) *fake.Clientset {
 					c := setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
 					c.PrependReactor("create", "pods", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
 						if action.GetSubresource() != "eviction" {
@@ -574,12 +574,11 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			h := &DrainNodeHandler{
 				log:       logrus.New(),
-				clientset: tt.fields.clientSet(),
+				clientset: tt.fields.clientSet(t),
 				cfg:       tt.args.cfg,
 			}
 			err := h.Handle(context.Background(), tt.args.action)
