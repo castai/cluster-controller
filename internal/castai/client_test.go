@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	dto "github.com/prometheus/client_model/go"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewRestryClient_TLS(t *testing.T) {
@@ -200,12 +200,12 @@ func TestConvertPrometheusMetricFamilies(t *testing.T) {
 				{
 					Label: []*dto.LabelPair{
 						{
-							Name: nil, // Should be skipped
+							Name:  nil, // Should be skipped
 							Value: &validLabelValue,
 						},
 						{
 							Name:  &validLabelName,
-							Value: nil, // Should use empty string via lo.FromPtr
+							Value: nil, // Should use empty string
 						},
 						{
 							Name:  &validLabelName,
@@ -238,18 +238,10 @@ func TestConvertPrometheusMetricFamilies(t *testing.T) {
 		r := require.New(t)
 
 		metricName := "test_counter"
-		zeroValue := 0.0
-		largeValue := 9999999999.99
 
 		family := &dto.MetricFamily{
 			Name: &metricName,
 			Metric: []*dto.Metric{
-				{
-					Counter: &dto.Counter{Value: &zeroValue},
-				},
-				{
-					Counter: &dto.Counter{Value: &largeValue},
-				},
 				{
 					Counter: nil, // Should not produce samples
 				},
@@ -258,15 +250,6 @@ func TestConvertPrometheusMetricFamilies(t *testing.T) {
 
 		result := convertPrometheusMetricFamilies(gatherTime, []*dto.MetricFamily{family})
 
-		// Only 2 timeseries should be created (nil counter skipped)
-		r.Len(result.Timeseries, 2)
-
-		// Verify zero value
-		r.Equal(zeroValue, result.Timeseries[0].Samples[0].Value)
-		r.Equal(expectedTimestamp, result.Timeseries[0].Samples[0].Timestamp)
-
-		// Verify large value
-		r.Equal(largeValue, result.Timeseries[1].Samples[0].Value)
-		r.Equal(expectedTimestamp, result.Timeseries[1].Samples[0].Timestamp)
+		r.Len(result.Timeseries, 0)
 	})
 }

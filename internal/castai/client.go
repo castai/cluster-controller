@@ -196,6 +196,11 @@ func convertPrometheusMetricFamilies(gatherTime time.Time, metricFamilies []*dto
 	timeseries := []PrometheusTimeseries{}
 	for _, family := range metricFamilies {
 		for _, metric := range family.Metric {
+			// Right now we support only export of counter metrics.
+			if metric.Counter == nil {
+				continue
+			}
+
 			timeserie := PrometheusTimeseries{
 				Labels: []PrometheusLabel{
 					{
