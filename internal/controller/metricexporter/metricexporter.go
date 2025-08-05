@@ -61,6 +61,7 @@ func (me *MetricsExporter) Run(ctx context.Context) {
 	defer t.Stop()
 	defer me.log.Info("metrics exporter stopped")
 	me.log.Infof("starting metrics exporter with interval %v", me.exportInterval)
+
 	for {
 		select {
 		case <-ctx.Done():

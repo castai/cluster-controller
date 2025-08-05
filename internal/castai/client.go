@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
 	"time"
@@ -198,45 +199,181 @@ func convertPrometheusMetricFamilies(gatherTime time.Time, podName string, metri
 	timeseries := []PrometheusTimeseries{}
 	for _, family := range metricFamilies {
 		for _, metric := range family.Metric {
-			// Right now we support only export of counter metrics.
-			if metric.Counter == nil {
-				continue
-			}
-
-			timeserie := PrometheusTimeseries{
-				Labels: []PrometheusLabel{
-					{
-						Name:  "__name__",
-						Value: family.GetName(),
-					},
-					{
-						Name:  "pod_name",
-						Value: podName,
-					},
+			commonLabels := []PrometheusLabel{
+				{
+					Name:  "pod_name",
+					Value: podName,
 				},
 			}
+
 			for _, label := range metric.Label {
 				if label.Name == nil {
 					continue
 				}
 
-				timeserie.Labels = append(timeserie.Labels, PrometheusLabel{
+				commonLabels = append(commonLabels, PrometheusLabel{
 					Name:  *label.Name,
 					Value: lo.FromPtr(label.Value),
 				})
 			}
 
-			timeserie.Samples = []PrometheusSample{}
-			timeserie.Samples = append(timeserie.Samples, PrometheusSample{
-				Timestamp: timestamp,
-				Value:     metric.Counter.GetValue(),
-			})
+			if metric.Counter != nil {
+				timeseries = append(timeseries,
+					convertPrometheusCounterMetric(commonLabels, family, metric, timestamp)...,
+				)
+			}
 
-			timeseries = append(timeseries, timeserie)
+			if metric.Histogram != nil {
+				timeseries = append(timeseries,
+					convertPrometheusHistogramMetric(commonLabels, family, metric, timestamp)...)
+			}
+
+			if metric.Summary != nil {
+				timeseries = append(timeseries,
+					convertPrometheusSummaryMetric(commonLabels, family, metric, timestamp)...)
+			}
 		}
 	}
 
 	return &PrometheusWriteRequest{
 		Timeseries: timeseries,
 	}
+}
+
+func convertPrometheusCounterMetric(
+	commonLabels []PrometheusLabel,
+	family *dto.MetricFamily,
+	metric *dto.Metric,
+	timestamp int64,
+) []PrometheusTimeseries {
+	return []PrometheusTimeseries{
+		{
+			Labels: copyLabelsWithName(commonLabels, family.GetName()),
+			Samples: []PrometheusSample{
+				{
+					Timestamp: timestamp,
+					Value:     metric.Counter.GetValue(),
+				},
+			},
+		},
+	}
+}
+
+func convertPrometheusHistogramMetric(
+	commonLabels []PrometheusLabel,
+	family *dto.MetricFamily,
+	metric *dto.Metric,
+	timestamp int64,
+) []PrometheusTimeseries {
+	timeseries := make([]PrometheusTimeseries, 0)
+	h := metric.Histogram
+
+	for _, b := range h.Bucket {
+		timeseries = append(timeseries, PrometheusTimeseries{
+			Labels: copyLabelsWithName(commonLabels, family.GetName()+"_bucket", PrometheusLabel{
+				Name: "le", Value: fmt.Sprintf("%f", b.GetUpperBound()),
+			}),
+			Samples: []PrometheusSample{
+				{
+					Timestamp: timestamp,
+					Value:     float64(b.GetCumulativeCount()),
+				},
+			},
+		})
+	}
+	// We need this +Inf bucket for histogram_quantile query.
+	timeseries = append(timeseries, PrometheusTimeseries{
+		Labels: copyLabelsWithName(commonLabels, family.GetName()+"_bucket", PrometheusLabel{
+			Name: "le", Value: "+Inf",
+		}),
+		Samples: []PrometheusSample{
+			{
+				Timestamp: timestamp,
+				Value:     float64(h.GetSampleCount()),
+			},
+		},
+	})
+
+	timeseries = append(timeseries, PrometheusTimeseries{
+		Labels: copyLabelsWithName(commonLabels, family.GetName()+"_sum"),
+		Samples: []PrometheusSample{
+			{
+				Timestamp: timestamp,
+				Value:     h.GetSampleSum(),
+			},
+		},
+	})
+
+	timeseries = append(timeseries, PrometheusTimeseries{
+		Labels: copyLabelsWithName(commonLabels, family.GetName()+"_count"),
+		Samples: []PrometheusSample{
+			{
+				Timestamp: timestamp,
+				Value:     float64(h.GetSampleCount()),
+			},
+		},
+	})
+
+	return timeseries
+}
+
+func convertPrometheusSummaryMetric(
+	commonLabels []PrometheusLabel,
+	family *dto.MetricFamily,
+	metric *dto.Metric,
+	timestamp int64,
+) []PrometheusTimeseries {
+	timeseries := make([]PrometheusTimeseries, 0)
+	s := metric.Summary
+
+	for _, quantile := range s.Quantile {
+		if math.IsNaN(quantile.GetValue()) {
+			continue
+		}
+
+		timeseries = append(timeseries, PrometheusTimeseries{
+			Labels: copyLabelsWithName(commonLabels, family.GetName()+"_quantile", PrometheusLabel{
+				Name:  "quantile",
+				Value: fmt.Sprintf("%f", quantile.GetQuantile()),
+			}),
+			Samples: []PrometheusSample{
+				{
+					Timestamp: timestamp,
+					Value:     quantile.GetValue(),
+				},
+			},
+		})
+	}
+
+	timeseries = append(timeseries, PrometheusTimeseries{
+		Labels: copyLabelsWithName(commonLabels, family.GetName()+"_sum"),
+		Samples: []PrometheusSample{
+			{
+				Timestamp: timestamp,
+				Value:     s.GetSampleSum(),
+			},
+		},
+	})
+
+	timeseries = append(timeseries, PrometheusTimeseries{
+		Labels: copyLabelsWithName(commonLabels, family.GetName()+"_count"),
+		Samples: []PrometheusSample{
+			{
+				Timestamp: timestamp,
+				Value:     float64(s.GetSampleCount()),
+			},
+		},
+	})
+	return timeseries
+}
+
+func copyLabelsWithName(baseLabels []PrometheusLabel, name string, additionalLabels ...PrometheusLabel) []PrometheusLabel {
+	labels := make([]PrometheusLabel, 0, len(baseLabels)+1)
+	labels = append(labels, baseLabels...)
+	labels = append(labels, additionalLabels...)
+	labels = append(labels, PrometheusLabel{
+		Name:  "__name__",
+		Value: name,
+	})
+	return labels
 }
