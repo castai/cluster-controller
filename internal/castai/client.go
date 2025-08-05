@@ -46,10 +46,11 @@ type Client struct {
 	log       *logrus.Logger
 	rest      *resty.Client
 	clusterID string
+	podName   string
 }
 
 // NewClient returns new Client for communicating with Cast AI.
-func NewClient(log *logrus.Logger, rest *resty.Client, clusterID string) *Client {
+func NewClient(log *logrus.Logger, rest *resty.Client, clusterID, podName string) *Client {
 	return &Client{
 		log:       log,
 		rest:      rest,
@@ -144,7 +145,7 @@ func (c *Client) SendLog(ctx context.Context, e *LogEntry) error {
 }
 
 func (c *Client) SendMetrics(ctx context.Context, gatherTime time.Time, metricFamilies []*dto.MetricFamily) error {
-	req := convertPrometheusMetricFamilies(gatherTime, metricFamilies)
+	req := convertPrometheusMetricFamilies(gatherTime, c.podName, metricFamilies)
 
 	resp, err := c.rest.R().
 		SetBody(req).
@@ -190,7 +191,7 @@ func (c *Client) AckAction(ctx context.Context, actionID string, req *AckCluster
 	return nil
 }
 
-func convertPrometheusMetricFamilies(gatherTime time.Time, metricFamilies []*dto.MetricFamily) *PrometheusWriteRequest {
+func convertPrometheusMetricFamilies(gatherTime time.Time, podName string, metricFamilies []*dto.MetricFamily) *PrometheusWriteRequest {
 	timestamp := gatherTime.UnixMilli()
 
 	timeseries := []PrometheusTimeseries{}
@@ -206,6 +207,10 @@ func convertPrometheusMetricFamilies(gatherTime time.Time, metricFamilies []*dto
 					{
 						Name:  "__name__",
 						Value: family.GetName(),
+					},
+					{
+						Name:  "pod_name",
+						Value: podName,
 					},
 				},
 			}

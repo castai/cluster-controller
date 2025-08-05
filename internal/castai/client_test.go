@@ -65,7 +65,7 @@ func TestConvertPrometheusMetricFamilies(t *testing.T) {
 	t.Run("empty input", func(t *testing.T) {
 		r := require.New(t)
 
-		result := convertPrometheusMetricFamilies(gatherTime, []*dto.MetricFamily{})
+		result := convertPrometheusMetricFamilies(gatherTime, "ctrl_pod", []*dto.MetricFamily{})
 
 		r.NotNil(result)
 		r.Empty(result.Timeseries)
@@ -96,19 +96,21 @@ func TestConvertPrometheusMetricFamilies(t *testing.T) {
 			},
 		}
 
-		result := convertPrometheusMetricFamilies(gatherTime, []*dto.MetricFamily{family})
+		result := convertPrometheusMetricFamilies(gatherTime, "ctrl_pod", []*dto.MetricFamily{family})
 
 		r.Len(result.Timeseries, 1)
 		ts := result.Timeseries[0]
 
-		// Verify __name__ label is first
-		r.Len(ts.Labels, 2)
+		// Verify __name__ and pod_name label is first
+		r.Len(ts.Labels, 3)
 		r.Equal("__name__", ts.Labels[0].Name)
 		r.Equal(metricName, ts.Labels[0].Value)
+		r.Equal("pod_name", ts.Labels[1].Name)
+		r.Equal("ctrl_pod", ts.Labels[1].Value)
 
 		// Verify custom label
-		r.Equal(labelName, ts.Labels[1].Name)
-		r.Equal(labelValue, ts.Labels[1].Value)
+		r.Equal(labelName, ts.Labels[2].Name)
+		r.Equal(labelValue, ts.Labels[2].Value)
 
 		// Verify sample
 		r.Len(ts.Samples, 1)
@@ -135,7 +137,7 @@ func TestConvertPrometheusMetricFamilies(t *testing.T) {
 			},
 		}
 
-		result := convertPrometheusMetricFamilies(gatherTime, []*dto.MetricFamily{family})
+		result := convertPrometheusMetricFamilies(gatherTime, "ctrl_pod", []*dto.MetricFamily{family})
 
 		r.Len(result.Timeseries, 2)
 
@@ -172,7 +174,7 @@ func TestConvertPrometheusMetricFamilies(t *testing.T) {
 			},
 		}
 
-		result := convertPrometheusMetricFamilies(gatherTime, []*dto.MetricFamily{family1, family2})
+		result := convertPrometheusMetricFamilies(gatherTime, "ctrl_pod", []*dto.MetricFamily{family1, family2})
 
 		r.Len(result.Timeseries, 2)
 
@@ -217,21 +219,23 @@ func TestConvertPrometheusMetricFamilies(t *testing.T) {
 			},
 		}
 
-		result := convertPrometheusMetricFamilies(gatherTime, []*dto.MetricFamily{family})
+		result := convertPrometheusMetricFamilies(gatherTime, "ctrl_pod", []*dto.MetricFamily{family})
 
 		r.Len(result.Timeseries, 1)
 		ts := result.Timeseries[0]
 
-		// Should have __name__ + 2 valid labels (nil name skipped, nil value converted to empty)
-		r.Len(ts.Labels, 3)
+		// Should have __name__, pod_name + 2 valid labels (nil name skipped, nil value converted to empty)
+		r.Len(ts.Labels, 4)
 		r.Equal("__name__", ts.Labels[0].Name)
 		r.Equal(metricName, ts.Labels[0].Value)
+		r.Equal("pod_name", ts.Labels[1].Name)
+		r.Equal("ctrl_pod", ts.Labels[1].Value)
 
 		// Verify remaining labels handle nil values correctly
-		r.Equal(validLabelName, ts.Labels[1].Name)
-		r.Equal("", ts.Labels[1].Value) // nil value becomes empty string
 		r.Equal(validLabelName, ts.Labels[2].Name)
-		r.Equal("", ts.Labels[2].Value) // empty string preserved
+		r.Equal("", ts.Labels[2].Value) // nil value becomes empty string
+		r.Equal(validLabelName, ts.Labels[3].Name)
+		r.Equal("", ts.Labels[3].Value) // empty string preserved
 	})
 
 	t.Run("counter edge cases", func(t *testing.T) {
@@ -248,7 +252,7 @@ func TestConvertPrometheusMetricFamilies(t *testing.T) {
 			},
 		}
 
-		result := convertPrometheusMetricFamilies(gatherTime, []*dto.MetricFamily{family})
+		result := convertPrometheusMetricFamilies(gatherTime, "ctrl_pod", []*dto.MetricFamily{family})
 
 		r.Len(result.Timeseries, 0)
 	})
