@@ -226,13 +226,11 @@ func convertPrometheusMetricFamilies(gatherTime time.Time, podName string, metri
 				})
 			}
 
-			if metric.Counter != nil {
-				timeserie.Samples = []PrometheusSample{}
-				timeserie.Samples = append(timeserie.Samples, PrometheusSample{
-					Timestamp: timestamp,
-					Value:     metric.Counter.GetValue(),
-				})
-			}
+			timeserie.Samples = []PrometheusSample{}
+			timeserie.Samples = append(timeserie.Samples, PrometheusSample{
+				Timestamp: timestamp,
+				Value:     metric.Counter.GetValue(),
+			})
 
 			timeseries = append(timeseries, timeserie)
 		}
