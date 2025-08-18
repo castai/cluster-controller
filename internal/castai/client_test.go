@@ -2,7 +2,9 @@ package castai
 
 import (
 	"testing"
+	"time"
 
+	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 )
 
@@ -53,5 +55,205 @@ q276VYI/vYmMLRI/iE7Qjn9uGEeR1LWpVngE9jSzSdzByvzw3DwO4sL5B+rv7O1T
 		got, err := createTLSConfig("")
 		r.NoError(err)
 		r.Nil(got)
+	})
+}
+
+func TestConvertPrometheusMetricFamilies(t *testing.T) {
+	gatherTime := time.Date(2023, 9, 13, 10, 30, 0, 0, time.UTC)
+	expectedTimestamp := gatherTime.UnixMilli()
+
+	t.Run("empty input", func(t *testing.T) {
+		r := require.New(t)
+
+		result := convertPrometheusMetricFamilies(gatherTime, "ctrl_pod", []*dto.MetricFamily{})
+
+		r.NotNil(result)
+		r.Empty(result.Timeseries)
+	})
+
+	t.Run("single counter with labels", func(t *testing.T) {
+		r := require.New(t)
+
+		metricName := "test_counter"
+		counterValue := 42.5
+		labelName := "label1"
+		labelValue := "value1"
+
+		family := &dto.MetricFamily{
+			Name: &metricName,
+			Metric: []*dto.Metric{
+				{
+					Label: []*dto.LabelPair{
+						{
+							Name:  &labelName,
+							Value: &labelValue,
+						},
+					},
+					Counter: &dto.Counter{
+						Value: &counterValue,
+					},
+				},
+			},
+		}
+
+		result := convertPrometheusMetricFamilies(gatherTime, "ctrl_pod", []*dto.MetricFamily{family})
+
+		r.Len(result.Timeseries, 1)
+		ts := result.Timeseries[0]
+
+		// Verify __name__ and pod_name label is first
+		r.Len(ts.Labels, 3)
+		r.Equal("__name__", ts.Labels[0].Name)
+		r.Equal(metricName, ts.Labels[0].Value)
+		r.Equal("pod_name", ts.Labels[1].Name)
+		r.Equal("ctrl_pod", ts.Labels[1].Value)
+
+		// Verify custom label
+		r.Equal(labelName, ts.Labels[2].Name)
+		r.Equal(labelValue, ts.Labels[2].Value)
+
+		// Verify sample
+		r.Len(ts.Samples, 1)
+		r.Equal(expectedTimestamp, ts.Samples[0].Timestamp)
+		r.Equal(counterValue, ts.Samples[0].Value)
+	})
+
+	t.Run("multiple counters in one family", func(t *testing.T) {
+		r := require.New(t)
+
+		metricName := "test_counter"
+		counter1Value := 10.0
+		counter2Value := 20.0
+
+		family := &dto.MetricFamily{
+			Name: &metricName,
+			Metric: []*dto.Metric{
+				{
+					Counter: &dto.Counter{Value: &counter1Value},
+				},
+				{
+					Counter: &dto.Counter{Value: &counter2Value},
+				},
+			},
+		}
+
+		result := convertPrometheusMetricFamilies(gatherTime, "ctrl_pod", []*dto.MetricFamily{family})
+
+		r.Len(result.Timeseries, 2)
+
+		// Both should have same __name__ label
+		r.Equal("__name__", result.Timeseries[0].Labels[0].Name)
+		r.Equal(metricName, result.Timeseries[0].Labels[0].Value)
+		r.Equal("__name__", result.Timeseries[1].Labels[0].Name)
+		r.Equal(metricName, result.Timeseries[1].Labels[0].Value)
+
+		// Different counter values
+		r.Equal(counter1Value, result.Timeseries[0].Samples[0].Value)
+		r.Equal(counter2Value, result.Timeseries[1].Samples[0].Value)
+	})
+
+	t.Run("multiple metric families", func(t *testing.T) {
+		r := require.New(t)
+
+		metric1Name := "counter1"
+		metric2Name := "counter2"
+		value1 := 1.0
+		value2 := 2.0
+
+		family1 := &dto.MetricFamily{
+			Name: &metric1Name,
+			Metric: []*dto.Metric{
+				{Counter: &dto.Counter{Value: &value1}},
+			},
+		}
+
+		family2 := &dto.MetricFamily{
+			Name: &metric2Name,
+			Metric: []*dto.Metric{
+				{Counter: &dto.Counter{Value: &value2}},
+			},
+		}
+
+		result := convertPrometheusMetricFamilies(gatherTime, "ctrl_pod", []*dto.MetricFamily{family1, family2})
+
+		r.Len(result.Timeseries, 2)
+
+		// Verify different metric names
+		r.Equal(metric1Name, result.Timeseries[0].Labels[0].Value)
+		r.Equal(metric2Name, result.Timeseries[1].Labels[0].Value)
+
+		// Verify values
+		r.Equal(value1, result.Timeseries[0].Samples[0].Value)
+		r.Equal(value2, result.Timeseries[1].Samples[0].Value)
+	})
+
+	t.Run("label edge cases", func(t *testing.T) {
+		r := require.New(t)
+
+		metricName := "test_counter"
+		counterValue := 5.0
+		validLabelName := "valid_label"
+		validLabelValue := "valid_value"
+		emptyLabelValue := ""
+
+		family := &dto.MetricFamily{
+			Name: &metricName,
+			Metric: []*dto.Metric{
+				{
+					Label: []*dto.LabelPair{
+						{
+							Name:  nil, // Should be skipped
+							Value: &validLabelValue,
+						},
+						{
+							Name:  &validLabelName,
+							Value: nil, // Should use empty string
+						},
+						{
+							Name:  &validLabelName,
+							Value: &emptyLabelValue, // Should preserve empty string
+						},
+					},
+					Counter: &dto.Counter{Value: &counterValue},
+				},
+			},
+		}
+
+		result := convertPrometheusMetricFamilies(gatherTime, "ctrl_pod", []*dto.MetricFamily{family})
+
+		r.Len(result.Timeseries, 1)
+		ts := result.Timeseries[0]
+
+		// Should have __name__, pod_name + 2 valid labels (nil name skipped, nil value converted to empty)
+		r.Len(ts.Labels, 4)
+		r.Equal("__name__", ts.Labels[0].Name)
+		r.Equal(metricName, ts.Labels[0].Value)
+		r.Equal("pod_name", ts.Labels[1].Name)
+		r.Equal("ctrl_pod", ts.Labels[1].Value)
+
+		// Verify remaining labels handle nil values correctly
+		r.Equal(validLabelName, ts.Labels[2].Name)
+		r.Equal("", ts.Labels[2].Value) // nil value becomes empty string
+		r.Equal(validLabelName, ts.Labels[3].Name)
+		r.Equal("", ts.Labels[3].Value) // empty string preserved
+	})
+
+	t.Run("counter edge cases", func(t *testing.T) {
+		r := require.New(t)
+
+		metricName := "test_counter"
+
+		family := &dto.MetricFamily{
+			Name: &metricName,
+			Metric: []*dto.Metric{
+				{
+					Counter: nil, // Should not produce samples
+				},
+			},
+		}
+
+		result := convertPrometheusMetricFamilies(gatherTime, "ctrl_pod", []*dto.MetricFamily{family})
+
+		r.Len(result.Timeseries, 0)
 	})
 }

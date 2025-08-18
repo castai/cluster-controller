@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
+	dto "github.com/prometheus/client_model/go"
+	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/http2"
 
@@ -28,6 +30,7 @@ type CastAIClient interface {
 	GetActions(ctx context.Context, k8sVersion string) ([]*ClusterAction, error)
 	AckAction(ctx context.Context, actionID string, req *AckClusterActionRequest) error
 	SendLog(ctx context.Context, e *LogEntry) error
+	SendMetrics(ctx context.Context, gatherTime time.Time, metricFamilies []*dto.MetricFamily) error
 }
 
 type LogEntry struct {
@@ -43,14 +46,16 @@ type Client struct {
 	log       *logrus.Logger
 	rest      *resty.Client
 	clusterID string
+	podName   string
 }
 
 // NewClient returns new Client for communicating with Cast AI.
-func NewClient(log *logrus.Logger, rest *resty.Client, clusterID string) *Client {
+func NewClient(log *logrus.Logger, rest *resty.Client, clusterID, podName string) *Client {
 	return &Client{
 		log:       log,
 		rest:      rest,
 		clusterID: clusterID,
+		podName:   podName,
 	}
 }
 
@@ -140,6 +145,23 @@ func (c *Client) SendLog(ctx context.Context, e *LogEntry) error {
 	return nil
 }
 
+func (c *Client) SendMetrics(ctx context.Context, gatherTime time.Time, metricFamilies []*dto.MetricFamily) error {
+	req := convertPrometheusMetricFamilies(gatherTime, c.podName, metricFamilies)
+
+	resp, err := c.rest.R().
+		SetBody(req).
+		SetContext(ctx).
+		Post(fmt.Sprintf("/v1/clusters/%s/components/%s/metrics", c.clusterID, "cluster-controller"))
+	if err != nil {
+		return fmt.Errorf("sending metrics: %w", err)
+	}
+	if resp.IsError() {
+		return fmt.Errorf("sending metrics: request error status_code=%d body=%s", resp.StatusCode(), resp.Body())
+	}
+
+	return nil
+}
+
 func (c *Client) GetActions(ctx context.Context, k8sVersion string) ([]*ClusterAction, error) {
 	res := &GetClusterActionsResponse{}
 	resp, err := c.rest.R().
@@ -168,4 +190,53 @@ func (c *Client) AckAction(ctx context.Context, actionID string, req *AckCluster
 		return fmt.Errorf("ack cluster-actions: request error status_code=%d body=%s", resp.StatusCode(), resp.Body())
 	}
 	return nil
+}
+
+func convertPrometheusMetricFamilies(gatherTime time.Time, podName string, metricFamilies []*dto.MetricFamily) *PrometheusWriteRequest {
+	timestamp := gatherTime.UnixMilli()
+
+	timeseries := []PrometheusTimeseries{}
+	for _, family := range metricFamilies {
+		for _, metric := range family.Metric {
+			// Right now we support only export of counter metrics.
+			if metric.Counter == nil {
+				continue
+			}
+
+			timeserie := PrometheusTimeseries{
+				Labels: []PrometheusLabel{
+					{
+						Name:  "__name__",
+						Value: family.GetName(),
+					},
+					{
+						Name:  "pod_name",
+						Value: podName,
+					},
+				},
+			}
+			for _, label := range metric.Label {
+				if label.Name == nil {
+					continue
+				}
+
+				timeserie.Labels = append(timeserie.Labels, PrometheusLabel{
+					Name:  *label.Name,
+					Value: lo.FromPtr(label.Value),
+				})
+			}
+
+			timeserie.Samples = []PrometheusSample{}
+			timeserie.Samples = append(timeserie.Samples, PrometheusSample{
+				Timestamp: timestamp,
+				Value:     metric.Counter.GetValue(),
+			})
+
+			timeseries = append(timeseries, timeserie)
+		}
+	}
+
+	return &PrometheusWriteRequest{
+		Timeseries: timeseries,
+	}
 }

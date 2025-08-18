@@ -50,7 +50,11 @@ func TestConfig(t *testing.T) {
 			Burst: 150,
 		},
 		MaxActionsInProgress: 1000,
-		Metrics:              Metrics{Port: 16000},
+		Metrics: Metrics{
+			Port:           16000,
+			ExportEnabled:  false,
+			ExportInterval: 30 * time.Second,
+		},
 	}
 
 	require.Equal(t, expected, cfg)

@@ -40,7 +40,7 @@ func run(ctx context.Context) error {
 	if err != nil {
 		log.Fatalf("failed to create castai client: %v", err)
 	}
-	client := castai.NewClient(logger, cl, cfg.ClusterID)
+	client := castai.NewClient(logger, cl, cfg.ClusterID, cfg.SelfPod.Name)
 
 	logexporter.SetupLogExporter(logger, client)
 

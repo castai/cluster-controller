@@ -30,6 +30,7 @@ import (
 	"github.com/castai/cluster-controller/internal/config"
 	"github.com/castai/cluster-controller/internal/controller"
 	"github.com/castai/cluster-controller/internal/controller/logexporter"
+	"github.com/castai/cluster-controller/internal/controller/metricexporter"
 	"github.com/castai/cluster-controller/internal/helm"
 	"github.com/castai/cluster-controller/internal/k8sversion"
 	"github.com/castai/cluster-controller/internal/metrics"
@@ -55,7 +56,7 @@ func run(ctx context.Context) error {
 		log.Fatalf("failed to create castai client: %v", err)
 	}
 
-	client := castai.NewClient(logger, cl, cfg.ClusterID)
+	client := castai.NewClient(logger, cl, cfg.ClusterID, cfg.SelfPod.Name)
 
 	logexporter.SetupLogExporter(logger, client)
 
@@ -158,6 +159,11 @@ func runController(
 			log.Errorf("failed to close controller service: %v", err)
 		}
 	}()
+
+	if cfg.Metrics.ExportEnabled {
+		metricExporter := metricexporter.New(log, client, cfg.Metrics.ExportInterval)
+		go metricExporter.Run(ctx)
+	}
 
 	httpMux := http.NewServeMux()
 	var checks []healthz.HealthChecker
