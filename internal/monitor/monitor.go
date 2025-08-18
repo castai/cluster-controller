@@ -59,8 +59,6 @@ func (m *monitor) metadataUpdated(ctx context.Context, metadata Metadata) {
 func (m *monitor) reportPodDiagnostics(ctx context.Context, prevLastStart int64) {
 	m.log.Errorf("unexpected controller restart detected, fetching k8s events for %s/%s", m.pod.Namespace, m.pod.Name)
 
-	// TODO: log pod restart reason from pod status
-
 	// log pod-related warnings
 	m.logEvents(ctx, m.log.WithField("events_group", fmt.Sprintf("%s/%s", m.pod.Namespace, m.pod.Name)), m.pod.Namespace, &metav1.ListOptions{
 		FieldSelector: "involvedObject.name=" + m.pod.Name,

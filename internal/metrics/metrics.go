@@ -26,6 +26,7 @@ func NewMetricsMux() *http.ServeMux {
 	return metricsMux
 }
 
+// Gather gets all current metric series registered at the Registry.
 func Gather() ([]*dto.MetricFamily, error) {
 	return registry.Gather()
 }

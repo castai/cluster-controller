@@ -260,6 +260,9 @@ func (c *ChartSource) Validate() error {
 	return nil
 }
 
+// PrometheusWriteRequest represents a request to write timeseries data
+// to the Components API IngestMetrics endpoint endpoint.
+// https://api.cast.ai/v1/spec/#/ComponentsAPI/ComponentsAPI_IngestMetrics
 type PrometheusWriteRequest struct {
 	Timeseries []PrometheusTimeseries `json:"timeseries"`
 }
