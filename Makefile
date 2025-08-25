@@ -48,9 +48,5 @@ generate-e2e-client:
 	go generate ./e2e/client
 .PHONY: generate-e2e-client
 
-generate-api-client:
-	go generate internal/castai/api/generate.go
-.PHONY: generate-api-client
-
 deploy-loadtest: release
 	IMAGE_REPOSITORY=$(DOCKER_REPOSITORY) IMAGE_TAG=$(VERSION) ./hack/loadtest/deploy.sh

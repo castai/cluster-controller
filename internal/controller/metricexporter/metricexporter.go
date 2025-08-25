@@ -11,31 +11,31 @@ import (
 	"github.com/castai/cluster-controller/internal/metrics"
 )
 
-type MetricSender interface {
+type Sender interface {
 	SendMetrics(ctx context.Context, gatherTime time.Time, metricFamilies []*dto.MetricFamily) error
 }
 
-type MetricGatherer func() ([]*dto.MetricFamily, time.Time, error)
+type Gatherer func() ([]*dto.MetricFamily, time.Time, error)
 
 func DefaultMetricGatherer() ([]*dto.MetricFamily, time.Time, error) {
 	families, err := metrics.Gather()
 	return families, time.Now(), err
 }
 
-type MetricsExporter struct {
+type Exporter struct {
 	log            *logrus.Entry
-	sender         MetricSender
-	gatherer       MetricGatherer
+	sender         Sender
+	gatherer       Gatherer
 	exportInterval time.Duration
 }
 
 func New(
 	log *logrus.Entry,
-	sender MetricSender,
+	sender Sender,
 	exportInterval time.Duration,
-	opts ...func(*MetricsExporter),
-) *MetricsExporter {
-	exp := &MetricsExporter{
+	opts ...func(*Exporter),
+) *Exporter {
+	exp := &Exporter{
 		log:            log.WithField("component", "metrics_exporter"),
 		sender:         sender,
 		gatherer:       DefaultMetricGatherer,
@@ -47,8 +47,8 @@ func New(
 	return exp
 }
 
-func WithMetricGatherer(g MetricGatherer) func(*MetricsExporter) {
-	return func(me *MetricsExporter) {
+func WithMetricGatherer(g Gatherer) func(*Exporter) {
+	return func(me *Exporter) {
 		if g == nil {
 			return
 		}
@@ -56,11 +56,12 @@ func WithMetricGatherer(g MetricGatherer) func(*MetricsExporter) {
 	}
 }
 
-func (me *MetricsExporter) Run(ctx context.Context) {
+func (me *Exporter) Run(ctx context.Context) {
 	t := time.NewTicker(me.exportInterval)
 	defer t.Stop()
 	defer me.log.Info("metrics exporter stopped")
 	me.log.Infof("starting metrics exporter with interval %v", me.exportInterval)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -76,7 +77,7 @@ func (me *MetricsExporter) Run(ctx context.Context) {
 	}
 }
 
-func (me *MetricsExporter) exportMetrics(ctx context.Context) error {
+func (me *Exporter) exportMetrics(ctx context.Context) error {
 	families, gatherTime, err := me.gatherer()
 	if err != nil {
 		return fmt.Errorf("failed to gather metrics: %w", err)

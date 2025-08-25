@@ -156,12 +156,17 @@ func (s *Controller) handleActions(ctx context.Context, clusterActions []*castai
 
 			var err error
 
+			metrics.ActionStarted(action.GetType())
+			startTime := time.Now()
+
 			handleErr := s.handleAction(ctx, action)
 			if errors.Is(handleErr, context.Canceled) {
 				// Action should be handled again on context canceled errors.
 				return
 			}
-			ackErr := s.ackAction(ctx, action, handleErr)
+
+			handleDuration := time.Since(startTime)
+			ackErr := s.ackAction(ctx, action, handleErr, handleDuration)
 			if handleErr != nil {
 				err = handleErr
 			}
@@ -235,7 +240,7 @@ func (s *Controller) handleAction(ctx context.Context, action *castai.ClusterAct
 	return nil
 }
 
-func (s *Controller) ackAction(ctx context.Context, action *castai.ClusterAction, handleErr error) error {
+func (s *Controller) ackAction(ctx context.Context, action *castai.ClusterAction, handleErr error, handleDuration time.Duration) error {
 	actionType := action.GetType()
 	actionError := getHandlerError(handleErr)
 	s.log.WithFields(logrus.Fields{
@@ -244,7 +249,7 @@ func (s *Controller) ackAction(ctx context.Context, action *castai.ClusterAction
 		"successful":             actionError == nil,
 	}).Info("ack action")
 
-	metrics.ActionFinished(actionType, actionError == nil)
+	metrics.ActionFinished(actionType, actionError == nil, handleDuration)
 
 	boff := waitext.NewConstantBackoff(s.cfg.AckRetryWait)
 

@@ -5,5 +5,9 @@ import (
 )
 
 func RegisterCustomMetrics() {
-	registry.MustRegister(actionCounter)
+	registry.MustRegister(
+		actionStartedCounter,
+		actionExecutedCounter,
+		actionExecutedDuration,
+	)
 }

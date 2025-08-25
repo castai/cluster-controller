@@ -56,8 +56,10 @@ type TLS struct {
 }
 
 type Metrics struct {
-	Port           int
-	ExportEnabled  bool
+	Port int
+	// ExportEnabled enabled exporting metrics to Cast AI SaaS platform.
+	ExportEnabled bool
+	// ExportInterval is the interval at which metrics are exported to Cast AI SaaS platform.
 	ExportInterval time.Duration
 }
 
