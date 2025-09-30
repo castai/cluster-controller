@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -139,6 +140,9 @@ func (c *Client) SendLog(ctx context.Context, e *LogEntry) error {
 	if err != nil {
 		return fmt.Errorf("sending logs: %w", err)
 	}
+	if resp == nil {
+		return errors.New("empty response")
+	}
 	if resp.IsError() {
 		return fmt.Errorf("sending logs: request error status_code=%d body=%s", resp.StatusCode(), resp.Body())
 	}
@@ -155,6 +159,9 @@ func (c *Client) SendMetrics(ctx context.Context, gatherTime time.Time, metricFa
 		Post(fmt.Sprintf("/v1/clusters/%s/components/%s/metrics", c.clusterID, "cluster-controller"))
 	if err != nil {
 		return fmt.Errorf("sending metrics: %w", err)
+	}
+	if resp == nil {
+		return errors.New("empty response")
 	}
 	if resp.IsError() {
 		return fmt.Errorf("sending metrics: request error status_code=%d body=%s", resp.StatusCode(), resp.Body())
@@ -173,6 +180,9 @@ func (c *Client) GetActions(ctx context.Context, k8sVersion string) ([]*ClusterA
 	if err != nil {
 		return nil, fmt.Errorf("failed to request cluster-actions: %w", err)
 	}
+	if resp == nil {
+		return errors.New("empty response")
+	}
 	if resp.IsError() {
 		return nil, fmt.Errorf("get cluster-actions: request error host=%s, status_code=%d body=%s", c.rest.BaseURL, resp.StatusCode(), resp.Body())
 	}
@@ -186,6 +196,9 @@ func (c *Client) AckAction(ctx context.Context, actionID string, req *AckCluster
 		Post(fmt.Sprintf("/v1/kubernetes/clusters/%s/actions/%s/ack", c.clusterID, actionID))
 	if err != nil {
 		return fmt.Errorf("failed to request cluster-actions ack: %w", err)
+	}
+	if resp == nil {
+		return errors.New("empty response")
 	}
 	if resp.IsError() {
 		return fmt.Errorf("ack cluster-actions: request error status_code=%d body=%s", resp.StatusCode(), resp.Body())
