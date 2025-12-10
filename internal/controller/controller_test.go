@@ -16,7 +16,7 @@ import (
 	"github.com/castai/cluster-controller/health"
 	mock_actions "github.com/castai/cluster-controller/internal/actions/mock"
 	"github.com/castai/cluster-controller/internal/castai"
-	"github.com/castai/cluster-controller/internal/castai/mock"
+	mock_castai "github.com/castai/cluster-controller/internal/castai/mock"
 )
 
 // nolint: govet
@@ -248,7 +248,7 @@ func TestController_Run(t *testing.T) {
 				nil,
 				client,
 				nil,
-				health.NewHealthzProvider(health.HealthzCfg{HealthyPollIntervalLimit: pollTimeout}, logrus.New()))
+				health.NewHealthzProvider(health.HealthzCfg{HealthyPollIntervalLimit: pollTimeout}, logrus.New()), nil)
 			handler := mock_actions.NewMockActionHandler(m)
 			if tt.fields.tuneMockHandler != nil {
 				tt.fields.tuneMockHandler(handler)

@@ -25,6 +25,7 @@ import (
 
 	"github.com/castai/cluster-controller/cmd/utils"
 	"github.com/castai/cluster-controller/health"
+	"github.com/castai/cluster-controller/internal/actions"
 	"github.com/castai/cluster-controller/internal/actions/csr"
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/config"
@@ -131,6 +132,22 @@ func runController(
 
 	log.Infof("running castai-cluster-controller version %v, log-level: %v", binVersion, logger.Level)
 
+	// Create global informer manager if enabled
+	log.Info("initializing global informer manager...")
+	informerManager := actions.NewInformerManager(
+		log,
+		clientset,
+		cfg.Informer.ResyncPeriod,
+	)
+
+	// Start informer and wait for cache sync (blocks until synced)
+	syncCtx, syncCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer syncCancel()
+
+	if err := informerManager.Start(syncCtx); err != nil {
+		return fmt.Errorf("starting informer manager: %w", err)
+	}
+
 	actionsConfig := controller.Config{
 		PollWaitInterval:     5 * time.Second,
 		PollTimeout:          maxRequestTimeout,
@@ -153,10 +170,15 @@ func runController(
 		client,
 		helmClient,
 		healthzAction,
+		informerManager,
 	)
 	defer func() {
 		if err := svc.Close(); err != nil {
 			log.Errorf("failed to close controller service: %v", err)
+		}
+		// Stop informer manager on shutdown
+		if informerManager != nil {
+			informerManager.Stop()
 		}
 	}()
 

@@ -3,6 +3,7 @@ package actions
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/samber/lo"
@@ -80,7 +81,7 @@ func TestCheckNodeStatusHandler_Handle_Deleted(t *testing.T) {
 		{
 			name: "provider id of Node is empty but nodeID matches",
 			args: args{
-				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_DELETED, nil),
+				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_DELETED, lo.ToPtr(int32(1))),
 			},
 			fields: fields{
 				tuneFakeObjects: []runtime.Object{
@@ -97,24 +98,24 @@ func TestCheckNodeStatusHandler_Handle_Deleted(t *testing.T) {
 					},
 				},
 			},
-			wantErr: errNodeNotDeleted,
+			wantErr: context.DeadlineExceeded,
 		},
 		{
 			name: "provider id of request is empty but nodeID matches",
 			args: args{
-				action: newActionCheckNodeStatus(nodeName, nodeID, "", castai.ActionCheckNodeStatus_DELETED, nil),
+				action: newActionCheckNodeStatus(nodeName, nodeID, "", castai.ActionCheckNodeStatus_DELETED, lo.ToPtr(int32(1))),
 			},
 			fields: fields{
 				tuneFakeObjects: []runtime.Object{
 					nodeObject,
 				},
 			},
-			wantErr: errNodeNotDeleted,
+			wantErr: context.DeadlineExceeded,
 		},
 		{
 			name: "node id at label is empty but provider ID matches",
 			args: args{
-				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_DELETED, nil),
+				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_DELETED, lo.ToPtr(int32(1))),
 			},
 			fields: fields{
 				tuneFakeObjects: []runtime.Object{
@@ -129,19 +130,19 @@ func TestCheckNodeStatusHandler_Handle_Deleted(t *testing.T) {
 					},
 				},
 			},
-			wantErr: errNodeNotDeleted,
+			wantErr: context.DeadlineExceeded,
 		},
 		{
 			name: "node id at request is empty but provider ID matches",
 			args: args{
-				action: newActionCheckNodeStatus(nodeName, "", providerID, castai.ActionCheckNodeStatus_DELETED, nil),
+				action: newActionCheckNodeStatus(nodeName, "", providerID, castai.ActionCheckNodeStatus_DELETED, lo.ToPtr(int32(1))),
 			},
 			fields: fields{
 				tuneFakeObjects: []runtime.Object{
 					nodeObject,
 				},
 			},
-			wantErr: errNodeNotDeleted,
+			wantErr: context.DeadlineExceeded,
 		},
 		{
 			name: "node with the same name exists but IDs does not match",
@@ -179,9 +180,9 @@ func TestCheckNodeStatusHandler_Handle_Deleted(t *testing.T) {
 				},
 			},
 			args: args{
-				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_DELETED, nil),
+				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_DELETED, lo.ToPtr(int32(1))),
 			},
-			wantErr: errNodeNotDeleted,
+			wantErr: context.DeadlineExceeded,
 		},
 	}
 	for _, tt := range tests {
@@ -189,10 +190,25 @@ func TestCheckNodeStatusHandler_Handle_Deleted(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			clientSet := fake.NewClientset(tt.fields.tuneFakeObjects...)
+
 			log := logrus.New()
 			log.SetLevel(logrus.DebugLevel)
+
+			infMgr := NewInformerManager(log, clientSet, 10*time.Minute)
+
+			// Start informer manager
+			ctx, cancel := context.WithCancel(context.Background())
+			t.Cleanup(cancel)
+
+			go func() {
+				_ = infMgr.Start(ctx)
+			}()
+
+			// Wait for informer to sync
+			time.Sleep(100 * time.Millisecond)
+
 			h := NewCheckNodeStatusHandler(
-				log, clientSet)
+				log, clientSet, infMgr)
 			err := h.Handle(context.Background(), tt.args.action)
 			require.ErrorIs(t, err, tt.wantErr, "unexpected error: %v", err)
 		})
@@ -434,13 +450,33 @@ func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			clientSet := fake.NewClientset()
 			watcher := watch.NewFake()
-			defer watcher.Stop()
 
+			// Set up watch reactor before starting informer
+			clientSet.PrependWatchReactor("nodes", k8stest.DefaultWatchReactor(watcher, nil))
+
+			log := logrus.New()
+			log.SetLevel(logrus.DebugLevel)
+			infMgr := NewInformerManager(log, clientSet, 10*time.Minute)
+
+			// Start informer manager
+			ctx, cancel := context.WithCancel(context.Background())
+			t.Cleanup(func() {
+				cancel()
+				watcher.Stop()
+			})
+
+			go func() {
+				_ = infMgr.Start(ctx)
+			}()
+
+			// Wait for informer to sync
+			time.Sleep(100 * time.Millisecond)
+
+			// Send watch events after informer is ready
 			go func() {
 				if len(tt.fields.tuneFakeObjects) == 0 {
 					return
@@ -451,11 +487,8 @@ func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
 					watcher.Action(obj.event, obj.object)
 				}
 			}()
-			clientSet.PrependWatchReactor("nodes", k8stest.DefaultWatchReactor(watcher, nil))
 
-			log := logrus.New()
-			log.SetLevel(logrus.DebugLevel)
-			h := NewCheckNodeStatusHandler(log, clientSet)
+			h := NewCheckNodeStatusHandler(log, clientSet, infMgr)
 
 			err := h.Handle(context.Background(), tt.args.action)
 			require.ErrorIs(t, err, tt.wantErr, "unexpected error: %v", err)

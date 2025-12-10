@@ -33,6 +33,8 @@ type KwokConfig struct {
 	// Annotation should match what kwok is configured to use via --manage-nodes-with-annotation-selector
 	// Default is DefaultKwokMarker. Value is always KwokMarkerValue.
 	Annotation string
+
+	ProviderID string
 }
 
 // NewKwokNode creates a fake node with reasonable defaults.
@@ -69,6 +71,7 @@ func NewKwokNode(cfg KwokConfig, nodeName string) *corev1.Node {
 			Annotations: defaultAnnotations,
 		},
 		Spec: corev1.NodeSpec{
+			ProviderID: cfg.ProviderID,
 			Taints: []corev1.Taint{
 				{
 					Key:    DefaultKwokMarker,
