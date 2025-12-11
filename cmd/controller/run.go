@@ -140,11 +140,7 @@ func runController(
 		cfg.Informer.ResyncPeriod,
 	)
 
-	// Start informer and wait for cache sync (blocks until synced)
-	syncCtx, syncCancel := context.WithTimeout(ctx, 30*time.Second)
-	defer syncCancel()
-
-	if err := informerManager.Start(syncCtx); err != nil {
+	if err := informerManager.Start(ctx); err != nil {
 		return fmt.Errorf("starting informer manager: %w", err)
 	}
 
