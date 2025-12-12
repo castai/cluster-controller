@@ -240,9 +240,11 @@ func (h *CheckNodeStatusHandler) checkNodeReadyWithInformer(ctx context.Context,
 							},
 						},
 					})
+					log.Infof("going to patch node capacity: %v", node.Name)
 					if err := patchNodeStatus(ctx, log, h.clientset, node.Name, patch); err != nil {
 						log.WithError(err).Error("failed to patch node capacity")
 					}
+					log.Infof("patched node capacity: %v", node.Name)
 				}
 				select {
 				case ready <- struct{}{}:
@@ -257,6 +259,22 @@ func (h *CheckNodeStatusHandler) checkNodeReadyWithInformer(ctx context.Context,
 			}
 			if h.isNodeReady(node, req.NodeID, req.ProviderId) {
 				log.Info("node became ready (update event)")
+				bandwith, ok := node.Labels["scheduling.cast.ai/network-bandwidth"]
+				if ok {
+					patch, _ := json.Marshal(map[string]interface{}{
+						"status": map[string]interface{}{
+							"capacity": map[string]interface{}{
+								"scheduling.cast.ai/network-bandwidth": bandwith,
+							},
+						},
+					})
+					log.Infof("going to patch node capacity: %v", node.Name)
+					if err := patchNodeStatus(ctx, log, h.clientset, node.Name, patch); err != nil {
+						log.WithError(err).Error("failed to patch node capacity")
+					}
+					log.Infof("patched node capacity: %v", node.Name)
+				}
+
 				select {
 				case ready <- struct{}{}:
 				default:
