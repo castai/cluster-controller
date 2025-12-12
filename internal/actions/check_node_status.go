@@ -20,6 +20,7 @@ import (
 
 var _ ActionHandler = &CheckNodeStatusHandler{}
 
+// NewCheckNodeStatusHandler creates a new handler for checking node status (ready/deleted).
 func NewCheckNodeStatusHandler(log logrus.FieldLogger, clientset kubernetes.Interface, informerManager *InformerManager) *CheckNodeStatusHandler {
 	return &CheckNodeStatusHandler{
 		log:             log,
@@ -28,12 +29,16 @@ func NewCheckNodeStatusHandler(log logrus.FieldLogger, clientset kubernetes.Inte
 	}
 }
 
+// CheckNodeStatusHandler handles ActionCheckNodeStatus actions by monitoring node status
+// changes using Kubernetes informers with efficient event-driven notifications.
 type CheckNodeStatusHandler struct {
 	log             logrus.FieldLogger
 	clientset       kubernetes.Interface
 	informerManager *InformerManager
 }
 
+// Handle processes a CheckNodeStatus action by verifying the node reaches the requested
+// status (READY or DELETED) within the specified timeout period.
 func (h *CheckNodeStatusHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
 	if action == nil {
 		return fmt.Errorf("action is nil %w", errAction)
@@ -131,7 +136,6 @@ func (h *CheckNodeStatusHandler) checkNodeDeletedWithInformer(ctx context.Contex
 
 	// Set up channel to receive notification when node is deleted
 	deleted := make(chan struct{})
-	errCh := make(chan error, 1)
 
 	informer := h.informerManager.GetNodeInformer()
 
@@ -188,8 +192,6 @@ func (h *CheckNodeStatusHandler) checkNodeDeletedWithInformer(ctx context.Contex
 	select {
 	case <-deleted:
 		return nil
-	case err := <-errCh:
-		return err
 	case <-ctx.Done():
 		return fmt.Errorf("timeout waiting for node to be deleted: %w", ctx.Err())
 	}
@@ -213,42 +215,22 @@ func (h *CheckNodeStatusHandler) checkNodeReadyWithInformer(ctx context.Context,
 	node, err := lister.Get(req.NodeName)
 	if err == nil && h.isNodeReady(node, req.NodeID, req.ProviderId) {
 		log.Info("node already ready in cache")
+		h.patchNodeCapacityIfNeeded(ctx, log, node)
 		return nil
 	}
 
 	// Set up channel to receive notification when node is ready
 	ready := make(chan struct{})
-	errCh := make(chan error, 1)
 
 	informer := h.informerManager.GetNodeInformer()
 
 	// Register event handler to watch for node updates
 	registration, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
-			node, ok := obj.(*corev1.Node)
-			if !ok || node.Name != req.NodeName {
-				return
-			}
-			if h.isNodeReady(node, req.NodeID, req.ProviderId) {
-				log.Info("node became ready (add event)")
-				select {
-				case ready <- struct{}{}:
-				default:
-				}
-			}
+			h.handleNodeReadyEvent(obj, req, ready, log, "add event")
 		},
 		UpdateFunc: func(oldObj, newObj any) {
-			node, ok := newObj.(*corev1.Node)
-			if !ok || node.Name != req.NodeName {
-				return
-			}
-			if h.isNodeReady(node, req.NodeID, req.ProviderId) {
-				log.Info("node became ready (update event)")
-				select {
-				case ready <- struct{}{}:
-				default:
-				}
-			}
+			h.handleNodeReadyEvent(newObj, req, ready, log, "update event")
 		},
 	})
 	if err != nil {
@@ -263,37 +245,57 @@ func (h *CheckNodeStatusHandler) checkNodeReadyWithInformer(ctx context.Context,
 	// Wait for node to be ready or timeout
 	select {
 	case <-ready:
-		if err := informer.RemoveEventHandler(registration); err != nil {
-			log.WithError(err).Warn("failed to remove event handler")
-		}
-
 		node, err := lister.Get(req.NodeName)
 		if err != nil {
-			log.WithError(err).Error("faield to get node, will skip patch")
+			log.WithError(err).Error("failed to get node, will skip patch")
 			return nil
 		}
 
-		bandwith, ok := node.Labels["scheduling.cast.ai/network-bandwidth"]
-		if ok {
-			patch, _ := json.Marshal(map[string]interface{}{
-				"status": map[string]interface{}{
-					"capacity": map[string]interface{}{
-						"scheduling.cast.ai/network-bandwidth": bandwith,
-					},
-				},
-			})
-			log.Infof("going to patch node capacity: %v", node.Name)
-			if err := patchNodeStatus(ctx, log, h.clientset, node.Name, patch); err != nil {
-				log.WithError(err).Error("failed to patch node capacity")
-			}
-			log.Infof("patched node capacity: %v", node.Name)
-		}
+		h.patchNodeCapacityIfNeeded(ctx, log, node)
 		return nil
-	case err := <-errCh:
-		return err
 	case <-ctx.Done():
 		return fmt.Errorf("timeout waiting for node to be ready: %w", ctx.Err())
 	}
+}
+
+func (h *CheckNodeStatusHandler) handleNodeReadyEvent(obj any, req *castai.ActionCheckNodeStatus, ready chan struct{}, log *logrus.Entry, eventType string) {
+	node, ok := obj.(*corev1.Node)
+	if !ok || node.Name != req.NodeName {
+		return
+	}
+	if h.isNodeReady(node, req.NodeID, req.ProviderId) {
+		log.Infof("node became ready (%s)", eventType)
+		select {
+		case ready <- struct{}{}:
+		default:
+		}
+	}
+}
+
+func (h *CheckNodeStatusHandler) patchNodeCapacityIfNeeded(ctx context.Context, log *logrus.Entry, node *corev1.Node) {
+	bandwidth, ok := node.Labels["scheduling.cast.ai/network-bandwidth"]
+	if !ok {
+		return
+	}
+
+	patch, err := json.Marshal(map[string]interface{}{
+		"status": map[string]interface{}{
+			"capacity": map[string]interface{}{
+				"scheduling.cast.ai/network-bandwidth": bandwidth,
+			},
+		},
+	})
+	if err != nil {
+		log.WithError(err).Error("failed to marshal node capacity patch")
+		return
+	}
+
+	log.Infof("going to patch node capacity: %v", node.Name)
+	if err := patchNodeStatus(ctx, log, h.clientset, node.Name, patch); err != nil {
+		log.WithError(err).Error("failed to patch node capacity")
+		return
+	}
+	log.Infof("patched node capacity: %v", node.Name)
 }
 
 func (h *CheckNodeStatusHandler) isNodeReady(node *corev1.Node, castNodeID, providerID string) bool {
