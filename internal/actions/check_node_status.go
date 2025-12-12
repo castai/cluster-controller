@@ -113,7 +113,7 @@ func checkNodeDeleted(ctx context.Context, clientSet v1.NodeInterface, nodeName,
 }
 
 // handleNodeDeletedUpdateEvent handles update events for node deletion detection.
-func (h *CheckNodeStatusHandler) handleNodeDeletedUpdateEvent(oldObj, newObj any, nodeName, nodeID, providerID string, deleted chan struct{}, log logrus.FieldLogger) {
+func (h *CheckNodeStatusHandler) handleNodeDeletedUpdateEvent(newObj any, nodeName, nodeID, providerID string, deleted chan struct{}, log logrus.FieldLogger) {
 	node, ok := newObj.(*corev1.Node)
 	if !ok || node.Name != nodeName {
 		return
@@ -155,7 +155,7 @@ func (h *CheckNodeStatusHandler) handleNodeDeletedDeleteEvent(obj any, nodeName 
 
 func (h *CheckNodeStatusHandler) checkNodeDeletedWithInformer(ctx context.Context, nodeName, nodeID, providerID string, log logrus.FieldLogger) error {
 	if err := h.checkNodeAlreadyDeleted(nodeName, nodeID, providerID, log); err != nil {
-		if err == errNodeNotDeleted {
+		if errors.Is(err, errNodeNotDeleted) {
 			return h.waitForNodeDeletion(ctx, nodeName, nodeID, providerID, log)
 		}
 		return err
@@ -195,7 +195,7 @@ func (h *CheckNodeStatusHandler) waitForNodeDeletion(ctx context.Context, nodeNa
 
 	registration, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		UpdateFunc: func(oldObj, newObj any) {
-			h.handleNodeDeletedUpdateEvent(oldObj, newObj, nodeName, nodeID, providerID, deleted, log)
+			h.handleNodeDeletedUpdateEvent(newObj, nodeName, nodeID, providerID, deleted, log)
 		},
 		DeleteFunc: func(obj any) {
 			h.handleNodeDeletedDeleteEvent(obj, nodeName, deleted, log)

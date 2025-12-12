@@ -45,6 +45,7 @@ jobs:
           GOOS: linux
           GOARCH: amd64
           CGO_ENABLED: 0
+          GOEXPERIMENT: synctest
 
       - name: Build Go binary arm64
         run: go build -ldflags "-s -w -X main.GitCommit=$GITHUB_SHA -X main.GitRef=$GITHUB_REF -X main.Version=${RELEASE_TAG:-$VERSION_TAG}" -o bin/castai-cluster-controller-arm64 .
@@ -52,9 +53,12 @@ jobs:
           GOOS: linux
           GOARCH: arm64
           CGO_ENABLED: 0
+          GOEXPERIMENT: synctest
 
       - name: Test
         run: go test -short -race -timeout 15m  ./...
+        env:
+          GOEXPERIMENT: synctest
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
