@@ -22,7 +22,7 @@ require (
 	go.uber.org/goleak v1.3.0
 	golang.org/x/net v0.42.0
 	golang.org/x/sync v0.16.0
-	helm.sh/helm/v3 v3.17.4
+	helm.sh/helm/v3 v3.18.5
 	k8s.io/api v0.33.2
 	k8s.io/apiextensions-apiserver v0.32.2
 	k8s.io/apimachinery v0.33.2
