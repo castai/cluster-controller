@@ -24,7 +24,7 @@ $(GOLANGCI_LINT):
 
 ## build: Build the binary for the specified architecture and create a Docker image. Usually this means ARCH=amd64 should be set if running on an ARM machine. Use `go build .` for simple local build.
 build:
-	CGO_ENABLED=0 GOOS=linux GOARCH=$(ARCH) go build -ldflags "-s -w" -o bin/castai-cluster-controller-$(ARCH) .
+	CGO_ENABLED=0 GOOS=linux GOARCH=$(ARCH) GOEXPERIMENT=synctest go build -ldflags "-s -w" -o bin/castai-cluster-controller-$(ARCH) .
 	docker build --platform=linux/$(ARCH) --build-arg TARGETARCH=$(ARCH) -t $(DOCKER_REPOSITORY):$(VERSION) .
 
 push:
@@ -41,7 +41,7 @@ fix: $(GOLANGCI_LINT)
 .PHONY: fix
 
 test:
-	go test ./... -race -parallel=20
+	GOEXPERIMENT=synctest go test ./... -race -parallel=20
 .PHONY: test
 
 generate-e2e-client:

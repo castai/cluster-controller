@@ -49,7 +49,7 @@ func (s *checkNodeStatusScenario) Preparation(ctx context.Context, namespace str
 		errGroup.Go(func() error {
 			nodeName := fmt.Sprintf("kwok-check-status-%d", i)
 			s.log.Info(fmt.Sprintf("Creating node %s", nodeName))
-			node := NewKwokNode(KwokConfig{}, nodeName)
+			node := NewKwokNode(KwokConfig{ProviderID: fmt.Sprintf("kwok://%s", nodeName)}, nodeName)
 
 			_, err := clientset.CoreV1().Nodes().Create(ctx, node, metav1.CreateOptions{})
 			if err != nil && !apierrors.IsAlreadyExists(err) {
@@ -112,6 +112,7 @@ func (s *checkNodeStatusScenario) Run(ctx context.Context, _ string, _ kubernete
 			CreatedAt: time.Now().UTC(),
 			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
 				NodeName:   node.Name,
+				ProviderId: node.Spec.ProviderID,
 				NodeStatus: castai.ActionCheckNodeStatus_READY,
 			},
 		})

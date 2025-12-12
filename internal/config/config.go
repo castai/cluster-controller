@@ -32,8 +32,13 @@ type Config struct {
 	// MaxActionsInProgress serves as a safeguard to limit the number of Goroutines in progress.
 	MaxActionsInProgress int
 
-	MonitorMetadataPath string `mapstructure:"monitor_metadata"`
-	SelfPod             Pod    `mapstructure:"self_pod"`
+	MonitorMetadataPath string         `mapstructure:"monitor_metadata"`
+	SelfPod             Pod            `mapstructure:"self_pod"`
+	Informer            InformerConfig `mapstructure:"informer"`
+}
+
+type InformerConfig struct {
+	ResyncPeriod time.Duration `mapstructure:"resync_period"`
 }
 
 type Pod struct {
@@ -109,6 +114,8 @@ func Get() Config {
 	_ = viper.BindEnv("metrics.port", "METRICS_PORT")
 	_ = viper.BindEnv("metrics.exportenabled", "METRICS_EXPORT_ENABLED")
 	_ = viper.BindEnv("metrics.exportinterval", "METRICS_EXPORT_INTERVAL")
+	_ = viper.BindEnv("informer.enabled", "INFORMER_ENABLED")
+	_ = viper.BindEnv("informer.resyncperiod", "INFORMER_RESYNC_PERIOD")
 
 	cfg = &Config{}
 	if err := viper.Unmarshal(&cfg); err != nil {
@@ -171,6 +178,12 @@ func Get() Config {
 		// We do not want to export metrics too often
 		// and also protect against accidental misconfiguration.
 		cfg.Metrics.ExportInterval = 30 * time.Second
+	}
+
+	// Informer defaults
+	if cfg.Informer.ResyncPeriod < 1*time.Hour {
+		// Default to 12 hours, consistent with CSR informer
+		cfg.Informer.ResyncPeriod = 12 * time.Hour
 	}
 
 	return *cfg
