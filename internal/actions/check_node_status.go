@@ -267,6 +267,12 @@ func (h *CheckNodeStatusHandler) checkNodeReadyWithInformer(ctx context.Context,
 			log.WithError(err).Warn("failed to remove event handler")
 		}
 
+		node, err := lister.Get(req.NodeName)
+		if err != nil {
+			log.WithError(err).Error("faield to get node, will skip patch")
+			return nil
+		}
+
 		bandwith, ok := node.Labels["scheduling.cast.ai/network-bandwidth"]
 		if ok {
 			patch, _ := json.Marshal(map[string]interface{}{
