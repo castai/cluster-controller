@@ -1,6 +1,6 @@
 module github.com/castai/cluster-controller
 
-go 1.24.6
+go 1.25.3
 
 require (
 	github.com/bombsimon/logrusr/v4 v4.1.0
