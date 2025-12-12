@@ -112,15 +112,66 @@ func checkNodeDeleted(ctx context.Context, clientSet v1.NodeInterface, nodeName,
 	return false, errNodeNotDeleted
 }
 
-func (h *CheckNodeStatusHandler) checkNodeDeletedWithInformer(ctx context.Context, nodeName, nodeID, providerID string, log logrus.FieldLogger) error {
-	lister := h.informerManager.GetNodeLister()
+// handleNodeDeletedUpdateEvent handles update events for node deletion detection.
+func (h *CheckNodeStatusHandler) handleNodeDeletedUpdateEvent(oldObj, newObj any, nodeName, nodeID, providerID string, deleted chan struct{}, log logrus.FieldLogger) {
+	node, ok := newObj.(*corev1.Node)
+	if !ok || node.Name != nodeName {
+		return
+	}
+	// Check if node was replaced (ID mismatch)
+	if err := isNodeIDProviderIDValid(node, nodeID, providerID, log); err != nil {
+		if errors.Is(err, errNodeDoesNotMatch) {
+			log.Info("node name reused, original node deleted (update event)")
+			select {
+			case deleted <- struct{}{}:
+			default:
+			}
+		}
+	}
+}
 
-	// Check if node is already deleted in cache
+// handleNodeDeletedDeleteEvent handles delete events for node deletion detection.
+func (h *CheckNodeStatusHandler) handleNodeDeletedDeleteEvent(obj any, nodeName string, deleted chan struct{}, log logrus.FieldLogger) {
+	node, ok := obj.(*corev1.Node)
+	if !ok {
+		// Handle tombstone case
+		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
+		if !ok {
+			return
+		}
+		node, ok = tombstone.Obj.(*corev1.Node)
+		if !ok {
+			return
+		}
+	}
+	if node.Name == nodeName {
+		log.Info("node deleted (delete event)")
+		select {
+		case deleted <- struct{}{}:
+		default:
+		}
+	}
+}
+
+func (h *CheckNodeStatusHandler) checkNodeDeletedWithInformer(ctx context.Context, nodeName, nodeID, providerID string, log logrus.FieldLogger) error {
+	if err := h.checkNodeAlreadyDeleted(nodeName, nodeID, providerID, log); err != nil {
+		if err == errNodeNotDeleted {
+			return h.waitForNodeDeletion(ctx, nodeName, nodeID, providerID, log)
+		}
+		return err
+	}
+	return nil
+}
+
+// checkNodeAlreadyDeleted checks if the node is already deleted in cache.
+// Returns nil if node is deleted, errNodeNotDeleted if still exists, or an error.
+func (h *CheckNodeStatusHandler) checkNodeAlreadyDeleted(nodeName, nodeID, providerID string, log logrus.FieldLogger) error {
+	lister := h.informerManager.GetNodeLister()
 	node, err := lister.Get(nodeName)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			log.Info("node already deleted in cache")
-			return nil // Node deleted
+			return nil
 		}
 		return fmt.Errorf("getting node from lister: %w", err)
 	}
@@ -129,54 +180,25 @@ func (h *CheckNodeStatusHandler) checkNodeDeletedWithInformer(ctx context.Contex
 	if err := isNodeIDProviderIDValid(node, nodeID, providerID, log); err != nil {
 		if errors.Is(err, errNodeDoesNotMatch) {
 			log.Info("node name reused, original node deleted")
-			return nil // Name reused, original deleted
+			return nil
 		}
 		return fmt.Errorf("validating node ID/provider ID: %w", err)
 	}
 
-	// Set up channel to receive notification when node is deleted
-	deleted := make(chan struct{})
+	return errNodeNotDeleted
+}
 
+// waitForNodeDeletion waits for a node to be deleted by watching for deletion events.
+func (h *CheckNodeStatusHandler) waitForNodeDeletion(ctx context.Context, nodeName, nodeID, providerID string, log logrus.FieldLogger) error {
+	deleted := make(chan struct{})
 	informer := h.informerManager.GetNodeInformer()
 
-	// Register event handler to watch for node deletion
 	registration, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		UpdateFunc: func(oldObj, newObj any) {
-			node, ok := newObj.(*corev1.Node)
-			if !ok || node.Name != nodeName {
-				return
-			}
-			// Check if node was replaced (ID mismatch)
-			if err := isNodeIDProviderIDValid(node, nodeID, providerID, log); err != nil {
-				if errors.Is(err, errNodeDoesNotMatch) {
-					log.Info("node name reused, original node deleted (update event)")
-					select {
-					case deleted <- struct{}{}:
-					default:
-					}
-				}
-			}
+			h.handleNodeDeletedUpdateEvent(oldObj, newObj, nodeName, nodeID, providerID, deleted, log)
 		},
 		DeleteFunc: func(obj any) {
-			node, ok := obj.(*corev1.Node)
-			if !ok {
-				// Handle tombstone case
-				tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
-				if !ok {
-					return
-				}
-				node, ok = tombstone.Obj.(*corev1.Node)
-				if !ok {
-					return
-				}
-			}
-			if node.Name == nodeName {
-				log.Info("node deleted (delete event)")
-				select {
-				case deleted <- struct{}{}:
-				default:
-				}
-			}
+			h.handleNodeDeletedDeleteEvent(obj, nodeName, deleted, log)
 		},
 	})
 	if err != nil {
@@ -188,7 +210,6 @@ func (h *CheckNodeStatusHandler) checkNodeDeletedWithInformer(ctx context.Contex
 		}
 	}()
 
-	// Wait for node to be deleted or timeout
 	select {
 	case <-deleted:
 		return nil
