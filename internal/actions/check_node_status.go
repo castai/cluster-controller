@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -230,6 +231,19 @@ func (h *CheckNodeStatusHandler) checkNodeReadyWithInformer(ctx context.Context,
 			}
 			if h.isNodeReady(node, req.NodeID, req.ProviderId) {
 				log.Info("node became ready (add event)")
+				bandwith, ok := node.Labels["scheduling.cast.ai/network-bandwidth"]
+				if ok {
+					patch, _ := json.Marshal(map[string]interface{}{
+						"status": map[string]interface{}{
+							"capacity": map[string]interface{}{
+								"scheduling.cast.ai/network-bandwidth": bandwith,
+							},
+						},
+					})
+					if err := patchNodeStatus(ctx, log, h.clientset, node.Name, patch); err != nil {
+						log.WithError(err).Error("failed to patch node capacity")
+					}
+				}
 				select {
 				case ready <- struct{}{}:
 				default:
