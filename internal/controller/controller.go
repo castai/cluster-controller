@@ -53,7 +53,7 @@ func NewService(
 		startedActions: map[string]struct{}{},
 		actionHandlers: map[reflect.Type]actions.ActionHandler{
 			reflect.TypeOf(&castai.ActionDeleteNode{}):        actions.NewDeleteNodeHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionDrainNode{}):         actions.NewDrainNodeHandler(log, clientset, cfg.Namespace),
+			reflect.TypeOf(&castai.ActionDrainNode{}):         actions.NewDrainNodeHandler(log, clientset, cfg.Namespace, informerManager),
 			reflect.TypeOf(&castai.ActionPatchNode{}):         actions.NewPatchNodeHandler(log, clientset),
 			reflect.TypeOf(&castai.ActionCreateEvent{}):       actions.NewCreateEventHandler(log, clientset),
 			reflect.TypeOf(&castai.ActionChartUpsert{}):       actions.NewChartUpsertHandler(log, helmClient),

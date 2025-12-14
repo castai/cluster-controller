@@ -30,6 +30,9 @@ type InformerManager struct {
 	nodeInformer cache.SharedIndexInformer
 	nodeLister   listerv1.NodeLister
 
+	podInformer cache.SharedIndexInformer
+	podLister   listerv1.PodLister
+
 	started    bool
 	cancelFunc context.CancelFunc
 	mu         sync.RWMutex
@@ -47,12 +50,18 @@ func NewInformerManager(
 	nodeInformer := factory.Core().V1().Nodes().Informer()
 	nodeLister := factory.Core().V1().Nodes().Lister()
 
+	// Create pod informer
+	podInformer := factory.Core().V1().Pods().Informer()
+	podLister := factory.Core().V1().Pods().Lister()
+
 	return &InformerManager{
 		log:          log,
 		clientset:    clientset,
 		factory:      factory,
 		nodeInformer: nodeInformer,
 		nodeLister:   nodeLister,
+		podInformer:  podInformer,
+		podLister:    podLister,
 	}
 }
 
@@ -88,12 +97,14 @@ func (m *InformerManager) Start(ctx context.Context) error {
 	defer syncCancel()
 
 	m.log.Info("waiting for informer caches to sync...")
-	if !cache.WaitForCacheSync(syncCtx.Done(), m.nodeInformer.HasSynced) {
+	if !cache.WaitForCacheSync(syncCtx.Done(), m.nodeInformer.HasSynced, m.podInformer.HasSynced) {
 		metrics.IncrementInformerCacheSyncs("node", "failure")
+		metrics.IncrementInformerCacheSyncs("pod", "failure")
 		return fmt.Errorf("failed to sync informer caches within %v", cacheSyncTimeout)
 	}
 
 	metrics.IncrementInformerCacheSyncs("node", "success")
+	metrics.IncrementInformerCacheSyncs("pod", "success")
 
 	m.mu.Lock()
 	m.started = true
@@ -142,12 +153,22 @@ func (m *InformerManager) GetNodeInformer() cache.SharedIndexInformer {
 	return m.nodeInformer
 }
 
+// GetPodLister returns the pod lister for querying the pod cache.
+func (m *InformerManager) GetPodLister() listerv1.PodLister {
+	return m.podLister
+}
+
+// GetPodInformer returns the pod informer for watching pod events.
+func (m *InformerManager) GetPodInformer() cache.SharedIndexInformer {
+	return m.podInformer
+}
+
 // GetFactory returns the underlying SharedInformerFactory for advanced use cases.
 func (m *InformerManager) GetFactory() informers.SharedInformerFactory {
 	return m.factory
 }
 
-// reportCacheSize periodically reports the node cache size as a metric.
+// reportCacheSize periodically reports the node and pod cache sizes as metrics.
 func (m *InformerManager) reportCacheSize(ctx context.Context) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -160,11 +181,20 @@ func (m *InformerManager) reportCacheSize(ctx context.Context) {
 			nodes, err := m.nodeLister.List(labels.Everything())
 			if err != nil {
 				m.log.WithError(err).Warn("failed to list nodes for cache size metric")
-				continue
+			} else {
+				size := len(nodes)
+				m.log.WithField("cache_size", size).Debug("node informer cache size")
+				metrics.SetInformerCacheSize("node", size)
 			}
-			size := len(nodes)
-			m.log.WithField("cache_size", size).Debug("node informer cache size")
-			metrics.SetInformerCacheSize("node", size)
+
+			pods, err := m.podLister.List(labels.Everything())
+			if err != nil {
+				m.log.WithError(err).Warn("failed to list pods for cache size metric")
+			} else {
+				size := len(pods)
+				m.log.WithField("cache_size", size).Debug("pod informer cache size")
+				metrics.SetInformerCacheSize("pod", size)
+			}
 		}
 	}
 }

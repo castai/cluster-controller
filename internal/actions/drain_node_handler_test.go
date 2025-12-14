@@ -576,10 +576,26 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+			log := logrus.New()
+			clientset := tt.fields.clientSet(t)
+
+			// Create and start informer manager
+			infMgr := NewInformerManager(log, clientset, 10*time.Minute)
+			ctx, cancel := context.WithCancel(context.Background())
+			t.Cleanup(cancel)
+
+			go func() {
+				_ = infMgr.Start(ctx)
+			}()
+
+			// Wait for informer caches to sync
+			time.Sleep(100 * time.Millisecond)
+
 			h := &DrainNodeHandler{
-				log:       logrus.New(),
-				clientset: tt.fields.clientSet(t),
-				cfg:       tt.args.cfg,
+				log:             log,
+				clientset:       clientset,
+				informerManager: infMgr,
+				cfg:             tt.args.cfg,
 			}
 			err := h.Handle(context.Background(), tt.args.action)
 			require.Equal(t, tt.wantErr != nil, err != nil, "expected error: %v, got: %v", tt.wantErr, err)
