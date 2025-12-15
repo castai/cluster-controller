@@ -51,3 +51,29 @@ func ActionFinished(actionType string, success bool, duration time.Duration) {
 	actionExecutedCounter.With(prometheus.Labels{"success": strconv.FormatBool(success), "type": actionType}).Inc()
 	actionExecutedDuration.With(prometheus.Labels{"type": actionType}).Observe(duration.Seconds())
 }
+
+// informerCacheSize tracks the size of informer caches.
+var informerCacheSize = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "informer_cache_size",
+		Help: "Number of objects in informer cache by resource type.",
+	},
+	[]string{"resource"},
+)
+
+// informerCacheSyncs tracks informer cache sync attempts.
+var informerCacheSyncs = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "informer_cache_syncs_total",
+		Help: "Informer cache sync attempts by resource and status.",
+	},
+	[]string{"resource", "status"},
+)
+
+func SetInformerCacheSize(resource string, size int) {
+	informerCacheSize.With(prometheus.Labels{"resource": resource}).Set(float64(size))
+}
+
+func IncrementInformerCacheSyncs(resource, status string) {
+	informerCacheSyncs.With(prometheus.Labels{"resource": resource, "status": status}).Inc()
+}

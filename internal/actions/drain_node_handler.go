@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/samber/lo"
@@ -15,9 +16,10 @@ import (
 	"k8s.io/api/policy/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/kubectl/pkg/drain"
 
 	"github.com/castai/cluster-controller/internal/castai"
@@ -40,10 +42,11 @@ type drainNodeConfig struct {
 	skipDeletedTimeoutSeconds     int
 }
 
-func NewDrainNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface, castNamespace string) *DrainNodeHandler {
+func NewDrainNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface, castNamespace string, informerManager *InformerManager) *DrainNodeHandler {
 	return &DrainNodeHandler{
-		log:       log,
-		clientset: clientset,
+		log:             log,
+		clientset:       clientset,
+		informerManager: informerManager,
 		cfg: drainNodeConfig{
 			podsDeleteTimeout:             2 * time.Minute,
 			podDeleteRetries:              5,
@@ -68,9 +71,10 @@ func (h *DrainNodeHandler) getDrainTimeout(action *castai.ClusterAction) time.Du
 }
 
 type DrainNodeHandler struct {
-	log       logrus.FieldLogger
-	clientset kubernetes.Interface
-	cfg       drainNodeConfig
+	log             logrus.FieldLogger
+	clientset       kubernetes.Interface
+	informerManager *InformerManager
+	cfg             drainNodeConfig
 }
 
 func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
@@ -305,34 +309,25 @@ func (h *DrainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldL
 //   - DaemonSet pods
 //   - pods that are already finished (Succeeded or Failed)
 //   - pods that were marked for deletion recently (Terminating state); the meaning of "recently" is controlled by config
+// This method uses the informer cache instead of making direct API calls.
 func (h *DrainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.FieldLogger, node *v1.Node) ([]v1.Pod, error) {
-	var pods *v1.PodList
-	err := waitext.Retry(
-		ctx,
-		defaultBackoff(),
-		defaultMaxRetriesK8SOperation,
-		func(ctx context.Context) (bool, error) {
-			p, err := h.clientset.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
-				FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": node.Name}).String(),
-			})
-			if err != nil {
-				return true, err
-			}
-			pods = p
-			return false, nil
-		},
-		func(err error) {
-			log.Warnf("listing pods on node %s: %v", node.Name, err)
-		},
-	)
+	// Use lister to query from local cache instead of API call
+	lister := h.informerManager.GetPodLister()
+
+	pods, err := lister.List(labels.Everything())
 	if err != nil {
-		return nil, fmt.Errorf("listing node %v pods: %w", node.Name, err)
+		return nil, fmt.Errorf("listing pods from cache: %w", err)
 	}
+
+	// Filter pods that belong to this node
+	podsOnNode := lo.Filter(pods, func(p *v1.Pod, _ int) bool {
+		return p.Spec.NodeName == node.Name
+	})
 
 	podsToEvict := make([]v1.Pod, 0)
 	castPods := make([]v1.Pod, 0)
 	// Evict CAST PODs as last ones.
-	for _, p := range pods.Items {
+	for _, p := range podsOnNode {
 		// Skip pods that have been recently removed.
 		if !p.ObjectMeta.DeletionTimestamp.IsZero() &&
 			int(time.Since(p.ObjectMeta.GetDeletionTimestamp().Time).Seconds()) > h.cfg.skipDeletedTimeoutSeconds {
@@ -344,13 +339,13 @@ func (h *DrainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.F
 			continue
 		}
 
-		if p.Namespace == h.cfg.castNamespace && !isDaemonSetPod(&p) && !isStaticPod(&p) {
-			castPods = append(castPods, p)
+		if p.Namespace == h.cfg.castNamespace && !isDaemonSetPod(p) && !isStaticPod(p) {
+			castPods = append(castPods, *p)
 			continue
 		}
 
-		if !isDaemonSetPod(&p) && !isStaticPod(&p) {
-			podsToEvict = append(podsToEvict, p)
+		if !isDaemonSetPod(p) && !isStaticPod(p) {
+			podsToEvict = append(podsToEvict, *p)
 		}
 	}
 
@@ -364,6 +359,7 @@ func (h *DrainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.F
 // If podsToIgnore is not empty, the list is further filtered by it.
 // This is useful when you don't expect some pods on the node to terminate (e.g. because eviction failed for them) so there is no reason to wait until timeout.
 // The wait can potentially run forever if pods are scheduled on the node and are not evicted/deleted by anything. Use a timeout to avoid infinite wait.
+// This method uses the informer watch mechanism instead of polling to efficiently detect pod terminations.
 func (h *DrainNodeHandler) waitNodePodsTerminated(ctx context.Context, log logrus.FieldLogger, node *v1.Node, podsToIgnore []*v1.Pod) error {
 	// Check if context is cancelled before starting any work.
 	select {
@@ -378,37 +374,140 @@ func (h *DrainNodeHandler) waitNodePodsTerminated(ctx context.Context, log logru
 		podsToIgnoreLookup[fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)] = struct{}{}
 	}
 
-	log.Infof("starting wait for pod termination, %d pods in ignore list", len(podsToIgnore))
-	return waitext.Retry(
-		ctx,
-		waitext.NewConstantBackoff(h.cfg.podsTerminationWaitRetryDelay),
-		waitext.Forever,
-		func(ctx context.Context) (bool, error) {
-			pods, err := h.listNodePodsToEvict(ctx, log, node)
-			if err != nil {
-				return true, fmt.Errorf("listing %q pods to be terminated: %w", node.Name, err)
+	// Get initial list of pods to wait for from cache
+	pods, err := h.listNodePodsToEvict(ctx, log, node)
+	if err != nil {
+		return fmt.Errorf("listing %q pods to be terminated: %w", node.Name, err)
+	}
+
+	// Create thread-safe tracker for remaining pods
+	tracker := newRemainingPodsTracker(pods, podsToIgnoreLookup)
+
+	if tracker.isEmpty() {
+		log.Info("no pods to wait for termination")
+		return nil
+	}
+
+	log.Infof("waiting for %d pods to terminate (using informer watch), %d pods in ignore list", tracker.count(), len(podsToIgnore))
+
+	// Set up event handler to watch for pod deletions and updates
+	done := make(chan struct{})
+	informer := h.informerManager.GetPodInformer()
+
+	registration, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		UpdateFunc: func(oldObj, newObj any) {
+			pod, ok := newObj.(*v1.Pod)
+			if !ok || pod.Spec.NodeName != node.Name {
+				return
 			}
 
-			podsNames := lo.Map(pods, func(p v1.Pod, _ int) string {
-				return fmt.Sprintf("%s/%s", p.Namespace, p.Name)
-			})
+			podKey := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
 
-			remainingPodsList := podsNames
-			if len(podsToIgnore) > 0 {
-				remainingPodsList = lo.Filter(remainingPodsList, func(podName string, _ int) bool {
-					_, ok := podsToIgnoreLookup[podName]
-					return !ok
-				})
+			if !tracker.contains(podKey) {
+				return
 			}
-			if remainingPods := len(remainingPodsList); remainingPods > 0 {
-				return true, fmt.Errorf("waiting for %d pods (%v) to be terminated on node %v", remainingPods, remainingPodsList, node.Name)
+
+			// Check if pod should be removed from waiting list
+			if shouldIgnorePod(pod, h.cfg.skipDeletedTimeoutSeconds) {
+				remaining := tracker.remove(podKey)
+				log.Infof("pod %s terminating/completed, %d remaining", podKey, remaining)
+
+				if remaining == 0 {
+					select {
+					case done <- struct{}{}:
+					default:
+					}
+				}
 			}
-			return false, nil
 		},
-		func(err error) {
-			h.log.Warnf("waiting for pod termination on node %v, will retry: %v", node.Name, err)
+		DeleteFunc: func(obj any) {
+			pod, ok := obj.(*v1.Pod)
+			if !ok {
+				// Handle tombstone
+				tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
+				if !ok {
+					return
+				}
+				pod, ok = tombstone.Obj.(*v1.Pod)
+				if !ok {
+					return
+				}
+			}
+
+			if pod.Spec.NodeName != node.Name {
+				return
+			}
+
+			podKey := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
+			remaining := tracker.remove(podKey)
+
+			if remaining == 0 {
+				log.Info("all pods terminated")
+				select {
+				case done <- struct{}{}:
+				default:
+				}
+			} else {
+				log.Infof("pod %s deleted, %d remaining", podKey, remaining)
+			}
 		},
-	)
+	})
+	if err != nil {
+		return fmt.Errorf("adding event handler: %w", err)
+	}
+	defer func() {
+		if err := informer.RemoveEventHandler(registration); err != nil {
+			log.WithError(err).Warn("failed to remove event handler")
+		}
+	}()
+
+	// Set up periodic re-check as a fallback in case events are missed
+	recheckInterval := h.cfg.podsTerminationWaitRetryDelay
+	if recheckInterval <= 0 {
+		recheckInterval = 10 * time.Second // Default fallback interval
+	}
+	ticker := time.NewTicker(recheckInterval)
+	defer ticker.Stop()
+
+	// Helper function to re-check pods from cache
+	recheckPods := func() (bool, error) {
+		pods, err := h.listNodePodsToEvict(ctx, log, node)
+		if err != nil {
+			return false, err
+		}
+
+		changed, count := tracker.update(pods, podsToIgnoreLookup)
+		if changed {
+			log.Infof("re-check: %d pods remaining", count)
+			return count == 0, nil
+		}
+		return false, nil
+	}
+
+	// Do an immediate check in case pods were already deleted
+	if allDone, err := recheckPods(); err == nil && allDone {
+		return nil
+	}
+
+	// Wait for all pods to terminate or timeout
+	for {
+		select {
+		case <-done:
+			return nil
+		case <-ticker.C:
+			// Periodically re-check the actual pod list from cache as fallback
+			if allDone, err := recheckPods(); err != nil {
+				log.Warnf("failed to re-check pods during termination wait: %v", err)
+			} else if allDone {
+				return nil
+			}
+		case <-ctx.Done():
+			remainingPods := tracker.list()
+			count := tracker.count()
+			return fmt.Errorf("timeout waiting for %d pods (%v) to terminate: %w",
+				count, remainingPods, ctx.Err())
+		}
+	}
 }
 
 // evictPod from the k8s node. Error handling is based on eviction api documentation:
@@ -495,6 +594,92 @@ func (h *DrainNodeHandler) deletePod(ctx context.Context, options metav1.DeleteO
 	return nil
 }
 
+// remainingPodsTracker is a thread-safe tracker for remaining pods during drain operation.
+type remainingPodsTracker struct {
+	mu   sync.Mutex
+	pods map[string]bool
+}
+
+// newRemainingPodsTracker creates a new tracker with the given initial pods.
+func newRemainingPodsTracker(pods []v1.Pod, podsToIgnore map[string]struct{}) *remainingPodsTracker {
+	tracker := &remainingPodsTracker{
+		pods: make(map[string]bool),
+	}
+	for _, p := range pods {
+		podKey := fmt.Sprintf("%s/%s", p.Namespace, p.Name)
+		if _, ignored := podsToIgnore[podKey]; !ignored {
+			tracker.pods[podKey] = true
+		}
+	}
+	return tracker
+}
+
+// remove removes a pod from the tracker and returns the new count.
+func (t *remainingPodsTracker) remove(podKey string) int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	delete(t.pods, podKey)
+	return len(t.pods)
+}
+
+// contains checks if a pod is being tracked.
+func (t *remainingPodsTracker) contains(podKey string) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	return t.pods[podKey]
+}
+
+// count returns the number of remaining pods.
+func (t *remainingPodsTracker) count() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	return len(t.pods)
+}
+
+// isEmpty returns true if there are no remaining pods.
+func (t *remainingPodsTracker) isEmpty() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	return len(t.pods) == 0
+}
+
+// list returns a copy of the remaining pod keys.
+func (t *remainingPodsTracker) list() []string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	pods := make([]string, 0, len(t.pods))
+	for podKey := range t.pods {
+		pods = append(pods, podKey)
+	}
+	return pods
+}
+
+// update replaces the tracked pods with a new set, given the ignored pods.
+// Returns true if the set changed and the new count.
+func (t *remainingPodsTracker) update(newPods []v1.Pod, podsToIgnore map[string]struct{}) (changed bool, count int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	newPodsMap := make(map[string]bool)
+	for _, p := range newPods {
+		podKey := fmt.Sprintf("%s/%s", p.Namespace, p.Name)
+		if _, ignored := podsToIgnore[podKey]; !ignored && t.pods[podKey] {
+			newPodsMap[podKey] = true
+		}
+	}
+
+	changed = len(newPodsMap) != len(t.pods)
+	if changed {
+		t.pods = newPodsMap
+	}
+	return changed, len(t.pods)
+}
+
 func logCastPodsToEvict(log logrus.FieldLogger, castPods []v1.Pod) {
 	if len(castPods) == 0 {
 		return
@@ -521,6 +706,23 @@ func isControlledBy(p *v1.Pod, kind string) bool {
 	ctrl := metav1.GetControllerOf(p)
 
 	return ctrl != nil && ctrl.Kind == kind
+}
+
+// shouldIgnorePod checks if a pod should be ignored for termination wait.
+// Returns true if the pod is marked for deletion and past grace period, or if it's in a terminal phase.
+func shouldIgnorePod(pod *v1.Pod, skipDeletedTimeoutSeconds int) bool {
+	// Pod is marked for deletion and past grace period
+	if !pod.ObjectMeta.DeletionTimestamp.IsZero() &&
+		int(time.Since(pod.ObjectMeta.GetDeletionTimestamp().Time).Seconds()) > skipDeletedTimeoutSeconds {
+		return true
+	}
+
+	// Pod is in terminal phase
+	if pod.Status.Phase == v1.PodSucceeded || pod.Status.Phase == v1.PodFailed {
+		return true
+	}
+
+	return false
 }
 
 type podFailedActionError struct {

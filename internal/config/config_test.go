@@ -55,6 +55,9 @@ func TestConfig(t *testing.T) {
 			ExportEnabled:  false,
 			ExportInterval: 30 * time.Second,
 		},
+		Informer: InformerConfig{
+			ResyncPeriod: 12 * time.Hour,
+		},
 	}
 
 	require.Equal(t, expected, cfg)
