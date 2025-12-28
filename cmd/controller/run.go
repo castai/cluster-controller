@@ -25,6 +25,7 @@ import (
 
 	"github.com/castai/cluster-controller/cmd/utils"
 	"github.com/castai/cluster-controller/health"
+	"github.com/castai/cluster-controller/internal/actions"
 	"github.com/castai/cluster-controller/internal/actions/csr"
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/config"
@@ -131,6 +132,15 @@ func runController(
 
 	log.Infof("running castai-cluster-controller version %v, log-level: %v", binVersion, logger.Level)
 
+	actionHandlers := actions.NewDefaultActionHandlers(
+		k8sVer.Full(),
+		cfg.SelfPod.Namespace,
+		log,
+		clientset,
+		dynamicClient,
+		helmClient,
+	)
+
 	actionsConfig := controller.Config{
 		PollWaitInterval:     5 * time.Second,
 		PollTimeout:          maxRequestTimeout,
@@ -148,11 +158,9 @@ func runController(
 		log,
 		actionsConfig,
 		k8sVer.Full(),
-		clientset,
-		dynamicClient,
 		client,
-		helmClient,
 		healthzAction,
+		actionHandlers,
 	)
 	defer func() {
 		if err := svc.Close(); err != nil {

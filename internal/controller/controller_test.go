@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -11,12 +12,12 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
-	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/health"
+	"github.com/castai/cluster-controller/internal/actions"
 	mock_actions "github.com/castai/cluster-controller/internal/actions/mock"
 	"github.com/castai/cluster-controller/internal/castai"
-	"github.com/castai/cluster-controller/internal/castai/mock"
+	mock_castai "github.com/castai/cluster-controller/internal/castai/mock"
 )
 
 // nolint: govet
@@ -99,9 +100,9 @@ func TestController_Run(t *testing.T) {
 							},
 						},
 					}, nil).Times(1).MinTimes(1)
-					m.EXPECT().AckAction(gomock.Any(), "a1", gomock.Any()).Return(nil).MinTimes(1)
-					m.EXPECT().AckAction(gomock.Any(), "a2", gomock.Any()).Return(nil).MinTimes(1)
-					m.EXPECT().AckAction(gomock.Any(), "a3", gomock.Any()).Return(nil).MinTimes(1)
+					m.EXPECT().AckAction(gomock.Any(), "a1", &castai.AckClusterActionRequest{}).Return(nil).MinTimes(1)
+					m.EXPECT().AckAction(gomock.Any(), "a2", &castai.AckClusterActionRequest{}).Return(nil).MinTimes(1)
+					m.EXPECT().AckAction(gomock.Any(), "a3", &castai.AckClusterActionRequest{}).Return(nil).MinTimes(1)
 				},
 			},
 		},
@@ -240,22 +241,25 @@ func TestController_Run(t *testing.T) {
 			if tt.fields.tuneMockCastAIClient != nil {
 				tt.fields.tuneMockCastAIClient(client)
 			}
-			s := NewService(
-				logrus.New(),
-				tt.fields.cfg,
-				tt.fields.k8sVersion,
-				kubernetes.New(nil),
-				nil,
-				client,
-				nil,
-				health.NewHealthzProvider(health.HealthzCfg{HealthyPollIntervalLimit: pollTimeout}, logrus.New()))
+
 			handler := mock_actions.NewMockActionHandler(m)
 			if tt.fields.tuneMockHandler != nil {
 				tt.fields.tuneMockHandler(handler)
 			}
-			for k := range s.actionHandlers {
-				s.actionHandlers[k] = handler
+			testActionHandlers := map[reflect.Type]actions.ActionHandler{
+				reflect.TypeOf(&castai.ActionDeleteNode{}): handler,
+				reflect.TypeOf(&castai.ActionDrainNode{}):  handler,
+				reflect.TypeOf(&castai.ActionPatchNode{}):  handler,
 			}
+
+			s := NewService(
+				logrus.New(),
+				tt.fields.cfg,
+				tt.fields.k8sVersion,
+				client,
+				health.NewHealthzProvider(health.HealthzCfg{HealthyPollIntervalLimit: pollTimeout}, logrus.New()),
+				testActionHandlers)
+
 			s.Run(tt.args.ctx())
 		})
 	}

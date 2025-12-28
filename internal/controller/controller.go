@@ -11,13 +11,10 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/health"
 	"github.com/castai/cluster-controller/internal/actions"
 	"github.com/castai/cluster-controller/internal/castai"
-	"github.com/castai/cluster-controller/internal/helm"
 	"github.com/castai/cluster-controller/internal/metrics"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
@@ -38,11 +35,9 @@ func NewService(
 	log logrus.FieldLogger,
 	cfg Config,
 	k8sVersion string,
-	clientset *kubernetes.Clientset,
-	dynamicClient dynamic.Interface,
 	castaiClient castai.CastAIClient,
-	helmClient helm.Client,
 	healthCheck *health.HealthzProvider,
+	actionHandlers actions.ActionHandlers,
 ) *Controller {
 	return &Controller{
 		log:            log,
@@ -50,23 +45,8 @@ func NewService(
 		k8sVersion:     k8sVersion,
 		castAIClient:   castaiClient,
 		startedActions: map[string]struct{}{},
-		actionHandlers: map[reflect.Type]actions.ActionHandler{
-			reflect.TypeOf(&castai.ActionDeleteNode{}):        actions.NewDeleteNodeHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionDrainNode{}):         actions.NewDrainNodeHandler(log, clientset, cfg.Namespace),
-			reflect.TypeOf(&castai.ActionPatchNode{}):         actions.NewPatchNodeHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionCreateEvent{}):       actions.NewCreateEventHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionChartUpsert{}):       actions.NewChartUpsertHandler(log, helmClient),
-			reflect.TypeOf(&castai.ActionChartUninstall{}):    actions.NewChartUninstallHandler(log, helmClient),
-			reflect.TypeOf(&castai.ActionChartRollback{}):     actions.NewChartRollbackHandler(log, helmClient, cfg.Version),
-			reflect.TypeOf(&castai.ActionDisconnectCluster{}): actions.NewDisconnectClusterHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionCheckNodeDeleted{}):  actions.NewCheckNodeDeletedHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionCheckNodeStatus{}):   actions.NewCheckNodeStatusHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionEvictPod{}):          actions.NewEvictPodHandler(log, clientset),
-			reflect.TypeOf(&castai.ActionPatch{}):             actions.NewPatchHandler(log, dynamicClient),
-			reflect.TypeOf(&castai.ActionCreate{}):            actions.NewCreateHandler(log, dynamicClient),
-			reflect.TypeOf(&castai.ActionDelete{}):            actions.NewDeleteHandler(log, dynamicClient),
-		},
-		healthCheck: healthCheck,
+		actionHandlers: actionHandlers,
+		healthCheck:    healthCheck,
 	}
 }
 
@@ -77,7 +57,7 @@ type Controller struct {
 
 	k8sVersion string
 
-	actionHandlers map[reflect.Type]actions.ActionHandler
+	actionHandlers actions.ActionHandlers
 
 	startedActionsWg sync.WaitGroup
 	startedActions   map[string]struct{}
@@ -273,5 +253,5 @@ func getHandlerError(err error) *string {
 }
 
 func (s *Controller) Close() error {
-	return s.actionHandlers[reflect.TypeOf(&castai.ActionCreateEvent{})].(*actions.CreateEventHandler).Close()
+	return s.actionHandlers.Close()
 }
