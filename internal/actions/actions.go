@@ -3,11 +3,12 @@ package actions
 import (
 	"reflect"
 
-	"github.com/castai/cluster-controller/internal/castai"
-	"github.com/castai/cluster-controller/internal/helm"
 	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/helm"
 )
 
 type ActionHandlers map[reflect.Type]ActionHandler
