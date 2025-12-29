@@ -13,8 +13,8 @@ import (
 type ActionHandlers map[reflect.Type]ActionHandler
 
 func NewDefaultActionHandlers(
-	version string,
-	namespace string,
+	k8sVersion string,
+	castNamespace string,
 	log logrus.FieldLogger,
 	clientset *kubernetes.Clientset,
 	dynamicClient dynamic.Interface,
@@ -22,12 +22,12 @@ func NewDefaultActionHandlers(
 ) ActionHandlers {
 	return ActionHandlers{
 		reflect.TypeOf(&castai.ActionDeleteNode{}):        NewDeleteNodeHandler(log, clientset),
-		reflect.TypeOf(&castai.ActionDrainNode{}):         NewDrainNodeHandler(log, clientset, namespace),
+		reflect.TypeOf(&castai.ActionDrainNode{}):         NewDrainNodeHandler(log, clientset, castNamespace),
 		reflect.TypeOf(&castai.ActionPatchNode{}):         NewPatchNodeHandler(log, clientset),
 		reflect.TypeOf(&castai.ActionCreateEvent{}):       NewCreateEventHandler(log, clientset),
 		reflect.TypeOf(&castai.ActionChartUpsert{}):       NewChartUpsertHandler(log, helmClient),
 		reflect.TypeOf(&castai.ActionChartUninstall{}):    NewChartUninstallHandler(log, helmClient),
-		reflect.TypeOf(&castai.ActionChartRollback{}):     NewChartRollbackHandler(log, helmClient, version),
+		reflect.TypeOf(&castai.ActionChartRollback{}):     NewChartRollbackHandler(log, helmClient, k8sVersion),
 		reflect.TypeOf(&castai.ActionDisconnectCluster{}): NewDisconnectClusterHandler(log, clientset),
 		reflect.TypeOf(&castai.ActionCheckNodeDeleted{}):  NewCheckNodeDeletedHandler(log, clientset),
 		reflect.TypeOf(&castai.ActionCheckNodeStatus{}):   NewCheckNodeStatusHandler(log, clientset),
