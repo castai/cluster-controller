@@ -277,7 +277,6 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		// capture range variable
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got := isNodeIDProviderIDValid(tt.args.node, tt.args.nodeID, tt.args.providerID, logrus.New())
