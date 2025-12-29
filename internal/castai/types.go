@@ -48,7 +48,7 @@ type ClusterAction struct {
 	Error                   *string                  `json:"error,omitempty"`
 }
 
-func (c *ClusterAction) Data() interface{} {
+func (c *ClusterAction) Data() any {
 	if c.ActionDeleteNode != nil {
 		return c.ActionDeleteNode
 	}
@@ -140,7 +140,7 @@ type ActionPatch struct {
 
 type ActionCreate struct {
 	GroupVersionResource `json:",inline"`
-	Object               map[string]interface{} `json:"object,omitempty"`
+	Object               map[string]any `json:"object,omitempty"`
 }
 
 type ActionDelete struct {

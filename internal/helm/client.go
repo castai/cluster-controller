@@ -108,7 +108,7 @@ func (c *client) Install(ctx context.Context, opts InstallOptions) (*release.Rel
 	install.Wait = true // Wait unit all applied resources are running.
 
 	// Prepare user value overrides.
-	values := map[string]interface{}{}
+	values := map[string]any{}
 	if err := mergeValuesOverrides(values, opts.ValuesOverrides); err != nil {
 		return nil, err
 	}
@@ -160,7 +160,7 @@ func (c *client) Upgrade(ctx context.Context, opts UpgradeOptions) (*release.Rel
 	name := opts.Release.Name
 
 	// Prepare user value overrides.
-	values := map[string]interface{}{}
+	values := map[string]any{}
 	if len(opts.Release.Config) > 0 {
 		values = opts.Release.Config
 	}
@@ -228,13 +228,13 @@ func (c *configurationGetter) Get(namespace string) (*action.Configuration, erro
 	return cfg, nil
 }
 
-func (c *configurationGetter) debugFuncf(format string, v ...interface{}) {
+func (c *configurationGetter) debugFuncf(format string, v ...any) {
 	if c.debug {
 		c.log.Debug(fmt.Sprintf(format, v...))
 	}
 }
 
-func mergeValuesOverrides(values map[string]interface{}, overrides map[string]string) error {
+func mergeValuesOverrides(values map[string]any, overrides map[string]string) error {
 	for k, v := range overrides {
 		value := fmt.Sprintf("%s=%v", k, v)
 		if err := strvals.ParseInto(value, values); err != nil {

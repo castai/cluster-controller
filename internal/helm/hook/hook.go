@@ -96,7 +96,7 @@ func (l *LabelIgnoreHook) Run(renderedManifests *bytes.Buffer) (*bytes.Buffer, e
 		if _, ok := labelIgnoreResources[key]; ok {
 			oldLabels := getChartLabels(oldManifests, u.GetName(), u.GetKind(), u.GetNamespace())
 			if oldLabels == nil {
-				return nil, fmt.Errorf("updating a previously non-existant chart %s", gvk)
+				return nil, fmt.Errorf("updating a previously non-existent chart %s", gvk)
 			}
 			labelCopy := u.GetLabels()
 			// Reset version labels to previous release.

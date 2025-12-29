@@ -295,14 +295,14 @@ func runWithLeaderElection(
 				// This method is always called(even if it was not a leader):
 				// - when controller shuts dow (for example because of SIGTERM)
 				// - we actually lost leader
-				// So we need to check what whas reason of acutally stopping.
+				// So we need to check what whas reason of actually stopping.
 				if err := ctx.Err(); err != nil {
 					log.Infof("main context done, stopping controller: %v", err)
 					return
 				}
 				log.Infof("leader lost: %s", id)
 				// We don't need to exit here.
-				// Leader "on started leading" receive a context that gets cancelled when you're no longer the leader.
+				// Leader "on started leading" receive a context that gets canceled when you're no longer the leader.
 			},
 			OnNewLeader: func(identity string) {
 				// We're notified when new leader elected.
@@ -338,13 +338,14 @@ func (e *logContextError) Unwrap() error {
 	return e.err
 }
 
-func runningOnGKE(clientset *kubernetes.Clientset, cfg config.Config) (isGKE bool, err error) {
+func runningOnGKE(clientset *kubernetes.Clientset, cfg config.Config) (bool, error) {
 	// When running locally, there is no node.
 	if cfg.SelfPod.Node == "" {
 		return false, nil
 	}
 
-	err = waitext.Retry(context.Background(), waitext.DefaultExponentialBackoff(), 3, func(ctx context.Context) (bool, error) {
+	var isGKE bool
+	err := waitext.Retry(context.Background(), waitext.DefaultExponentialBackoff(), 3, func(ctx context.Context) (bool, error) {
 		node, err := clientset.CoreV1().Nodes().Get(ctx, cfg.SelfPod.Node, metav1.GetOptions{})
 		if err != nil && !apierrors.IsNotFound(err) {
 			return true, fmt.Errorf("getting node: %w", err)
@@ -361,7 +362,7 @@ func runningOnGKE(clientset *kubernetes.Clientset, cfg config.Config) (isGKE boo
 	}, func(err error) {
 	})
 
-	return
+	return isGKE, err
 }
 
 func saveMetadata(clusterID string, cfg config.Config, log *logrus.Entry) error {

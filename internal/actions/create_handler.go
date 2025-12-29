@@ -45,7 +45,7 @@ func (h *CreateHandler) Handle(ctx context.Context, action *castai.ClusterAction
 	log := h.log.WithFields(logrus.Fields{
 		ActionIDLogField: action.ID,
 		"action":         action.GetType(),
-		"gvr":            req.GroupVersionResource.String(),
+		"gvr":            req.String(),
 		"name":           newObj.GetName(),
 	})
 
@@ -66,7 +66,7 @@ func (h *CreateHandler) Handle(ctx context.Context, action *castai.ClusterAction
 		return fmt.Errorf("creating resource %v: %w", req.Resource, err)
 	}
 
-	if apierrors.IsAlreadyExists(err) {
+	if !apierrors.IsAlreadyExists(err) {
 		log.Info("resource already exists, patching")
 		obj, err := resource.Get(ctx, newObj.GetName(), metav1.GetOptions{})
 		if err != nil {

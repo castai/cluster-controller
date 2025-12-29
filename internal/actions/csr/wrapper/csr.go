@@ -34,7 +34,7 @@ type CSR struct {
 }
 
 // NewCSR validates and creates new certificateRequestFacade.
-func NewCSR(clientset kubernetes.Interface, csrObj interface{}) (*CSR, error) {
+func NewCSR(clientset kubernetes.Interface, csrObj any) (*CSR, error) {
 	var (
 		v1   *certv1.CertificateSigningRequest
 		v1b1 *certv1beta1.CertificateSigningRequest

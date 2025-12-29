@@ -105,7 +105,7 @@ func TestCreateEvent(t *testing.T) {
 			ctx := context.Background()
 			wg := sync.WaitGroup{}
 			wg.Add(test.actionCount)
-			for i := 0; i < test.actionCount; i++ {
+			for range test.actionCount {
 				go func() {
 					err := h.Handle(ctx, test.action)
 					r.NoError(err)
@@ -114,7 +114,7 @@ func TestCreateEvent(t *testing.T) {
 			}
 			wg.Wait()
 			events := make([]string, 0, test.actionCount)
-			for i := 0; i < test.actionCount; i++ {
+			for i := range test.actionCount {
 				select {
 				case event := <-recorder.Events:
 					events = append(events, event)
@@ -123,7 +123,7 @@ func TestCreateEvent(t *testing.T) {
 					continue
 				}
 			}
-			for i := 0; i < test.actionCount; i++ {
+			for i := range test.actionCount {
 				r.Contains(events[i], test.expectedEvent.Reason)
 				r.Contains(events[i], test.expectedEvent.Message)
 			}
@@ -153,7 +153,7 @@ func TestRandomNs(t *testing.T) {
 	ctx := context.Background()
 	wg := sync.WaitGroup{}
 	wg.Add(actionCount)
-	for i := 0; i < actionCount; i++ {
+	for range actionCount {
 		go func() {
 			err := h.Handle(ctx, &castai.ClusterAction{
 				ID: uuid.New().String(),
@@ -193,7 +193,7 @@ func TestRandomNs(t *testing.T) {
 		broadCaster.Shutdown()
 	}
 	r.Len(events, actionCount)
-	for i := 0; i < actionCount; i++ {
+	for i := range actionCount {
 		r.Contains(events[i], "Warning")
 		r.Contains(events[i], "Oh common, you can do better.")
 	}
@@ -257,7 +257,6 @@ func TestCreateEventHandler_Handle(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			m := gomock.NewController(t)
@@ -270,14 +269,12 @@ func TestCreateEventHandler_Handle(t *testing.T) {
 			// defer handler.Close()
 			actionCount := 10000
 			wg := sync.WaitGroup{}
-			for i := 0; i < actionCount; i++ {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
+			for range actionCount {
+				wg.Go(func() {
 					if err := handler.Handle(context.Background(), tt.args.action); (err != nil) != tt.wantErr {
 						t.Errorf("Handle() error = %v, wantErr %v", err, tt.wantErr)
 					}
-				}()
+				})
 			}
 			wg.Wait()
 		})

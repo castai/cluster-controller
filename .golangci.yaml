@@ -1,5 +1,6 @@
+version: "2"
 linters:
-  disable-all: true
+  default: none
   enable:
     - containedctx
     - dogsled
@@ -8,86 +9,86 @@ linters:
     - errcheck
     - errname
     - errorlint
-    - gci
     - gocognit
     - goconst
     - gocritic
-#    - godot
-    - gofmt
-    - gofumpt
     - goprintffuncname
     - gosec
-    - gosimple
     - govet
     - ineffassign
+    - intrange
     - lll
-#    TODO FIX THE FOLLOWING
-#    - misspell
-#    - nakedret
-#    - paralleltest
+    - misspell
+    - modernize
+    - nakedret
+    - nilerr
+    - predeclared
     - revive
     - sqlclosecheck
     - staticcheck
-#    - stylecheck
-    - typecheck
     - unconvert
     - unparam
-    - unused
-#    - whitespace
-
-linters-settings:
-  gocritic:
-    enabled-all: true
-    disabled-checks:
-      - commentFormatting
-  godot:
-    scope: all
-  gofumpt:
-    module-path: github.com/castai/cluster-controller
-    extra-rules: true
-  goconst:
-    min-len: 2
-    min-occurrences: 5
-  golint:
-    min-confidence: 0
-  gomnd:
-    settings:
-      mnd:
-        # don't include the "operation" and "assign"
-        checks: [argument,case,condition,return]
-  govet:
-    # shadow is marked as experimental feature, skip it for now.
-    check-shadowing: false
-    settings:
-      printf:
-        funcs:
-          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Infof
-          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Warnf
-          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Errorf
-          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Fatalf
-  lll:
-    line-length: 200
-  maligned:
-    suggest-new: true
-  misspell:
-    locale: US
-  revive:
-    rules:
-      - name: redefines-builtin-id
-        disabled: true
-
-      # Allow code like:
-      #      Items: binpacking.Items{
-      #        {
-      #        },
-      #      }
-      - name: nested-structs
-        disabled: true
-  gci:
-    sections:
-      - standard
-      - default
-      - prefix(github.com/castai/cluster-controller)
-issues:
-  exclude-dirs:
-    - mock
+    - usestdlibvars
+    - usetesting
+    - wastedassign
+    - whitespace
+  settings:
+    goconst:
+      min-len: 2
+      min-occurrences: 5
+    gocritic:
+      disabled-checks:
+        - commentFormatting
+    godot:
+      scope: all
+    govet:
+      settings:
+        printf:
+          funcs:
+            - (github.com/golangci/golangci-lint/pkg/logutils.Log).Infof
+            - (github.com/golangci/golangci-lint/pkg/logutils.Log).Warnf
+            - (github.com/golangci/golangci-lint/pkg/logutils.Log).Errorf
+            - (github.com/golangci/golangci-lint/pkg/logutils.Log).Fatalf
+    lll:
+      line-length: 200
+    misspell:
+      locale: US
+    revive:
+      rules:
+        - name: redefines-builtin-id
+          disabled: true
+        - name: nested-structs
+          disabled: true
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - mock
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/castai/cluster-controller)
+    gofumpt:
+      module-path: github.com/castai/cluster-controller
+      extra-rules: true
+  exclusions:
+    generated: lax
+    paths:
+      - mock
+      - third_party$
+      - builtin$
+      - examples$

@@ -3,6 +3,7 @@ package logexporter
 import (
 	"context"
 	"fmt"
+	"maps"
 	"path"
 	"runtime"
 	"sync"
@@ -82,9 +83,7 @@ func (e *LogExporter) Fire(entry *logrus.Entry) error {
 		Message: entry.Message,
 	}
 	castLogEntry.Fields = make(logrus.Fields, len(entry.Data))
-	for k, v := range entry.Data {
-		castLogEntry.Fields[k] = v
-	}
+	maps.Copy(castLogEntry.Fields, entry.Data)
 
 	go func(entry *castai.LogEntry) {
 		defer e.wg.Done()

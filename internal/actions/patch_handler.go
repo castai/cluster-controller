@@ -43,7 +43,7 @@ func (h *PatchHandler) Handle(ctx context.Context, action *castai.ClusterAction)
 	log := h.log.WithFields(logrus.Fields{
 		ActionIDLogField: action.ID,
 		"action":         action.GetType(),
-		"gvr":            req.ID.GroupVersionResource.String(),
+		"gvr":            req.ID.String(),
 		"name":           req.ID.Name,
 	})
 	if req.ID.Namespace != nil {

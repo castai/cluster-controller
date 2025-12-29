@@ -64,7 +64,7 @@ func (s *deleteNodeScenario) Preparation(ctx context.Context, namespace string, 
 
 			s.log.Info(fmt.Sprintf("Creating deployment on node %s", nodeName))
 			deployment := Deployment(fmt.Sprintf("fake-deployment-%s-%d", node.Name, i))
-			deployment.ObjectMeta.Namespace = namespace
+			deployment.Namespace = namespace
 			//nolint:gosec // Not afraid of overflow here.
 			deployment.Spec.Replicas = lo.ToPtr(int32(s.deploymentReplicas))
 			deployment.Spec.Template.Spec.NodeName = nodeName

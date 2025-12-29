@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 
 	"github.com/spf13/cobra"
 
@@ -21,11 +22,8 @@ func Execute(ctx context.Context) {
 	cmd := rootCmd.Commands()
 
 	for _, a := range cmd {
-		for _, b := range os.Args[1:] {
-			if a.Name() == b {
-				cmdFound = true
-				break
-			}
+		if slices.Contains(os.Args[1:], a.Name()) {
+			cmdFound = true
 		}
 	}
 	if !cmdFound {

@@ -22,23 +22,23 @@ func NewDefaultActionHandlers(
 	helmClient helm.Client,
 ) ActionHandlers {
 	return ActionHandlers{
-		reflect.TypeOf(&castai.ActionDeleteNode{}):        NewDeleteNodeHandler(log, clientset),
-		reflect.TypeOf(&castai.ActionDrainNode{}):         NewDrainNodeHandler(log, clientset, castNamespace),
-		reflect.TypeOf(&castai.ActionPatchNode{}):         NewPatchNodeHandler(log, clientset),
-		reflect.TypeOf(&castai.ActionCreateEvent{}):       NewCreateEventHandler(log, clientset),
-		reflect.TypeOf(&castai.ActionChartUpsert{}):       NewChartUpsertHandler(log, helmClient),
-		reflect.TypeOf(&castai.ActionChartUninstall{}):    NewChartUninstallHandler(log, helmClient),
-		reflect.TypeOf(&castai.ActionChartRollback{}):     NewChartRollbackHandler(log, helmClient, k8sVersion),
-		reflect.TypeOf(&castai.ActionDisconnectCluster{}): NewDisconnectClusterHandler(log, clientset),
-		reflect.TypeOf(&castai.ActionCheckNodeDeleted{}):  NewCheckNodeDeletedHandler(log, clientset),
-		reflect.TypeOf(&castai.ActionCheckNodeStatus{}):   NewCheckNodeStatusHandler(log, clientset),
-		reflect.TypeOf(&castai.ActionEvictPod{}):          NewEvictPodHandler(log, clientset),
-		reflect.TypeOf(&castai.ActionPatch{}):             NewPatchHandler(log, dynamicClient),
-		reflect.TypeOf(&castai.ActionCreate{}):            NewCreateHandler(log, dynamicClient),
-		reflect.TypeOf(&castai.ActionDelete{}):            NewDeleteHandler(log, dynamicClient),
+		reflect.TypeFor[*castai.ActionDeleteNode]():        NewDeleteNodeHandler(log, clientset),
+		reflect.TypeFor[*castai.ActionDrainNode]():         NewDrainNodeHandler(log, clientset, castNamespace),
+		reflect.TypeFor[*castai.ActionPatchNode]():         NewPatchNodeHandler(log, clientset),
+		reflect.TypeFor[*castai.ActionCreateEvent]():       NewCreateEventHandler(log, clientset),
+		reflect.TypeFor[*castai.ActionChartUpsert]():       NewChartUpsertHandler(log, helmClient),
+		reflect.TypeFor[*castai.ActionChartUninstall]():    NewChartUninstallHandler(log, helmClient),
+		reflect.TypeFor[*castai.ActionChartRollback]():     NewChartRollbackHandler(log, helmClient, k8sVersion),
+		reflect.TypeFor[*castai.ActionDisconnectCluster](): NewDisconnectClusterHandler(log, clientset),
+		reflect.TypeFor[*castai.ActionCheckNodeDeleted]():  NewCheckNodeDeletedHandler(log, clientset),
+		reflect.TypeFor[*castai.ActionCheckNodeStatus]():   NewCheckNodeStatusHandler(log, clientset),
+		reflect.TypeFor[*castai.ActionEvictPod]():          NewEvictPodHandler(log, clientset),
+		reflect.TypeFor[*castai.ActionPatch]():             NewPatchHandler(log, dynamicClient),
+		reflect.TypeFor[*castai.ActionCreate]():            NewCreateHandler(log, dynamicClient),
+		reflect.TypeFor[*castai.ActionDelete]():            NewDeleteHandler(log, dynamicClient),
 	}
 }
 
 func (h ActionHandlers) Close() error {
-	return h[reflect.TypeOf(&castai.ActionCreateEvent{})].(*CreateEventHandler).Close()
+	return h[reflect.TypeFor[*castai.ActionCreateEvent]()].(*CreateEventHandler).Close()
 }

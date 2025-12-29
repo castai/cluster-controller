@@ -29,7 +29,7 @@ func Test_newCreateHandler(t *testing.T) {
 	tests := map[string]struct {
 		objs      []runtime.Object
 		action    *castai.ClusterAction
-		convertFn func(i map[string]interface{}) client.Object
+		convertFn func(i map[string]any) client.Object
 		err       error
 		want      runtime.Object
 	}{
@@ -59,7 +59,7 @@ func Test_newCreateHandler(t *testing.T) {
 				},
 			},
 			want: newDeployment(),
-			convertFn: func(i map[string]interface{}) client.Object {
+			convertFn: func(i map[string]any) client.Object {
 				out := &appsv1.Deployment{}
 				_ = runtime.DefaultUnstructuredConverter.FromUnstructured(i, out)
 				return out
@@ -85,7 +85,7 @@ func Test_newCreateHandler(t *testing.T) {
 				d.(*appsv1.Deployment).CreationTimestamp = now
 				d.(*appsv1.Deployment).Labels = map[string]string{"changed": "true"}
 			}),
-			convertFn: func(i map[string]interface{}) client.Object {
+			convertFn: func(i map[string]any) client.Object {
 				out := &appsv1.Deployment{}
 				_ = runtime.DefaultUnstructuredConverter.FromUnstructured(i, out)
 				return out
@@ -111,7 +111,7 @@ func Test_newCreateHandler(t *testing.T) {
 				d.(*appsv1.Deployment).CreationTimestamp = now
 				d.(*appsv1.Deployment).Finalizers = []string{"autoscaling.cast.ai/recommendation"}
 			}),
-			convertFn: func(i map[string]interface{}) client.Object {
+			convertFn: func(i map[string]any) client.Object {
 				out := &appsv1.Deployment{}
 				_ = runtime.DefaultUnstructuredConverter.FromUnstructured(i, out)
 				return out
@@ -129,7 +129,7 @@ func Test_newCreateHandler(t *testing.T) {
 				},
 			},
 			want: newNamespace(),
-			convertFn: func(i map[string]interface{}) client.Object {
+			convertFn: func(i map[string]any) client.Object {
 				out := &v1.Namespace{}
 				_ = runtime.DefaultUnstructuredConverter.FromUnstructured(i, out)
 				return out
@@ -138,7 +138,6 @@ func Test_newCreateHandler(t *testing.T) {
 	}
 
 	for name, test := range tests {
-		test := test
 		t.Run(name, func(t *testing.T) {
 			r := require.New(t)
 			log := logrus.New()
@@ -166,7 +165,7 @@ func Test_newCreateHandler(t *testing.T) {
 	}
 }
 
-func getObj(t *testing.T, obj runtime.Object) map[string]interface{} {
+func getObj(t *testing.T, obj runtime.Object) map[string]any {
 	t.Helper()
 	unstructured, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
 	if err != nil {

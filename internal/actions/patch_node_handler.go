@@ -88,7 +88,7 @@ func (h *PatchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	if req.Unschedulable == nil && len(req.Labels) == 0 && len(req.Taints) == 0 && len(req.Annotations) == 0 {
 		log.Info("no patch for node spec or labels")
 	} else {
-		log.WithFields(map[string]interface{}{
+		log.WithFields(map[string]any{
 			"labels":      req.Labels,
 			"taints":      req.Taints,
 			"annotations": req.Annotations,
@@ -108,8 +108,8 @@ func (h *PatchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 
 	if len(req.Capacity) > 0 {
 		log.WithField("capacity", req.Capacity).Infof("patching node status")
-		patch, err := json.Marshal(map[string]interface{}{
-			"status": map[string]interface{}{
+		patch, err := json.Marshal(map[string]any{
+			"status": map[string]any{
 				"capacity": req.Capacity,
 			},
 		})

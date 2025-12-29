@@ -168,7 +168,7 @@ func executeBatchPodActions(
 	pods []v1.Pod,
 	action func(context.Context, v1.Pod) error,
 	actionName string,
-) (successfulPods []*v1.Pod, failedPods []podActionFailure) {
+) ([]*v1.Pod, []podActionFailure) {
 	if actionName == "" {
 		actionName = "unspecified"
 	}
@@ -220,15 +220,17 @@ func executeBatchPodActions(
 	close(failedPodsChan)
 	close(successfulPodsChan)
 
+	var successfulPods []*v1.Pod
 	for pod := range successfulPodsChan {
 		successfulPods = append(successfulPods, pod)
 	}
 
+	var failedPods []podActionFailure
 	for failure := range failedPodsChan {
 		failedPods = append(failedPods, failure)
 	}
 
-	return
+	return successfulPods, failedPods
 }
 
 func defaultBackoff() wait.Backoff {
