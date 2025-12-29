@@ -33,6 +33,8 @@ jobs:
 
       - uses: azure/setup-kubectl@v4
       - uses: azure/setup-helm@v4.2.0
+        with:
+          version: 'v3.19.4'
 
       - name: 'Set up Cloud SDK'
         uses: 'google-github-actions/setup-gcloud@v2'
