@@ -225,7 +225,7 @@ func setupFakeClientWithPodEviction() (*fake.Clientset, *v1.Pod) {
 			NodeName: nodeName,
 		},
 	}
-	clientset := fake.NewSimpleClientset(node, pod)
+	clientset := fake.NewClientset(node, pod)
 
 	addEvictionSupport(clientset)
 
