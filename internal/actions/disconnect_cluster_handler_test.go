@@ -25,7 +25,7 @@ func TestDisconnectClusterHandler(t *testing.T) {
 			Name: ns,
 		},
 	}
-	clientset := fake.NewSimpleClientset(node)
+	clientset := fake.NewClientset(node)
 
 	action := &castai.ClusterAction{
 		ID:                      uuid.New().String(),

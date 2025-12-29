@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/url"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/samber/lo"
@@ -34,11 +35,8 @@ func TestIntegration(t *testing.T) {
 }
 
 func testIntegration(t *testing.T, csrVersion schema.GroupVersion) {
-	ctx := context.TODO()
-	r := require.New(t)
-	clientset := setupManagerAndClientset(t, csrVersion)
 	for _, testcase := range []struct {
-		creationTimestamp     metav1.Time
+		durationDelta         time.Duration
 		description           string
 		emails                []string
 		groups                []string
@@ -53,13 +51,13 @@ func testIntegration(t *testing.T, csrVersion schema.GroupVersion) {
 		dns                   []string
 	}{
 		{
-			description:       "[client-kubelet] outdated",
-			nodeName:          "node-csr-cast-pool-0",
-			signer:            certv1.KubeAPIServerClientKubeletSignerName,
-			usages:            []string{string(certv1.UsageClientAuth)},
-			username:          "kubelet-bootstrap",
-			creationTimestamp: metav1.NewTime(time.Now().Add(-time.Hour - 1*time.Minute)),
-			notApproved:       true,
+			description:   "[client-kubelet] outdated",
+			nodeName:      "node-csr-cast-pool-0",
+			signer:        certv1.KubeAPIServerClientKubeletSignerName,
+			usages:        []string{string(certv1.UsageClientAuth)},
+			username:      "kubelet-bootstrap",
+			durationDelta: -time.Hour - time.Minute,
+			notApproved:   true,
 		},
 		{
 			description: "[client-kubelet] with prefix node-csr",
@@ -446,91 +444,100 @@ func testIntegration(t *testing.T, csrVersion schema.GroupVersion) {
 	} {
 		t.Run(csrVersion.Version+" "+testcase.description, func(t *testing.T) {
 			t.Parallel()
-			if testcase.creationTimestamp.IsZero() {
-				testcase.creationTimestamp = metav1.Now()
-			}
-			if testcase.nodeCreatedWithStatus != nil {
-				node := &corev1.Node{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:              testcase.nodeName,
-						CreationTimestamp: testcase.creationTimestamp,
-					},
-					Status: *testcase.nodeCreatedWithStatus,
+
+			synctest.Test(t, func(t *testing.T) {
+				ctx := context.TODO()
+				r := require.New(t)
+				clientset := setupManagerAndClientset(t, csrVersion)
+
+				createTimestamp := metav1.Now()
+				if testcase.durationDelta != 0 {
+					createTimestamp = metav1.Time{Time: createTimestamp.Add(testcase.durationDelta)}
 				}
-				_, err := clientset.CoreV1().Nodes().Create(ctx, node, metav1.CreateOptions{})
-				r.NoError(err, "failed to create node")
-			}
-			if csrVersion == certv1.SchemeGroupVersion {
-				csr := &certv1.CertificateSigningRequest{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:              testcase.nodeName,
-						CreationTimestamp: testcase.creationTimestamp,
-					},
-					Spec: certv1.CertificateSigningRequestSpec{
-						Groups: testcase.groups,
-						Request: csrtest.NewEncodedCertificateRequest(t, &x509.CertificateRequest{
-							EmailAddresses: testcase.emails,
-							IPAddresses:    testcase.ips,
-							DNSNames:       testcase.dns,
-							Subject: pkix.Name{
-								CommonName: "system:node:" + testcase.nodeName,
-							},
-							URIs: testcase.uris,
-						}),
-						SignerName: testcase.signer,
-						Usages: lo.Map(testcase.usages, func(u string, _ int) certv1.KeyUsage {
-							return certv1.KeyUsage(u)
-						}),
-						Username: testcase.username,
-					},
+				if testcase.nodeCreatedWithStatus != nil {
+					node := &corev1.Node{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:              testcase.nodeName,
+							CreationTimestamp: createTimestamp,
+						},
+						Status: *testcase.nodeCreatedWithStatus,
+					}
+					_, err := clientset.CoreV1().Nodes().Create(ctx, node, metav1.CreateOptions{})
+					r.NoError(err, "failed to create node")
 				}
-				_, err := clientset.CertificatesV1().CertificateSigningRequests().Create(ctx, csr, metav1.CreateOptions{})
-				r.NoError(err, "failed to create CSR")
-				time.Sleep(10 * time.Millisecond)
-				csr, err = clientset.CertificatesV1().CertificateSigningRequests().Get(ctx, csr.Name, metav1.GetOptions{})
-				r.NoError(err, "failed to get CSR")
-				approved := approvedCSRV1(csr)
-				if testcase.notApproved {
-					r.Falsef(approved, "%s - must not be approved", testcase.description)
+				if csrVersion == certv1.SchemeGroupVersion {
+					csr := &certv1.CertificateSigningRequest{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:              testcase.nodeName,
+							CreationTimestamp: createTimestamp,
+						},
+						Spec: certv1.CertificateSigningRequestSpec{
+							Groups: testcase.groups,
+							Request: csrtest.NewEncodedCertificateRequest(t, &x509.CertificateRequest{
+								EmailAddresses: testcase.emails,
+								IPAddresses:    testcase.ips,
+								DNSNames:       testcase.dns,
+								Subject: pkix.Name{
+									CommonName: "system:node:" + testcase.nodeName,
+								},
+								URIs: testcase.uris,
+							}),
+							SignerName: testcase.signer,
+							Usages: lo.Map(testcase.usages, func(u string, _ int) certv1.KeyUsage {
+								return certv1.KeyUsage(u)
+							}),
+							Username: testcase.username,
+						},
+					}
+					_, err := clientset.CertificatesV1().CertificateSigningRequests().Create(ctx, csr, metav1.CreateOptions{})
+					r.NoError(err, "failed to create CSR")
+					synctest.Wait()
+					csr, err = clientset.CertificatesV1().CertificateSigningRequests().Get(ctx, csr.Name, metav1.GetOptions{})
+					r.NoError(err, "failed to get CSR")
+					approved := approvedCSRV1(csr)
+
+					if testcase.notApproved {
+						r.Falsef(approved, "%s - must not be approved", testcase.description)
+					} else {
+						r.Truef(approved, "%s - must be approved", testcase.description)
+					}
 				} else {
-					r.Truef(approved, "%s - must be approved", testcase.description)
+					csr := &certv1beta1.CertificateSigningRequest{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:              testcase.nodeName,
+							CreationTimestamp: createTimestamp,
+						},
+						Spec: certv1beta1.CertificateSigningRequestSpec{
+							Groups: testcase.groups,
+							Request: csrtest.NewEncodedCertificateRequest(t, &x509.CertificateRequest{
+								EmailAddresses: testcase.emails,
+								IPAddresses:    testcase.ips,
+								DNSNames:       testcase.dns,
+								Subject: pkix.Name{
+									CommonName: "system:node:" + testcase.nodeName,
+								},
+								URIs: testcase.uris,
+							}),
+							SignerName: lo.ToPtr(testcase.signer),
+							Usages: lo.Map(testcase.usages, func(u string, _ int) certv1beta1.KeyUsage {
+								return certv1beta1.KeyUsage(u)
+							}),
+							Username: testcase.username,
+						},
+					}
+					_, err := clientset.CertificatesV1beta1().CertificateSigningRequests().Create(ctx, csr, metav1.CreateOptions{})
+					r.NoError(err, "failed to create CSR")
+					synctest.Wait()
+					csr, err = clientset.CertificatesV1beta1().CertificateSigningRequests().Get(ctx, csr.Name, metav1.GetOptions{})
+					r.NoError(err, "failed to get CSR")
+					approved := approvedCSRV1beta1(csr)
+					if testcase.notApproved {
+						r.Falsef(approved, "%s - must not be approved", testcase.description)
+					} else {
+						r.Truef(approved, "%s - must be approved", testcase.description)
+					}
 				}
-			} else {
-				csr := &certv1beta1.CertificateSigningRequest{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:              testcase.nodeName,
-						CreationTimestamp: testcase.creationTimestamp,
-					},
-					Spec: certv1beta1.CertificateSigningRequestSpec{
-						Groups: testcase.groups,
-						Request: csrtest.NewEncodedCertificateRequest(t, &x509.CertificateRequest{
-							EmailAddresses: testcase.emails,
-							IPAddresses:    testcase.ips,
-							DNSNames:       testcase.dns,
-							Subject: pkix.Name{
-								CommonName: "system:node:" + testcase.nodeName,
-							},
-							URIs: testcase.uris,
-						}),
-						SignerName: lo.ToPtr(testcase.signer),
-						Usages: lo.Map(testcase.usages, func(u string, _ int) certv1beta1.KeyUsage {
-							return certv1beta1.KeyUsage(u)
-						}),
-						Username: testcase.username,
-					},
-				}
-				_, err := clientset.CertificatesV1beta1().CertificateSigningRequests().Create(ctx, csr, metav1.CreateOptions{})
-				r.NoError(err, "failed to create CSR")
-				time.Sleep(10 * time.Millisecond)
-				csr, err = clientset.CertificatesV1beta1().CertificateSigningRequests().Get(ctx, csr.Name, metav1.GetOptions{})
-				r.NoError(err, "failed to get CSR")
-				approved := approvedCSRV1beta1(csr)
-				if testcase.notApproved {
-					r.Falsef(approved, "%s - must not be approved", testcase.description)
-				} else {
-					r.Truef(approved, "%s - must be approved", testcase.description)
-				}
-			}
+			})
 		})
 	}
 }
@@ -569,7 +576,7 @@ func setupManagerAndClientset(t *testing.T, csrVersion schema.GroupVersion) *fak
 	logger := logrus.New()
 	logger.SetOutput(io.Discard)
 	manager := csr.NewApprovalManager(logger, client)
-	err := manager.Start(context.TODO())
+	err := manager.Start(t.Context())
 	require.NoError(t, err, "failed to start approval manager")
 
 	return client
