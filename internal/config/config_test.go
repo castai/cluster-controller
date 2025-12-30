@@ -1,7 +1,6 @@
 package config
 
 import (
-	"os"
 	"testing"
 	"time"
 
@@ -12,16 +11,16 @@ import (
 
 func TestConfig(t *testing.T) {
 	clusterId := uuid.New().String()
-	require.NoError(t, os.Setenv("API_KEY", "abc"))
-	require.NoError(t, os.Setenv("API_URL", "api.cast.ai"))
-	require.NoError(t, os.Setenv("KUBECONFIG", "~/.kube/config"))
-	require.NoError(t, os.Setenv("CLUSTER_ID", clusterId))
-	require.NoError(t, os.Setenv("LEADER_ELECTION_ENABLED", "true"))
-	require.NoError(t, os.Setenv("LEADER_ELECTION_NAMESPACE", "castai-agent"))
-	require.NoError(t, os.Setenv("LEADER_ELECTION_LOCK_NAME", "castai-cluster-controller"))
-	require.NoError(t, os.Setenv("LEADER_ELECTION_LEASE_DURATION", "25s"))
-	require.NoError(t, os.Setenv("LEADER_ELECTION_LEASE_RENEW_DEADLINE", "20s"))
-	require.NoError(t, os.Setenv("METRICS_PORT", "16000"))
+	t.Setenv("API_KEY", "abc")
+	t.Setenv("API_URL", "api.cast.ai")
+	t.Setenv("KUBECONFIG", "~/.kube/config")
+	t.Setenv("CLUSTER_ID", clusterId)
+	t.Setenv("LEADER_ELECTION_ENABLED", "true")
+	t.Setenv("LEADER_ELECTION_NAMESPACE", "castai-agent")
+	t.Setenv("LEADER_ELECTION_LOCK_NAME", "castai-cluster-controller")
+	t.Setenv("LEADER_ELECTION_LEASE_DURATION", "25s")
+	t.Setenv("LEADER_ELECTION_LEASE_RENEW_DEADLINE", "20s")
+	t.Setenv("METRICS_PORT", "16000")
 
 	cfg := Get()
 

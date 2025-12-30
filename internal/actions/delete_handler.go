@@ -36,7 +36,7 @@ func (h *DeleteHandler) Handle(ctx context.Context, action *castai.ClusterAction
 	log := h.log.WithFields(logrus.Fields{
 		"id":     action.ID,
 		"action": action.GetType(),
-		"gvr":    req.ID.GroupVersionResource.String(),
+		"gvr":    req.ID.String(),
 		"name":   req.ID.Name,
 	})
 

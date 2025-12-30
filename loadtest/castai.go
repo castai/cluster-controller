@@ -38,7 +38,7 @@ func NewTestServer(logger *slog.Logger, cfg TestServerConfig) *CastAITestServer 
 }
 
 // ExecuteActions pushes the list of actions to the queue for cluster controller to process.
-// This method returns when all actions are acked or context is cancelled.
+// This method returns when all actions are acked or context is canceled.
 func (c *CastAITestServer) ExecuteActions(ctx context.Context, actions []castai.ClusterAction) {
 	// owner channel has 1:n relationship with the actions. It handles the ack
 	ownerChannel := make(chan string, len(actions))
@@ -47,7 +47,7 @@ func (c *CastAITestServer) ExecuteActions(ctx context.Context, actions []castai.
 		if action.ID == "" {
 			action.ID = uuid.NewString()
 		}
-		if action.CreatedAt == (time.Time{}) {
+		if action.CreatedAt.IsZero() {
 			action.CreatedAt = time.Now()
 		}
 		c.addActionToStore(action.ID, action, ownerChannel)

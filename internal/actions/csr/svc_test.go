@@ -228,7 +228,7 @@ func TestApproveCSRExponentialBackoff(t *testing.T) {
 	r := require.New(t)
 	b := newApproveCSRExponentialBackoff()
 	var sum time.Duration
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		tmp := b.Step()
 		sum += tmp
 	}

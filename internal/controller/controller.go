@@ -189,19 +189,18 @@ func (s *Controller) startProcessing(actionID string) bool {
 	return true
 }
 
-func (s *Controller) handleAction(ctx context.Context, action *castai.ClusterAction) (err error) {
+func (s *Controller) handleAction(ctx context.Context, action *castai.ClusterAction) (retErr error) {
 	// Check if the action can be used at all before continuing.
 	// We still want to ACK the action in this case, otherwise it will keep being resent until it expires.
 	if !action.IsValid() || (action.GetType() == castai.UnknownActionType) {
-		err = fmt.Errorf("invalid action, check action data or if cluster controller version supports this action type")
-		return
+		return fmt.Errorf("invalid action, check action data or if cluster controller version supports this action type")
 	}
 
 	actionType := reflect.TypeOf(action.Data())
 
 	defer func() {
 		if rerr := recover(); rerr != nil {
-			err = fmt.Errorf("panic: handling action %s: %s: %s", actionType, rerr, string(debug.Stack()))
+			retErr = fmt.Errorf("panic: handling action %s: %s: %s", actionType, rerr, string(debug.Stack()))
 		}
 	}()
 

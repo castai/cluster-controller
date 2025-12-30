@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"time"
 
 	"github.com/samber/lo"
@@ -12,7 +13,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/typed/core/v1"
+	v1 "k8s.io/client-go/kubernetes/typed/core/v1"
 
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/waitext"
@@ -63,7 +64,6 @@ func (h *CheckNodeStatusHandler) Handle(ctx context.Context, action *castai.Clus
 	case castai.ActionCheckNodeStatus_DELETED:
 		log.Info("checking node deleted")
 		return h.checkNodeDeleted(ctx, log, req)
-
 	}
 
 	return fmt.Errorf("unknown status to check provided node=%s status=%s", req.NodeName, req.NodeStatus)
@@ -176,13 +176,7 @@ func (h *CheckNodeStatusHandler) isNodeReady(node *corev1.Node, castNodeID, prov
 }
 
 func containsUninitializedNodeTaint(taints []corev1.Taint) bool {
-	for _, taint := range taints {
-		// Some providers like AKS provider adds this taint even if node contains ready condition.
-		if taint == taintCloudProviderUninitialized {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(taints, taintCloudProviderUninitialized)
 }
 
 var taintCloudProviderUninitialized = corev1.Taint{

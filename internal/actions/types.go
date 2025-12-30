@@ -25,7 +25,7 @@ var (
 	errNodeWatcherClosed = fmt.Errorf("node watcher closed, no more events will be received")
 )
 
-func newUnexpectedTypeErr(value, expectedType interface{}) error {
+func newUnexpectedTypeErr(value, expectedType any) error {
 	return fmt.Errorf("unexpected type %T, expected %T %w", value, expectedType, errAction)
 }
 

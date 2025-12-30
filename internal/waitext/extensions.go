@@ -44,7 +44,7 @@ func NewConstantBackoff(interval time.Duration) wait.Backoff {
 
 // Retry executes an operation with retries following these semantics:
 //
-//   - The operation is executed at least once (even if context is cancelled)
+//   - The operation is executed at least once (even if context is canceled)
 //
 //   - If operation returns nil error, assumption is that it succeeded
 //
@@ -54,13 +54,13 @@ func NewConstantBackoff(interval time.Duration) wait.Backoff {
 //
 //   - retries reaches 0
 //
-//   - the context is cancelled
+//   - the context is canceled
 //
 // The end result is:
 //
 //   - nil if operation was successful at least once
 //   - last encountered error from operation if retries are exhausted
-//   - a multi-error if context is cancelled that contains - the ctx.Err(), context.Cause() and last encountered error from the operation
+//   - a multi-error if context is canceled that contains - the ctx.Err(), context.Cause() and last encountered error from the operation
 //
 // If retryNotify is passed, it is called when making retries.
 // Caveat: this function is similar to wait.ExponentialBackoff but has some important behavior differences like at-least-one execution and retryable errors.

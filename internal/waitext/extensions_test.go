@@ -16,7 +16,7 @@ func TestNewConstantBackoff(t *testing.T) {
 	expectedSleepDuration := 10 * time.Second
 	backoff := NewConstantBackoff(expectedSleepDuration)
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		r.Equal(expectedSleepDuration, backoff.Step())
 	}
 }
@@ -162,12 +162,12 @@ func TestRetry(t *testing.T) {
 
 			cancel(cancelCause)
 			<-done
-			r.ErrorIs(overallReturnedErr, context.Canceled, "Expected context cancelled to be propagated")
+			r.ErrorIs(overallReturnedErr, context.Canceled, "Expected context canceled to be propagated")
 			r.ErrorIs(overallReturnedErr, innerError, "Expected inner error by operation be propagated")
 			r.ErrorIs(overallReturnedErr, cancelCause, "Expected cancel cause error to be propagated")
 		})
 
-		t.Run("Operation is called at least once, even if context is cancelled", func(t *testing.T) {
+		t.Run("Operation is called at least once, even if context is canceled", func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
 

@@ -41,8 +41,8 @@ func TestClientInstall(t *testing.T) {
 	r.NoError(err)
 	r.Equal("nginx-ingress", rel.Name)
 	r.Equal("test", rel.Namespace)
-	r.Equal(int64(2), rel.Config["controller"].(map[string]interface{})["replicaCount"])
-	r.Equal("NodePort", rel.Config["controller"].(map[string]interface{})["service"].(map[string]interface{})["type"])
+	r.Equal(int64(2), rel.Config["controller"].(map[string]any)["replicaCount"])
+	r.Equal("NodePort", rel.Config["controller"].(map[string]any)["service"].(map[string]any)["type"])
 	r.Equal("noop", rel.Config["random"])
 }
 
@@ -71,7 +71,7 @@ func TestClientUpdate(t *testing.T) {
 	r.NoError(err)
 	r.NotNil(rel)
 	r.Equal("nginx-ingress", rel.Name)
-	r.Equal(int64(100), rel.Config["controller"].(map[string]interface{})["replicaCount"])
+	r.Equal(int64(100), rel.Config["controller"].(map[string]any)["replicaCount"])
 	r.Equal("noop", rel.Config["random"])
 }
 
@@ -101,7 +101,7 @@ func TestClientUpdateResetThenReuseValue(t *testing.T) {
 	r.NoError(err)
 	r.NotNil(rel)
 	r.Equal("nginx-ingress", rel.Name)
-	r.Equal(int64(100), rel.Config["controller"].(map[string]interface{})["replicaCount"])
+	r.Equal(int64(100), rel.Config["controller"].(map[string]any)["replicaCount"])
 	r.Equal("noop", rel.Config["random"])
 }
 
@@ -135,7 +135,7 @@ func (c *testConfigurationGetter) Get(_ string) (*action.Configuration, error) {
 		Releases:     storage.Init(driver.NewMemory()),
 		KubeClient:   &fake.PrintingKubeClient{Out: io.Discard},
 		Capabilities: chartutil.DefaultCapabilities,
-		Log: func(format string, v ...interface{}) {
+		Log: func(format string, v ...any) {
 			c.t.Helper()
 			c.t.Logf(format, v...)
 		},
@@ -168,10 +168,10 @@ func buildNginxIngressChart() *chart.Chart {
 		Templates: []*chart.File{
 			{Name: "templates/hello", Data: []byte("hello: world")},
 		},
-		Values: map[string]interface{}{
-			"controller": map[string]interface{}{
+		Values: map[string]any{
+			"controller": map[string]any{
 				"replicaCount": 1,
-				"service": map[string]interface{}{
+				"service": map[string]any{
 					"type": "LoadBalancer",
 				},
 			},
@@ -191,7 +191,7 @@ func buildNginxIngressRelease(status release.Status) *release.Release {
 			Description:   "Named Release Stub",
 		},
 		Chart:   buildNginxIngressChart(),
-		Config:  map[string]interface{}{"name": "value"},
+		Config:  map[string]any{"name": "value"},
 		Version: 1,
 	}
 }

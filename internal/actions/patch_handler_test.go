@@ -69,7 +69,6 @@ func TestPatchHandler(t *testing.T) {
 	}
 
 	for name, test := range tests {
-		test := test
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			r := require.New(t)
@@ -92,7 +91,7 @@ func TestPatchHandler(t *testing.T) {
 			// The fake client does not work properly with patching. And it does not aim to replicate the api-server logic.
 			// There are ways to work around it, but the test is testing fake code then.
 			// For context, here's the PR that attempted to circumvent the issue: https://github.com/kubernetes/kubernetes/pull/78630
-			actions := client.Fake.Actions()
+			actions := client.Actions()
 			r.Len(actions, 1)
 			action, ok := actions[0].(client_testing.PatchAction)
 			r.True(ok, "action is not a patch action")

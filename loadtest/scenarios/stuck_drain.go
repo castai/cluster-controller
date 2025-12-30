@@ -71,11 +71,11 @@ func (s *stuckDrainScenario) Preparation(ctx context.Context, namespace string, 
 
 			s.log.Info(fmt.Sprintf("Creating deployment on node %s", nodeName))
 			deployment, pdb := DeploymentWithStuckPDB(fmt.Sprintf("fake-deployment-%s-%d", node.Name, i))
-			deployment.ObjectMeta.Namespace = namespace
+			deployment.Namespace = namespace
 			//nolint:gosec // Not afraid of overflow here.
 			deployment.Spec.Replicas = lo.ToPtr(int32(s.deploymentReplicas))
 			deployment.Spec.Template.Spec.NodeName = nodeName
-			pdb.ObjectMeta.Namespace = namespace
+			pdb.Namespace = namespace
 
 			_, err = clientset.AppsV1().Deployments(namespace).Create(ctx, deployment, metav1.CreateOptions{})
 			if err != nil {

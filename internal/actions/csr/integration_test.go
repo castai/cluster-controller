@@ -104,7 +104,7 @@ func testIntegration(t *testing.T, csrVersion schema.GroupVersion) {
 			username:    "system:serviceaccount:castai-agent:castai-cluster-controller",
 		},
 		{
-			description: "[client-kubelet] with username prefix sytem:node",
+			description: "[client-kubelet] with username prefix system:node",
 			nodeName:    "csr-cast-pool-6",
 			signer:      certv1.KubeAPIServerClientKubeletSignerName,
 			usages:      []string{string(certv1.UsageClientAuth)},
@@ -571,7 +571,7 @@ func setupManagerAndClientset(t *testing.T, csrVersion schema.GroupVersion) *fak
 			err = apierrors.NewNotFound(schema.GroupResource{}, action.GetResource().String())
 			return true, nil, err
 		}
-		return
+		return false, nil, nil
 	})
 	logger := logrus.New()
 	logger.SetOutput(io.Discard)

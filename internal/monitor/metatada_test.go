@@ -34,7 +34,6 @@ func TestSaveMetadata(t *testing.T) {
 	}
 
 	for testName, tt := range tests {
-		tt := tt
 		t.Run(testName, func(t *testing.T) {
 			r := require.New(t)
 			baseDir := t.TempDir()

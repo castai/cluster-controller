@@ -103,7 +103,6 @@ func Test_newDeleteHandler(t *testing.T) {
 	}
 
 	for name, test := range tests {
-		test := test
 		t.Run(name, func(t *testing.T) {
 			r := require.New(t)
 			log := logrus.New()

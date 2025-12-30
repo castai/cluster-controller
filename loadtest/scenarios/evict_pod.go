@@ -55,7 +55,7 @@ func (e *evictPodScenario) Preparation(ctx context.Context, namespace string, cl
 		}
 
 		pod := Pod(fmt.Sprintf("evict-pod-%d", i))
-		pod.ObjectMeta.Namespace = namespace
+		pod.Namespace = namespace
 		pod.Spec.NodeName = nodeName
 
 		e.log.Info(fmt.Sprintf("Creating pod %s", pod.Name))

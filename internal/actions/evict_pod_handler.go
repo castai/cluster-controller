@@ -45,7 +45,7 @@ func (h *EvictPodHandler) Handle(ctx context.Context, action *castai.ClusterActi
 	}
 	log := h.log.WithFields(logrus.Fields{
 		ActionIDLogField: action.ID,
-		"action":         reflect.TypeOf(req).String(),
+		"action":         reflect.TypeFor[*castai.ActionEvictPod]().String(),
 		"namespace":      req.Namespace,
 		"pod":            req.PodName,
 	})

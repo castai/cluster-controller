@@ -232,7 +232,6 @@ func TestController_Run(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			m := gomock.NewController(t)
@@ -247,9 +246,9 @@ func TestController_Run(t *testing.T) {
 				tt.fields.tuneMockHandler(handler)
 			}
 			testActionHandlers := map[reflect.Type]actions.ActionHandler{
-				reflect.TypeOf(&castai.ActionDeleteNode{}): handler,
-				reflect.TypeOf(&castai.ActionDrainNode{}):  handler,
-				reflect.TypeOf(&castai.ActionPatchNode{}):  handler,
+				reflect.TypeFor[*castai.ActionDeleteNode](): handler,
+				reflect.TypeFor[*castai.ActionDrainNode]():  handler,
+				reflect.TypeFor[*castai.ActionPatchNode]():  handler,
 			}
 
 			s := NewService(

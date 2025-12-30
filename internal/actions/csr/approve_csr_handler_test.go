@@ -97,12 +97,12 @@ func TestApproveCSRHandler(t *testing.T) {
 		}
 		client := fake.NewClientset(csrRes)
 		// Return NotFound for all v1 resources.
-		client.PrependReactor("*", "*", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
+		client.PrependReactor("*", "*", func(action ktest.Action) (handled bool, resource runtime.Object, reacton error) {
 			if action.GetResource().Version == "v1" {
-				err = apierrors.NewNotFound(schema.GroupResource{}, action.GetResource().String())
+				err := apierrors.NewNotFound(schema.GroupResource{}, action.GetResource().String())
 				return true, nil, err
 			}
-			return
+			return false, nil, nil
 		})
 		client.PrependReactor("update", "certificatesigningrequests", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
 			approved := csrRes.DeepCopy()
@@ -153,14 +153,14 @@ func TestApproveCSRHandler(t *testing.T) {
 		}
 		client := fake.NewClientset(csrRes)
 		// Return NotFound for all v1 resources.
-		client.PrependReactor("*", "*", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
+		client.PrependReactor("*", "*", func(action ktest.Action) (handled bool, resource runtime.Object, reacton error) {
 			if action.GetResource().Version == "v1" {
-				err = apierrors.NewNotFound(schema.GroupResource{}, action.GetResource().String())
+				err := apierrors.NewNotFound(schema.GroupResource{}, action.GetResource().String())
 				return true, nil, err
 			}
-			return
+			return false, nil, nil
 		})
-		client.PrependReactor("update", "certificatesigningrequests", func(action ktest.Action) (handled bool, ret runtime.Object, err error) {
+		client.PrependReactor("update", "certificatesigningrequests", func(action ktest.Action) (handled bool, resource runtime.Object, reacton error) {
 			c := csrRes.DeepCopy()
 			c.Status.Conditions = []certv1beta1.CertificateSigningRequestCondition{
 				{

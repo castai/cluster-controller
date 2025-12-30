@@ -92,7 +92,7 @@ func (cl *remoteChartLoader) fetchArchive(ctx context.Context, archiveURL string
 	httpClient := &http.Client{
 		Timeout: 30 * time.Second,
 	}
-	archiveReq, err := http.NewRequestWithContext(ctx, "GET", archiveURL, nil)
+	archiveReq, err := http.NewRequestWithContext(ctx, http.MethodGet, archiveURL, nil)
 	if err != nil {
 		return nil, err
 	}

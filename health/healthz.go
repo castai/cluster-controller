@@ -46,7 +46,7 @@ func (h *HealthzProvider) Check(_ *http.Request) (err error) {
 
 	if h.initStartedAt != nil {
 		if time.Since(*h.initStartedAt) > h.cfg.StartTimeLimit {
-			return fmt.Errorf("there was no sucessful poll action since start of application %s", h.cfg.StartTimeLimit)
+			return fmt.Errorf("there was no successful poll action since start of application %s", h.cfg.StartTimeLimit)
 		}
 		return nil
 	}

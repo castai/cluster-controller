@@ -27,7 +27,7 @@ func TestNewCSR(t *testing.T) {
 	t.Parallel()
 	for _, testcase := range []struct {
 		name   string
-		csrObj interface{}
+		csrObj any
 		notOK  bool
 	}{
 		{
@@ -650,7 +650,7 @@ func withConditionsV1Beta1(t *testing.T, clientset kubernetes.Interface, conditi
 func v1WithCreationTimestamp(t *testing.T, clientset kubernetes.Interface, creationTime time.Time) *wrapper.CSR {
 	t.Helper()
 	result, err := wrapper.NewCSR(clientset, modifyValidV1(t, func(v1 *certv1.CertificateSigningRequest) *certv1.CertificateSigningRequest {
-		v1.ObjectMeta.CreationTimestamp = metav1.NewTime(creationTime)
+		v1.CreationTimestamp = metav1.NewTime(creationTime)
 		return v1
 	}))
 	require.NoError(t, err, "failed to create CSR")
@@ -660,7 +660,7 @@ func v1WithCreationTimestamp(t *testing.T, clientset kubernetes.Interface, creat
 func v1beta1WithCreationTimestamp(t *testing.T, clientset kubernetes.Interface, creationTime time.Time) *wrapper.CSR {
 	t.Helper()
 	result, err := wrapper.NewCSR(clientset, modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
-		v1beta1.ObjectMeta.CreationTimestamp = metav1.NewTime(creationTime)
+		v1beta1.CreationTimestamp = metav1.NewTime(creationTime)
 		return v1beta1
 	}))
 	require.NoError(t, err, "failed to create CSR")

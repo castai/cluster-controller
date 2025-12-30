@@ -185,7 +185,6 @@ func TestCheckNodeStatusHandler_Handle_Deleted(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			clientSet := fake.NewClientset(tt.fields.tuneFakeObjects...)
@@ -434,7 +433,6 @@ func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			clientSet := fake.NewClientset()

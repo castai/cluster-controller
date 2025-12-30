@@ -73,7 +73,7 @@ func (m *ApprovalManager) Start(ctx context.Context) error {
 	c := make(chan *wrapper.CSR, 1)
 
 	handlerFuncs := cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
+		AddFunc: func(obj any) {
 			csr, err := wrapper.NewCSR(m.clientset, obj)
 			if err != nil {
 				m.log.WithError(err).Warn("creating csr wrapper")

@@ -66,7 +66,7 @@ func RunScenario(
 		return fmt.Errorf("failed to create namespace %v: %w", namespaceForTest, err)
 	}
 	defer func() {
-		// Cleanup uses different context so it runs even when the overall one is already cancelled
+		// Cleanup uses different context so it runs even when the overall one is already canceled
 		ctxForCleanup, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 
@@ -88,7 +88,7 @@ func RunScenario(
 	logger.Info("Running preparation function")
 	// We defer the cleanup before running preparation or run because each can "fail" in the middle and leave hanging resources.
 	defer func() {
-		// Cleanup uses different context so it runs even when the overall one is already cancelled
+		// Cleanup uses different context so it runs even when the overall one is already canceled
 		ctxForCleanup, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 

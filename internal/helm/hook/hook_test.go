@@ -27,7 +27,7 @@ type k8sObjectDetails struct {
 }
 
 func renderManifestTemplate(apiVersion, kind, name, appVersion, chartVersion string) (string, error) {
-	vars := map[string]interface{}{
+	vars := map[string]any{
 		"ApiVersion":   apiVersion,
 		"Kind":         kind,
 		"Name":         name,
