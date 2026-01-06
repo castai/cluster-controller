@@ -93,6 +93,7 @@ func createHTTPTransport(ca string) (*http.Transport, error) {
 			Timeout: 15 * time.Second,
 		}).DialContext,
 		ForceAttemptHTTP2:     true,
+		MaxIdleConnsPerHost:   100,
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   5 * time.Second,
