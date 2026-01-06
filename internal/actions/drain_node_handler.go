@@ -118,15 +118,18 @@ func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 
 	log.Infof("draining node, drain_timeout_seconds=%f, force=%v created_at=%s", drainTimeout.Seconds(), req.Force, action.CreatedAt)
 
-	// First try to evict pods gracefully using eviction API.
-	evictCtx, evictCancel := context.WithTimeout(ctx, drainTimeout)
-	defer evictCancel()
+	// we don't need to try to do a graceful eviction if drain timout is 0
+	if drainTimeout > 0 {
+		// First try to evict pods gracefully using eviction API.
+		evictCtx, evictCancel := context.WithTimeout(ctx, drainTimeout)
+		defer evictCancel()
 
-	err = h.evictNodePods(evictCtx, log, node)
+		err = h.evictNodePods(evictCtx, log, node)
 
-	if err == nil {
-		log.Info("node fully drained via graceful eviction")
-		return nil
+		if err == nil {
+			log.Info("node fully drained via graceful eviction")
+			return nil
+		}
 	}
 
 	if !req.Force {
@@ -309,6 +312,7 @@ func (h *DrainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldL
 //   - DaemonSet pods
 //   - pods that are already finished (Succeeded or Failed)
 //   - pods that were marked for deletion recently (Terminating state); the meaning of "recently" is controlled by config
+//
 // This method uses the informer cache instead of making direct API calls.
 func (h *DrainNodeHandler) listNodePodsToEvict(ctx context.Context, log logrus.FieldLogger, node *v1.Node) ([]v1.Pod, error) {
 	// Use lister to query from local cache instead of API call
