@@ -40,13 +40,14 @@ func NewService(
 	actionHandlers actions.ActionHandlers,
 ) *Controller {
 	return &Controller{
-		log:            log,
-		cfg:            cfg,
-		k8sVersion:     k8sVersion,
-		castAIClient:   castaiClient,
-		startedActions: map[string]struct{}{},
-		actionHandlers: actionHandlers,
-		healthCheck:    healthCheck,
+		log:              log,
+		cfg:              cfg,
+		k8sVersion:       k8sVersion,
+		castAIClient:     castaiClient,
+		startedActions:   make(map[string]struct{}),
+		completedActions: make(map[string]time.Time),
+		actionHandlers:   actionHandlers,
+		healthCheck:      healthCheck,
 	}
 }
 
@@ -61,6 +62,7 @@ type Controller struct {
 
 	startedActionsWg sync.WaitGroup
 	startedActions   map[string]struct{}
+	completedActions map[string]time.Time
 	startedActionsMu sync.Mutex
 	healthCheck      *health.HealthzProvider
 }
@@ -122,6 +124,7 @@ func (s *Controller) doWork(ctx context.Context) error {
 
 	s.log.WithFields(logrus.Fields{"n": strconv.Itoa(len(actions))}).Infof("received in %s", pollDuration)
 	s.handleActions(ctx, actions)
+	s.gcCompletedActions()
 	return nil
 }
 
@@ -132,7 +135,10 @@ func (s *Controller) handleActions(ctx context.Context, clusterActions []*castai
 		}
 
 		go func(action *castai.ClusterAction) {
-			defer s.finishProcessing(action.ID)
+			var ackErr error
+			defer func() {
+				s.finishProcessing(action.ID, ackErr)
+			}()
 
 			var err error
 
@@ -146,7 +152,7 @@ func (s *Controller) handleActions(ctx context.Context, clusterActions []*castai
 			}
 
 			handleDuration := time.Since(startTime)
-			ackErr := s.ackAction(ctx, action, handleErr, handleDuration)
+			ackErr = s.ackAction(ctx, action, handleErr, handleDuration)
 			if handleErr != nil {
 				err = handleErr
 			}
@@ -163,12 +169,17 @@ func (s *Controller) handleActions(ctx context.Context, clusterActions []*castai
 	}
 }
 
-func (s *Controller) finishProcessing(actionID string) {
+func (s *Controller) finishProcessing(actionID string, ackErr error) {
 	s.startedActionsMu.Lock()
 	defer s.startedActionsMu.Unlock()
 
 	s.startedActionsWg.Done()
 	delete(s.startedActions, actionID)
+
+	if ackErr == nil {
+		// only mark the action as completed if it was succesfully acknowledged so it can be retried quickly if not and still requested.
+		s.completedActions[actionID] = time.Now()
+	}
 }
 
 func (s *Controller) startProcessing(actionID string) bool {
@@ -179,6 +190,11 @@ func (s *Controller) startProcessing(actionID string) bool {
 		return false
 	}
 
+	if _, ok := s.completedActions[actionID]; ok {
+		s.log.WithField(actions.ActionIDLogField, actionID).Debug("action has been recently completed, not starting")
+		return false
+	}
+
 	if inProgress := len(s.startedActions); inProgress >= s.cfg.MaxActionsInProgress {
 		s.log.Warnf("too many actions in progress %d/%d", inProgress, s.cfg.MaxActionsInProgress)
 		return false
@@ -186,6 +202,7 @@ func (s *Controller) startProcessing(actionID string) bool {
 
 	s.startedActionsWg.Add(1)
 	s.startedActions[actionID] = struct{}{}
+
 	return true
 }
 
@@ -241,6 +258,21 @@ func (s *Controller) ackAction(ctx context.Context, action *castai.ClusterAction
 	}, func(err error) {
 		s.log.Debugf("ack failed, will retry: %v", err)
 	})
+}
+
+func (s *Controller) gcCompletedActions() {
+	expireDuration := (s.cfg.PollTimeout + s.cfg.PollWaitInterval) * 2
+	now := time.Now()
+
+	s.startedActionsMu.Lock()
+	defer s.startedActionsMu.Unlock()
+
+	for actionID, completedAt := range s.completedActions {
+		if now.Before(completedAt.Add(expireDuration)) {
+			continue
+		}
+		delete(s.completedActions, actionID)
+	}
 }
 
 func getHandlerError(err error) *string {
