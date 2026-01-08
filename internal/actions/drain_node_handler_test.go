@@ -880,17 +880,33 @@ func TestWaitForVolumeDetach(t *testing.T) {
 		t.Parallel()
 		r := require.New(t)
 		log := logrus.New()
-		clientset := fake.NewClientset()
 
 		h := &DrainNodeHandler{
-			log:       log,
-			clientset: clientset,
+			log: log,
 			cfg: drainNodeConfig{
 				volumeDetachPollInterval: 100 * time.Millisecond,
 			},
 		}
 
 		err := h.waitForVolumeDetach(context.Background(), log, "node1", nil)
+		r.NoError(err)
+	})
+
+	t.Run("should return immediately when cachedClient is nil", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		log := logrus.New()
+
+		h := &DrainNodeHandler{
+			log:          log,
+			cachedClient: nil,
+			cfg: drainNodeConfig{
+				volumeDetachPollInterval: 100 * time.Millisecond,
+			},
+		}
+
+		// Should skip waiting and return nil when cachedClient is nil
+		err := h.waitForVolumeDetach(context.Background(), log, "node1", []string{"va1"})
 		r.NoError(err)
 	})
 
@@ -906,11 +922,11 @@ func TestWaitForVolumeDetach(t *testing.T) {
 				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: strPtr("pv1")},
 			},
 		}
-		clientset := fake.NewClientset(va)
+		cachedClient := newTestCachedClient(t, va)
 
 		h := &DrainNodeHandler{
-			log:       log,
-			clientset: clientset,
+			log:          log,
+			cachedClient: cachedClient,
 			cfg: drainNodeConfig{
 				volumeDetachPollInterval: 50 * time.Millisecond,
 			},
@@ -919,7 +935,7 @@ func TestWaitForVolumeDetach(t *testing.T) {
 		// Delete VA in background
 		go func() {
 			time.Sleep(100 * time.Millisecond)
-			err := clientset.StorageV1().VolumeAttachments().Delete(context.Background(), "va1", metav1.DeleteOptions{})
+			err := cachedClient.Delete(context.Background(), va)
 			r.NoError(err)
 		}()
 
@@ -942,11 +958,11 @@ func TestWaitForVolumeDetach(t *testing.T) {
 				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: strPtr("pv1")},
 			},
 		}
-		clientset := fake.NewClientset(va)
+		cachedClient := newTestCachedClient(t, va)
 
 		h := &DrainNodeHandler{
-			log:       log,
-			clientset: clientset,
+			log:          log,
+			cachedClient: cachedClient,
 			cfg: drainNodeConfig{
 				volumeDetachPollInterval: 50 * time.Millisecond,
 			},
@@ -972,11 +988,11 @@ func TestWaitForVolumeDetach(t *testing.T) {
 				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: strPtr("pv1")},
 			},
 		}
-		clientset := fake.NewClientset(va)
+		cachedClient := newTestCachedClient(t, va)
 
 		h := &DrainNodeHandler{
-			log:       log,
-			clientset: clientset,
+			log:          log,
+			cachedClient: cachedClient,
 			cfg: drainNodeConfig{
 				volumeDetachPollInterval: 50 * time.Millisecond,
 			},

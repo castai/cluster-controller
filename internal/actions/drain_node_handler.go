@@ -673,6 +673,11 @@ func (h *DrainNodeHandler) waitForVolumeDetach(
 		return nil
 	}
 
+	if h.cachedClient == nil {
+		log.Warn("cached client not available, skipping volume detach wait")
+		return nil
+	}
+
 	vaNameSet := make(map[string]struct{}, len(vaNames))
 	for _, name := range vaNames {
 		vaNameSet[name] = struct{}{}
@@ -685,11 +690,10 @@ func (h *DrainNodeHandler) waitForVolumeDetach(
 		waitext.NewConstantBackoff(h.cfg.volumeDetachPollInterval),
 		waitext.Forever,
 		func(ctx context.Context) (bool, error) {
-			// List VolumeAttachments for this node
-			vaList, err := h.clientset.StorageV1().VolumeAttachments().List(ctx, metav1.ListOptions{
-				FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": nodeName}).String(),
-			})
-			if err != nil {
+			// List VolumeAttachments for this node using cached client with field index
+			var vaList storagev1.VolumeAttachmentList
+			if err := h.cachedClient.List(ctx, &vaList,
+				client.MatchingFields{"spec.nodeName": nodeName}); err != nil {
 				return true, fmt.Errorf("listing VolumeAttachments: %w", err)
 			}
 
