@@ -43,14 +43,14 @@ func NewService(
 	actionHandlers actions.ActionHandlers,
 ) *Controller {
 	return &Controller{
-		log:              log,
-		cfg:              cfg,
-		k8sVersion:       k8sVersion,
-		castAIClient:     castaiClient,
-		startedActions:   make(map[string]struct{}),
-		completedActions: make(map[string]int8),
-		actionHandlers:   actionHandlers,
-		healthCheck:      healthCheck,
+		log:                      log,
+		cfg:                      cfg,
+		k8sVersion:               k8sVersion,
+		castAIClient:             castaiClient,
+		startedActions:           make(map[string]struct{}),
+		recentlyCompletedActions: make(map[string]int8),
+		actionHandlers:           actionHandlers,
+		healthCheck:              healthCheck,
 	}
 }
 
@@ -63,10 +63,10 @@ type Controller struct {
 
 	actionHandlers actions.ActionHandlers
 
-	startedActionsWg sync.WaitGroup
-	actionsMu        sync.Mutex
-	startedActions   map[string]struct{} // protected by actionsMu
-	completedActions map[string]int8     // protected by actionsMu
+	startedActionsWg         sync.WaitGroup
+	actionsMu                sync.Mutex
+	startedActions           map[string]struct{} // protected by actionsMu
+	recentlyCompletedActions map[string]int8     // protected by actionsMu
 
 	healthCheck *health.HealthzProvider
 }
@@ -182,7 +182,7 @@ func (s *Controller) finishProcessing(actionID string, ackErr error) {
 
 	if ackErr == nil {
 		// only mark the action as completed if it was successfully acknowledged so it can be retried quickly if not and still requested.
-		s.completedActions[actionID] = gcCompletedActionAfterTimes + 1
+		s.recentlyCompletedActions[actionID] = gcCompletedActionAfterTimes + 1
 	}
 }
 
@@ -194,7 +194,7 @@ func (s *Controller) startProcessing(actionID string) bool {
 		return false
 	}
 
-	if _, ok := s.completedActions[actionID]; ok {
+	if _, ok := s.recentlyCompletedActions[actionID]; ok {
 		s.log.WithField(actions.ActionIDLogField, actionID).Debug("action has been recently completed, not starting")
 		return false
 	}
@@ -264,17 +264,22 @@ func (s *Controller) ackAction(ctx context.Context, action *castai.ClusterAction
 	})
 }
 
+// gcCompletedActions removes recently completed actions from memory after they've been visited
+// a certain number of times during polling cycles. This prevents completed actions from being
+// re-executed while allowing enough time for duplicate action requests to be filtered out.
+// Actions are removed after gcCompletedActionAfterTimes visits to balance memory usage and
+// protection against duplicate execution.
 func (s *Controller) gcCompletedActions() {
 	s.actionsMu.Lock()
 	defer s.actionsMu.Unlock()
 
-	for actionID, timesVisited := range s.completedActions {
+	for actionID, timesVisited := range s.recentlyCompletedActions {
 		timesVisited--
 		if timesVisited <= 0 {
-			delete(s.completedActions, actionID)
+			delete(s.recentlyCompletedActions, actionID)
 			continue
 		}
-		s.completedActions[actionID] = timesVisited
+		s.recentlyCompletedActions[actionID] = timesVisited
 	}
 }
 
