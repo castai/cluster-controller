@@ -12,12 +12,15 @@ import (
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 	ktest "k8s.io/client-go/testing"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	fakectrl "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/castai/cluster-controller/internal/castai"
 )
@@ -625,4 +628,453 @@ func newActionDrainNode(nodeName, nodeID, providerID string, drainTimeoutSeconds
 		},
 		CreatedAt: time.Now().UTC(),
 	}
+}
+
+// newTestCachedClient creates a fake controller-runtime client with field indexes for testing.
+func newTestCachedClient(t *testing.T, objects ...client.Object) client.Client {
+	t.Helper()
+	scheme := runtime.NewScheme()
+	_ = v1.AddToScheme(scheme)
+	_ = storagev1.AddToScheme(scheme)
+
+	builder := fakectrl.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(objects...).
+		WithIndex(&storagev1.VolumeAttachment{}, "spec.nodeName", func(obj client.Object) []string {
+			va := obj.(*storagev1.VolumeAttachment)
+			return []string{va.Spec.NodeName}
+		}).
+		WithIndex(&v1.Pod{}, "spec.nodeName", func(obj client.Object) []string {
+			pod := obj.(*v1.Pod)
+			if pod.Spec.NodeName == "" {
+				return nil
+			}
+			return []string{pod.Spec.NodeName}
+		})
+
+	return builder.Build()
+}
+
+func TestGetVolumeAttachmentsForNode(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should return error when cached client is nil", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		log := logrus.New()
+
+		h := &DrainNodeHandler{
+			log:          log,
+			cachedClient: nil,
+		}
+
+		vaNames, err := h.getVolumeAttachmentsForNode(context.Background(), log, "node1")
+		r.Error(err)
+		r.Contains(err.Error(), "cached client not available")
+		r.Nil(vaNames)
+	})
+
+	t.Run("should return empty when no VolumeAttachments on node", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		log := logrus.New()
+		cachedClient := newTestCachedClient(t)
+
+		h := &DrainNodeHandler{
+			log:          log,
+			cachedClient: cachedClient,
+		}
+
+		vaNames, err := h.getVolumeAttachmentsForNode(context.Background(), log, "node1")
+		r.NoError(err)
+		r.Empty(vaNames)
+	})
+
+	t.Run("should find VolumeAttachments for node", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		log := logrus.New()
+
+		va := &storagev1.VolumeAttachment{
+			ObjectMeta: metav1.ObjectMeta{Name: "va1"},
+			Spec: storagev1.VolumeAttachmentSpec{
+				NodeName: "node1",
+				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: strPtr("pv1")},
+			},
+		}
+		// Regular pod (drainable)
+		pod := &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"},
+			Spec: v1.PodSpec{
+				NodeName: "node1",
+			},
+		}
+
+		cachedClient := newTestCachedClient(t, va, pod)
+
+		h := &DrainNodeHandler{
+			log:          log,
+			cachedClient: cachedClient,
+		}
+
+		vaNames, err := h.getVolumeAttachmentsForNode(context.Background(), log, "node1")
+		r.NoError(err)
+		r.Equal([]string{"va1"}, vaNames)
+	})
+
+	t.Run("should exclude VAs from DaemonSet pods", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		log := logrus.New()
+
+		pvc := &v1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{Name: "pvc-ds", Namespace: "default"},
+			Spec:       v1.PersistentVolumeClaimSpec{VolumeName: "pv-ds"},
+		}
+		vaFromDS := &storagev1.VolumeAttachment{
+			ObjectMeta: metav1.ObjectMeta{Name: "va-ds"},
+			Spec: storagev1.VolumeAttachmentSpec{
+				NodeName: "node1",
+				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: strPtr("pv-ds")},
+			},
+		}
+		vaFromRegular := &storagev1.VolumeAttachment{
+			ObjectMeta: metav1.ObjectMeta{Name: "va-regular"},
+			Spec: storagev1.VolumeAttachmentSpec{
+				NodeName: "node1",
+				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: strPtr("pv-regular")},
+			},
+		}
+
+		controller := true
+		dsPod := &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "ds-pod",
+				Namespace: "default",
+				OwnerReferences: []metav1.OwnerReference{
+					{Kind: "DaemonSet", Controller: &controller},
+				},
+			},
+			Spec: v1.PodSpec{
+				NodeName: "node1",
+				Volumes: []v1.Volume{
+					{
+						Name: "data",
+						VolumeSource: v1.VolumeSource{
+							PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: "pvc-ds"},
+						},
+					},
+				},
+			},
+		}
+
+		cachedClient := newTestCachedClient(t, pvc, vaFromDS, vaFromRegular, dsPod)
+
+		h := &DrainNodeHandler{
+			log:          log,
+			cachedClient: cachedClient,
+		}
+
+		vaNames, err := h.getVolumeAttachmentsForNode(context.Background(), log, "node1")
+		r.NoError(err)
+		// Should only return va-regular, not va-ds (excluded because owned by DaemonSet)
+		r.Equal([]string{"va-regular"}, vaNames)
+	})
+
+	t.Run("should exclude VAs from static pods", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		log := logrus.New()
+
+		pvc := &v1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{Name: "pvc-static", Namespace: "default"},
+			Spec:       v1.PersistentVolumeClaimSpec{VolumeName: "pv-static"},
+		}
+		vaFromStatic := &storagev1.VolumeAttachment{
+			ObjectMeta: metav1.ObjectMeta{Name: "va-static"},
+			Spec: storagev1.VolumeAttachmentSpec{
+				NodeName: "node1",
+				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: strPtr("pv-static")},
+			},
+		}
+		vaFromRegular := &storagev1.VolumeAttachment{
+			ObjectMeta: metav1.ObjectMeta{Name: "va-regular"},
+			Spec: storagev1.VolumeAttachmentSpec{
+				NodeName: "node1",
+				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: strPtr("pv-regular")},
+			},
+		}
+
+		controller := true
+		staticPod := &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "static-pod",
+				Namespace: "default",
+				OwnerReferences: []metav1.OwnerReference{
+					{Kind: "Node", Controller: &controller},
+				},
+			},
+			Spec: v1.PodSpec{
+				NodeName: "node1",
+				Volumes: []v1.Volume{
+					{
+						Name: "data",
+						VolumeSource: v1.VolumeSource{
+							PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: "pvc-static"},
+						},
+					},
+				},
+			},
+		}
+
+		cachedClient := newTestCachedClient(t, pvc, vaFromStatic, vaFromRegular, staticPod)
+
+		h := &DrainNodeHandler{
+			log:          log,
+			cachedClient: cachedClient,
+		}
+
+		vaNames, err := h.getVolumeAttachmentsForNode(context.Background(), log, "node1")
+		r.NoError(err)
+		// Should only return va-regular, not va-static (excluded because owned by Node/static)
+		r.Equal([]string{"va-regular"}, vaNames)
+	})
+
+	t.Run("should only return VAs for the specified node", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		log := logrus.New()
+
+		vaNode1 := &storagev1.VolumeAttachment{
+			ObjectMeta: metav1.ObjectMeta{Name: "va-node1"},
+			Spec: storagev1.VolumeAttachmentSpec{
+				NodeName: "node1",
+				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: strPtr("pv1")},
+			},
+		}
+		vaNode2 := &storagev1.VolumeAttachment{
+			ObjectMeta: metav1.ObjectMeta{Name: "va-node2"},
+			Spec: storagev1.VolumeAttachmentSpec{
+				NodeName: "node2",
+				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: strPtr("pv2")},
+			},
+		}
+
+		cachedClient := newTestCachedClient(t, vaNode1, vaNode2)
+
+		h := &DrainNodeHandler{
+			log:          log,
+			cachedClient: cachedClient,
+		}
+
+		vaNames, err := h.getVolumeAttachmentsForNode(context.Background(), log, "node1")
+		r.NoError(err)
+		r.Equal([]string{"va-node1"}, vaNames)
+	})
+}
+
+func TestWaitForVolumeDetach(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should return immediately when no VAs to wait for", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		log := logrus.New()
+		clientset := fake.NewClientset()
+
+		h := &DrainNodeHandler{
+			log:       log,
+			clientset: clientset,
+			cfg: drainNodeConfig{
+				volumeDetachPollInterval: 100 * time.Millisecond,
+			},
+		}
+
+		err := h.waitForVolumeDetach(context.Background(), log, "node1", nil)
+		r.NoError(err)
+	})
+
+	t.Run("should complete when VAs are deleted", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		log := logrus.New()
+
+		va := &storagev1.VolumeAttachment{
+			ObjectMeta: metav1.ObjectMeta{Name: "va1"},
+			Spec: storagev1.VolumeAttachmentSpec{
+				NodeName: "node1",
+				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: strPtr("pv1")},
+			},
+		}
+		clientset := fake.NewClientset(va)
+
+		h := &DrainNodeHandler{
+			log:       log,
+			clientset: clientset,
+			cfg: drainNodeConfig{
+				volumeDetachPollInterval: 50 * time.Millisecond,
+			},
+		}
+
+		// Delete VA in background
+		go func() {
+			time.Sleep(100 * time.Millisecond)
+			err := clientset.StorageV1().VolumeAttachments().Delete(context.Background(), "va1", metav1.DeleteOptions{})
+			r.NoError(err)
+		}()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		err := h.waitForVolumeDetach(ctx, log, "node1", []string{"va1"})
+		r.NoError(err)
+	})
+
+	t.Run("should timeout gracefully", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		log := logrus.New()
+
+		va := &storagev1.VolumeAttachment{
+			ObjectMeta: metav1.ObjectMeta{Name: "va1"},
+			Spec: storagev1.VolumeAttachmentSpec{
+				NodeName: "node1",
+				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: strPtr("pv1")},
+			},
+		}
+		clientset := fake.NewClientset(va)
+
+		h := &DrainNodeHandler{
+			log:       log,
+			clientset: clientset,
+			cfg: drainNodeConfig{
+				volumeDetachPollInterval: 50 * time.Millisecond,
+			},
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+		defer cancel()
+
+		// VA will not be deleted, should timeout but return nil
+		err := h.waitForVolumeDetach(ctx, log, "node1", []string{"va1"})
+		r.NoError(err) // Timeout is handled gracefully
+	})
+
+	t.Run("should respect context cancellation", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		log := logrus.New()
+
+		va := &storagev1.VolumeAttachment{
+			ObjectMeta: metav1.ObjectMeta{Name: "va1"},
+			Spec: storagev1.VolumeAttachmentSpec{
+				NodeName: "node1",
+				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: strPtr("pv1")},
+			},
+		}
+		clientset := fake.NewClientset(va)
+
+		h := &DrainNodeHandler{
+			log:       log,
+			clientset: clientset,
+			cfg: drainNodeConfig{
+				volumeDetachPollInterval: 50 * time.Millisecond,
+			},
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+
+		// Cancel context immediately
+		go func() {
+			time.Sleep(50 * time.Millisecond)
+			cancel()
+		}()
+
+		err := h.waitForVolumeDetach(ctx, log, "node1", []string{"va1"})
+		r.ErrorIs(err, context.Canceled)
+	})
+}
+
+func TestWaitForVolumeDetachIfEnabled(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should do nothing when feature is disabled", func(t *testing.T) {
+		t.Parallel()
+		log := logrus.New()
+		clientset := fake.NewClientset()
+
+		h := &DrainNodeHandler{
+			log:       log,
+			clientset: clientset,
+			cfg: drainNodeConfig{
+				waitForVolumeDetach: false,
+			},
+		}
+
+		// Should return without doing anything
+		h.waitForVolumeDetachIfEnabled(context.Background(), log, "node1")
+		// No assertions needed - just ensuring no panic/error
+	})
+
+	t.Run("should do nothing when cachedClient is nil", func(t *testing.T) {
+		t.Parallel()
+		log := logrus.New()
+		clientset := fake.NewClientset()
+
+		h := &DrainNodeHandler{
+			log:          log,
+			clientset:    clientset,
+			cachedClient: nil, // No cached client
+			cfg: drainNodeConfig{
+				waitForVolumeDetach:      true,
+				volumeDetachTimeout:      1 * time.Second,
+				volumeDetachPollInterval: 100 * time.Millisecond,
+			},
+		}
+
+		h.waitForVolumeDetachIfEnabled(context.Background(), log, "node1")
+		// No assertions needed - just ensuring no panic/error
+	})
+
+	t.Run("should wait when feature is enabled and VAs exist", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		log := logrus.New()
+
+		va := &storagev1.VolumeAttachment{
+			ObjectMeta: metav1.ObjectMeta{Name: "va1"},
+			Spec: storagev1.VolumeAttachmentSpec{
+				NodeName: "node1",
+				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: strPtr("pv1")},
+			},
+		}
+
+		cachedClient := newTestCachedClient(t, va)
+		clientset := fake.NewClientset(va)
+
+		h := &DrainNodeHandler{
+			log:          log,
+			clientset:    clientset,
+			cachedClient: cachedClient,
+			cfg: drainNodeConfig{
+				waitForVolumeDetach:      true,
+				volumeDetachTimeout:      2 * time.Second,
+				volumeDetachPollInterval: 50 * time.Millisecond,
+			},
+		}
+
+		// Delete VA in background
+		go func() {
+			time.Sleep(100 * time.Millisecond)
+			err := clientset.StorageV1().VolumeAttachments().Delete(context.Background(), "va1", metav1.DeleteOptions{})
+			r.NoError(err)
+		}()
+
+		h.waitForVolumeDetachIfEnabled(context.Background(), log, "node1")
+		// No assertions needed - just ensuring no panic/error and it completes
+	})
+}
+
+func strPtr(s string) *string {
+	return &s
 }

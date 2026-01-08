@@ -13,12 +13,14 @@ import (
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/api/policy/v1beta1"
+	storagev1 "k8s.io/api/storage/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/kubectl/pkg/drain"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/waitext"
@@ -38,12 +40,26 @@ type drainNodeConfig struct {
 	podsTerminationWaitRetryDelay time.Duration
 	castNamespace                 string
 	skipDeletedTimeoutSeconds     int
+	// waitForVolumeDetach enables waiting for VolumeAttachments to be deleted after draining.
+	waitForVolumeDetach bool
+	// volumeDetachTimeout is the maximum time to wait for VolumeAttachments to be deleted.
+	volumeDetachTimeout time.Duration
+	// volumeDetachPollInterval is the interval between checks for VolumeAttachment deletion.
+	volumeDetachPollInterval time.Duration
 }
 
-func NewDrainNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface, castNamespace string) *DrainNodeHandler {
+func NewDrainNodeHandler(
+	log logrus.FieldLogger,
+	clientset kubernetes.Interface,
+	castNamespace string,
+	waitForVolumeDetach bool,
+	volumeDetachTimeout time.Duration,
+	cachedClient client.Client,
+) *DrainNodeHandler {
 	return &DrainNodeHandler{
-		log:       log,
-		clientset: clientset,
+		log:          log,
+		clientset:    clientset,
+		cachedClient: cachedClient,
 		cfg: drainNodeConfig{
 			podsDeleteTimeout:             2 * time.Minute,
 			podDeleteRetries:              5,
@@ -52,6 +68,9 @@ func NewDrainNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface,
 			podsTerminationWaitRetryDelay: 10 * time.Second,
 			castNamespace:                 castNamespace,
 			skipDeletedTimeoutSeconds:     60,
+			waitForVolumeDetach:           waitForVolumeDetach,
+			volumeDetachTimeout:           volumeDetachTimeout,
+			volumeDetachPollInterval:      5 * time.Second,
 		},
 	}
 }
@@ -68,9 +87,10 @@ func (h *DrainNodeHandler) getDrainTimeout(action *castai.ClusterAction) time.Du
 }
 
 type DrainNodeHandler struct {
-	log       logrus.FieldLogger
-	clientset kubernetes.Interface
-	cfg       drainNodeConfig
+	log          logrus.FieldLogger
+	clientset    kubernetes.Interface
+	cachedClient client.Client
+	cfg          drainNodeConfig
 }
 
 func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
@@ -122,6 +142,7 @@ func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 
 	if err == nil {
 		log.Info("node fully drained via graceful eviction")
+		h.waitForVolumeDetachIfEnabled(ctx, log, node.Name)
 		return nil
 	}
 
@@ -170,6 +191,7 @@ func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	// Note: if some pods remained even after forced deletion, we'd get an error from last call here.
 	if deleteErr == nil {
 		log.Info("node drained forcefully")
+		h.waitForVolumeDetachIfEnabled(ctx, log, node.Name)
 	} else {
 		log.Warnf("node failed to fully force drain: %v", deleteErr)
 	}
@@ -189,6 +211,32 @@ func (h *DrainNodeHandler) cordonNode(ctx context.Context, node *v1.Node) error 
 		return fmt.Errorf("patching node unschedulable: %w", err)
 	}
 	return nil
+}
+
+// waitForVolumeDetachIfEnabled waits for VolumeAttachments to be deleted if the feature is enabled.
+// This is called after successful drain to give CSI drivers time to clean up volumes.
+func (h *DrainNodeHandler) waitForVolumeDetachIfEnabled(ctx context.Context, log logrus.FieldLogger, nodeName string) {
+	if !h.cfg.waitForVolumeDetach || h.cachedClient == nil {
+		return
+	}
+
+	vaNames, err := h.getVolumeAttachmentsForNode(ctx, log, nodeName)
+	if err != nil {
+		log.Warnf("failed to get VolumeAttachments for node: %v", err)
+		return
+	}
+
+	if len(vaNames) == 0 {
+		log.Debug("no VolumeAttachments to wait for")
+		return
+	}
+
+	vaCtx, vaCancel := context.WithTimeout(ctx, h.cfg.volumeDetachTimeout)
+	defer vaCancel()
+
+	if err := h.waitForVolumeDetach(vaCtx, log, nodeName, vaNames); err != nil {
+		log.Warnf("error waiting for volume detach: %v", err)
+	}
 }
 
 // Return error if at least one pod failed (but don't wait for it!) => to signal if we should do force delete.
@@ -536,4 +584,142 @@ func (p *podFailedActionError) Error() string {
 
 func (p *podFailedActionError) Unwrap() []error {
 	return p.Errors
+}
+
+// getVolumeAttachmentsForNode returns VolumeAttachment names that should be waited for.
+// It uses the cached client to efficiently query VolumeAttachments and Pods.
+// VAs belonging to non-drainable pods (DaemonSets, static pods) are excluded since
+// those pods won't be evicted and would cause a deadlock waiting for their VAs.
+func (h *DrainNodeHandler) getVolumeAttachmentsForNode(
+	ctx context.Context,
+	log logrus.FieldLogger,
+	nodeName string,
+) ([]string, error) {
+	if h.cachedClient == nil {
+		return nil, fmt.Errorf("cached client not available")
+	}
+
+	// Step 1: List all VolumeAttachments for this node (from cache)
+	var vaList storagev1.VolumeAttachmentList
+	if err := h.cachedClient.List(ctx, &vaList,
+		client.MatchingFields{"spec.nodeName": nodeName}); err != nil {
+		return nil, fmt.Errorf("listing VolumeAttachments: %w", err)
+	}
+
+	if len(vaList.Items) == 0 {
+		log.Debug("no VolumeAttachments found for node")
+		return nil, nil
+	}
+
+	log.Debugf("found %d VolumeAttachments for node %s", len(vaList.Items), nodeName)
+
+	// Step 2: List all pods on this node (from cache)
+	var podList v1.PodList
+	if err := h.cachedClient.List(ctx, &podList,
+		client.MatchingFields{"spec.nodeName": nodeName}); err != nil {
+		return nil, fmt.Errorf("listing pods: %w", err)
+	}
+
+	// Step 3: Build exclusion set - PVs used by non-drainable pods (DaemonSets, static pods)
+	// These pods won't be evicted, so their VAs will never be cleaned up naturally.
+	// Waiting for them would cause a deadlock.
+	excludedPVs := make(map[string]struct{})
+	for i := range podList.Items {
+		pod := &podList.Items[i]
+		if !isDaemonSetPod(pod) && !isStaticPod(pod) {
+			continue
+		}
+		for _, vol := range pod.Spec.Volumes {
+			if vol.PersistentVolumeClaim == nil {
+				continue
+			}
+			var pvc v1.PersistentVolumeClaim
+			if err := h.cachedClient.Get(ctx, client.ObjectKey{
+				Namespace: pod.Namespace,
+				Name:      vol.PersistentVolumeClaim.ClaimName,
+			}, &pvc); err == nil && pvc.Spec.VolumeName != "" {
+				excludedPVs[pvc.Spec.VolumeName] = struct{}{}
+				log.Debugf("excluding PV %s used by non-drainable pod %s/%s", pvc.Spec.VolumeName, pod.Namespace, pod.Name)
+			}
+		}
+	}
+
+	// Step 4: Return VAs whose PV is NOT in exclusion set
+	var vaNames []string
+	for _, va := range vaList.Items {
+		if va.Spec.Source.PersistentVolumeName == nil {
+			continue
+		}
+		if _, excluded := excludedPVs[*va.Spec.Source.PersistentVolumeName]; !excluded {
+			vaNames = append(vaNames, va.Name)
+		}
+	}
+
+	log.Debugf("found %d VolumeAttachments to wait for on node %s (excluded %d from non-drainable pods)",
+		len(vaNames), nodeName, len(excludedPVs))
+	return vaNames, nil
+}
+
+// waitForVolumeDetach waits for the specified VolumeAttachments to be deleted.
+// Returns nil when all VAs are deleted or when timeout is reached (logs warning).
+// Respects context cancellation.
+func (h *DrainNodeHandler) waitForVolumeDetach(
+	ctx context.Context,
+	log logrus.FieldLogger,
+	nodeName string,
+	vaNames []string,
+) error {
+	if len(vaNames) == 0 {
+		return nil
+	}
+
+	vaNameSet := make(map[string]struct{}, len(vaNames))
+	for _, name := range vaNames {
+		vaNameSet[name] = struct{}{}
+	}
+
+	log.Infof("waiting for %d VolumeAttachments to detach: %v", len(vaNames), vaNames)
+
+	err := waitext.Retry(
+		ctx,
+		waitext.NewConstantBackoff(h.cfg.volumeDetachPollInterval),
+		waitext.Forever,
+		func(ctx context.Context) (bool, error) {
+			// List VolumeAttachments for this node
+			vaList, err := h.clientset.StorageV1().VolumeAttachments().List(ctx, metav1.ListOptions{
+				FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": nodeName}).String(),
+			})
+			if err != nil {
+				return true, fmt.Errorf("listing VolumeAttachments: %w", err)
+			}
+
+			// Check which of our VAs still exist
+			remaining := 0
+			var remainingNames []string
+			for _, va := range vaList.Items {
+				if _, ok := vaNameSet[va.Name]; ok {
+					remaining++
+					remainingNames = append(remainingNames, va.Name)
+				}
+			}
+
+			if remaining == 0 {
+				log.Info("all VolumeAttachments have been detached")
+				return false, nil
+			}
+
+			return true, fmt.Errorf("waiting for %d VolumeAttachments to detach: %v", remaining, remainingNames)
+		},
+		func(err error) {
+			log.Debugf("waiting for volume detach: %v", err)
+		},
+	)
+
+	// Handle timeout gracefully - log warning but don't fail
+	if errors.Is(err, context.DeadlineExceeded) {
+		log.Warnf("timeout waiting for VolumeAttachments to detach, proceeding anyway")
+		return nil
+	}
+
+	return err
 }
