@@ -27,6 +27,7 @@ type Config struct {
 	PprofPort      int
 	Metrics        Metrics
 	LeaderElection LeaderElection
+	Drain          Drain
 	// AutoscalingDisabled is a flag to disable approving csr.
 	AutoscalingDisabled bool `mapstructure:"autoscaling_disabled"`
 	// MaxActionsInProgress serves as a safeguard to limit the number of Goroutines in progress.
@@ -79,6 +80,18 @@ type KubeClient struct {
 	Burst int
 }
 
+// Drain contains configuration for node drain operations.
+type Drain struct {
+	// WaitForVolumeDetach enables waiting for VolumeAttachments to be deleted after draining.
+	// This helps prevent Multi-Attach errors when CSI drivers need time to clean up.
+	WaitForVolumeDetach bool `mapstructure:"waitforvolumedetach"`
+	// VolumeDetachTimeout is the maximum time to wait for VolumeAttachments to be deleted.
+	VolumeDetachTimeout time.Duration `mapstructure:"volumedetachtimeout"`
+	// CacheSyncTimeout is the maximum time to wait for the controller-runtime cache to sync.
+	// If the cache fails to sync, the VolumeAttachment wait feature will be disabled.
+	CacheSyncTimeout time.Duration `mapstructure:"cachesynctimeout"`
+}
+
 var cfg *Config
 
 // Get configuration bound to environment variables.
@@ -109,6 +122,9 @@ func Get() Config {
 	_ = viper.BindEnv("metrics.port", "METRICS_PORT")
 	_ = viper.BindEnv("metrics.exportenabled", "METRICS_EXPORT_ENABLED")
 	_ = viper.BindEnv("metrics.exportinterval", "METRICS_EXPORT_INTERVAL")
+	_ = viper.BindEnv("drain.waitforvolumedetach", "DRAIN_WAIT_FOR_VOLUME_DETACH")
+	_ = viper.BindEnv("drain.volumedetachtimeout", "DRAIN_VOLUME_DETACH_TIMEOUT")
+	_ = viper.BindEnv("drain.cachesynctimeout", "CACHE_SYNC_TIMEOUT")
 
 	cfg = &Config{}
 	if err := viper.Unmarshal(&cfg); err != nil {
@@ -171,6 +187,14 @@ func Get() Config {
 		// We do not want to export metrics too often
 		// and also protect against accidental misconfiguration.
 		cfg.Metrics.ExportInterval = 30 * time.Second
+	}
+
+	if cfg.Drain.VolumeDetachTimeout == 0 {
+		cfg.Drain.VolumeDetachTimeout = 60 * time.Second
+	}
+
+	if cfg.Drain.CacheSyncTimeout == 0 {
+		cfg.Drain.CacheSyncTimeout = 120 * time.Second
 	}
 
 	return *cfg

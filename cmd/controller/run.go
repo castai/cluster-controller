@@ -12,6 +12,8 @@ import (
 	"github.com/bombsimon/logrusr/v4"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
+	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apiserver/pkg/server/healthz"
@@ -22,6 +24,8 @@ import (
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"k8s.io/client-go/util/flowcontrol"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/castai/cluster-controller/cmd/utils"
 	"github.com/castai/cluster-controller/health"
@@ -132,6 +136,15 @@ func runController(
 
 	log.Infof("running castai-cluster-controller version %v, log-level: %v", binVersion, logger.Level)
 
+	// Setup cached client for DrainNodeHandler if VA wait feature is enabled
+	var cachedClient ctrlclient.Client
+	if cfg.Drain.WaitForVolumeDetach {
+		cachedClient = setupCachedClient(ctx, log, restConfig, cfg.Drain.CacheSyncTimeout)
+		if cachedClient == nil {
+			log.Warn("cached client not available, VA wait feature will be disabled")
+		}
+	}
+
 	actionHandlers := actions.NewDefaultActionHandlers(
 		k8sVer.Full(),
 		cfg.SelfPod.Namespace,
@@ -139,6 +152,11 @@ func runController(
 		clientset,
 		dynamicClient,
 		helmClient,
+		actions.DrainConfig{
+			WaitForVolumeDetach: cfg.Drain.WaitForVolumeDetach && cachedClient != nil,
+			VolumeDetachTimeout: cfg.Drain.VolumeDetachTimeout,
+			CachedClient:        cachedClient,
+		},
 	)
 
 	actionsConfig := controller.Config{
@@ -375,4 +393,66 @@ func saveMetadata(clusterID string, cfg config.Config, log *logrus.Entry) error 
 		return fmt.Errorf("saving metadata: %w", err)
 	}
 	return nil
+}
+
+// setupCachedClient creates a controller-runtime cached client for efficient VolumeAttachment queries.
+// Returns nil if cache setup fails (feature should be disabled gracefully).
+func setupCachedClient(ctx context.Context, log logrus.FieldLogger, restConfig *rest.Config, syncTimeout time.Duration) ctrlclient.Client {
+	// Create cache
+	c, err := cache.New(restConfig, cache.Options{})
+	if err != nil {
+		log.Warnf("failed to create cache: %v", err)
+		return nil
+	}
+
+	// Add field index for VolumeAttachments by nodeName
+	if err := c.IndexField(ctx, &storagev1.VolumeAttachment{}, "spec.nodeName",
+		func(obj ctrlclient.Object) []string {
+			va := obj.(*storagev1.VolumeAttachment)
+			return []string{va.Spec.NodeName}
+		}); err != nil {
+		log.Warnf("failed to add VolumeAttachment index: %v", err)
+		return nil
+	}
+
+	// Add field index for Pods by nodeName
+	if err := c.IndexField(ctx, &corev1.Pod{}, "spec.nodeName",
+		func(obj ctrlclient.Object) []string {
+			pod := obj.(*corev1.Pod)
+			if pod.Spec.NodeName == "" {
+				return nil
+			}
+			return []string{pod.Spec.NodeName}
+		}); err != nil {
+		log.Warnf("failed to add Pod index: %v", err)
+		return nil
+	}
+
+	// Start cache in background
+	go func() {
+		if err := c.Start(ctx); err != nil {
+			log.Errorf("cache stopped unexpectedly: %v", err)
+		}
+	}()
+
+	// Wait for cache sync with timeout
+	syncCtx, syncCancel := context.WithTimeout(ctx, syncTimeout)
+	defer syncCancel()
+
+	if !c.WaitForCacheSync(syncCtx) {
+		log.Warnf("cache sync timed out after %v", syncTimeout)
+		return nil
+	}
+
+	// Create client backed by cache
+	cachedClient, err := ctrlclient.New(restConfig, ctrlclient.Options{
+		Cache: &ctrlclient.CacheOptions{Reader: c},
+	})
+	if err != nil {
+		log.Warnf("failed to create cached client: %v", err)
+		return nil
+	}
+
+	log.Info("cache synced successfully, VA wait feature enabled with cached client")
+	return cachedClient
 }
