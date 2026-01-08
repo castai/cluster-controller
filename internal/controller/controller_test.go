@@ -304,7 +304,7 @@ func TestController_ParallelExecutionTest(t *testing.T) {
 			})
 		}
 		actionsWithAckErr := map[string]struct{}{
-			actions[2].ID: struct{}{},
+			actions[2].ID: {},
 		}
 
 		var (
@@ -366,18 +366,10 @@ func TestController_ParallelExecutionTest(t *testing.T) {
 		<-ctx.Done()
 		svc.startedActionsWg.Wait()
 
-		mu.Lock()
-		observedMax := maxExecutingObserved
-		counts := make(map[string]int)
-		for k, v := range executionCounts {
-			counts[k] = v
-		}
-		mu.Unlock()
-
-		require.LessOrEqual(t, observedMax, 2, "Expected no more than 2 actions to execute concurrently, but observed %d", observedMax)
+		require.LessOrEqual(t, maxExecutingObserved, 2, "Expected no more than 2 actions to execute concurrently, but observed %d", maxExecutingObserved)
 
 		for _, action := range actions {
-			count := counts[action.ID]
+			count := executionCounts[action.ID]
 			if _, ok := actionsWithAckErr[action.ID]; ok {
 				assert.Equal(t, 3, count, "Expected action %s to be executed three times because of ack errors, but it was executed %d times", action.ID, count)
 				continue

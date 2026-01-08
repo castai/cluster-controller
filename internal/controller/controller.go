@@ -19,6 +19,9 @@ import (
 	"github.com/castai/cluster-controller/internal/waitext"
 )
 
+// gcCompletedActionAfterTimes specifies after how many GCs to remove the completed action from the store.
+const gcCompletedActionAfterTimes = 2
+
 type Config struct {
 	PollWaitInterval     time.Duration // How long to wait unit next long polling request.
 	PollTimeout          time.Duration // hard timeout. Normally server should return empty result before this timeout.
@@ -45,7 +48,7 @@ func NewService(
 		k8sVersion:       k8sVersion,
 		castAIClient:     castaiClient,
 		startedActions:   make(map[string]struct{}),
-		completedActions: make(map[string]time.Time),
+		completedActions: make(map[string]int8),
 		actionHandlers:   actionHandlers,
 		healthCheck:      healthCheck,
 	}
@@ -61,10 +64,11 @@ type Controller struct {
 	actionHandlers actions.ActionHandlers
 
 	startedActionsWg sync.WaitGroup
-	startedActions   map[string]struct{}
-	completedActions map[string]time.Time
-	startedActionsMu sync.Mutex
-	healthCheck      *health.HealthzProvider
+	actionsMu        sync.Mutex
+	startedActions   map[string]struct{} // protected by actionsMu
+	completedActions map[string]int8     // protected by actionsMu
+
+	healthCheck *health.HealthzProvider
 }
 
 func (s *Controller) Run(ctx context.Context) {
@@ -170,21 +174,21 @@ func (s *Controller) handleActions(ctx context.Context, clusterActions []*castai
 }
 
 func (s *Controller) finishProcessing(actionID string, ackErr error) {
-	s.startedActionsMu.Lock()
-	defer s.startedActionsMu.Unlock()
+	s.actionsMu.Lock()
+	defer s.actionsMu.Unlock()
 
 	s.startedActionsWg.Done()
 	delete(s.startedActions, actionID)
 
 	if ackErr == nil {
-		// only mark the action as completed if it was succesfully acknowledged so it can be retried quickly if not and still requested.
-		s.completedActions[actionID] = time.Now()
+		// only mark the action as completed if it was successfully acknowledged so it can be retried quickly if not and still requested.
+		s.completedActions[actionID] = gcCompletedActionAfterTimes + 1
 	}
 }
 
 func (s *Controller) startProcessing(actionID string) bool {
-	s.startedActionsMu.Lock()
-	defer s.startedActionsMu.Unlock()
+	s.actionsMu.Lock()
+	defer s.actionsMu.Unlock()
 
 	if _, ok := s.startedActions[actionID]; ok {
 		return false
@@ -261,17 +265,16 @@ func (s *Controller) ackAction(ctx context.Context, action *castai.ClusterAction
 }
 
 func (s *Controller) gcCompletedActions() {
-	expireDuration := (s.cfg.PollTimeout + s.cfg.PollWaitInterval) * 2
-	now := time.Now()
+	s.actionsMu.Lock()
+	defer s.actionsMu.Unlock()
 
-	s.startedActionsMu.Lock()
-	defer s.startedActionsMu.Unlock()
-
-	for actionID, completedAt := range s.completedActions {
-		if now.Before(completedAt.Add(expireDuration)) {
+	for actionID, timesVisited := range s.completedActions {
+		timesVisited--
+		if timesVisited <= 0 {
+			delete(s.completedActions, actionID)
 			continue
 		}
-		delete(s.completedActions, actionID)
+		s.completedActions[actionID] = timesVisited
 	}
 }
 
