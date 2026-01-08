@@ -1,4 +1,4 @@
-package actions
+package informer
 
 import (
 	"context"
@@ -20,9 +20,9 @@ const (
 	cacheSyncTimeout = 30 * time.Second
 )
 
-// InformerManager manages the global SharedInformerFactory and provides
+// Manager manages the global SharedInformerFactory and provides
 // access to specific informers and listers.
-type InformerManager struct {
+type Manager struct {
 	log       logrus.FieldLogger
 	clientset kubernetes.Interface
 	factory   informers.SharedInformerFactory
@@ -38,12 +38,12 @@ type InformerManager struct {
 	mu         sync.RWMutex
 }
 
-// NewInformerManager creates a new InformerManager with the given clientset and resync period.
-func NewInformerManager(
+// NewManager creates a new Manager with the given clientset and resync period.
+func NewManager(
 	log logrus.FieldLogger,
 	clientset kubernetes.Interface,
 	resyncPeriod time.Duration,
-) *InformerManager {
+) *Manager {
 	factory := informers.NewSharedInformerFactory(clientset, resyncPeriod)
 
 	// Create node informer
@@ -54,7 +54,7 @@ func NewInformerManager(
 	podInformer := factory.Core().V1().Pods().Informer()
 	podLister := factory.Core().V1().Pods().Lister()
 
-	return &InformerManager{
+	return &Manager{
 		log:          log,
 		clientset:    clientset,
 		factory:      factory,
@@ -67,7 +67,7 @@ func NewInformerManager(
 
 // Start starts the informer factory and waits for all caches to sync.
 // This method blocks until caches are synchronized or the context is cancelled.
-func (m *InformerManager) Start(ctx context.Context) error {
+func (m *Manager) Start(ctx context.Context) error {
 	m.mu.Lock()
 	if m.started {
 		m.mu.Unlock()
@@ -119,7 +119,7 @@ func (m *InformerManager) Start(ctx context.Context) error {
 }
 
 // Stop gracefully stops the informer factory.
-func (m *InformerManager) Stop() {
+func (m *Manager) Stop() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -137,39 +137,39 @@ func (m *InformerManager) Stop() {
 }
 
 // IsStarted returns true if the informer manager has been started and caches are synced.
-func (m *InformerManager) IsStarted() bool {
+func (m *Manager) IsStarted() bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.started
 }
 
 // GetNodeLister returns the node lister for querying the node cache.
-func (m *InformerManager) GetNodeLister() listerv1.NodeLister {
+func (m *Manager) GetNodeLister() listerv1.NodeLister {
 	return m.nodeLister
 }
 
 // GetNodeInformer returns the node informer for watching node events.
-func (m *InformerManager) GetNodeInformer() cache.SharedIndexInformer {
+func (m *Manager) GetNodeInformer() cache.SharedIndexInformer {
 	return m.nodeInformer
 }
 
 // GetPodLister returns the pod lister for querying the pod cache.
-func (m *InformerManager) GetPodLister() listerv1.PodLister {
+func (m *Manager) GetPodLister() listerv1.PodLister {
 	return m.podLister
 }
 
 // GetPodInformer returns the pod informer for watching pod events.
-func (m *InformerManager) GetPodInformer() cache.SharedIndexInformer {
+func (m *Manager) GetPodInformer() cache.SharedIndexInformer {
 	return m.podInformer
 }
 
 // GetFactory returns the underlying SharedInformerFactory for advanced use cases.
-func (m *InformerManager) GetFactory() informers.SharedInformerFactory {
+func (m *Manager) GetFactory() informers.SharedInformerFactory {
 	return m.factory
 }
 
 // reportCacheSize periodically reports the node and pod cache sizes as metrics.
-func (m *InformerManager) reportCacheSize(ctx context.Context) {
+func (m *Manager) reportCacheSize(ctx context.Context) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 

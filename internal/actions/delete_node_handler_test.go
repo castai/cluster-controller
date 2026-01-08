@@ -138,10 +138,10 @@ func TestDeleteNodeHandler_Handle(t *testing.T) {
 				clientSet = fake.NewClientset(tt.fields.tuneFakeObjects...)
 			}
 			h := &DeleteNodeHandler{
-				DrainNodeHandler: DrainNodeHandler{clientset: clientSet, log: logrus.New()},
-				log:              logrus.New(),
-				clientset:        clientSet,
-				cfg:              tt.fields.cfg,
+				log:       logrus.New(),
+				clientset: clientSet,
+				cfg:       tt.fields.cfg,
+				drainCfg:  newDrainNodeConfig(""),
 			}
 			err := h.Handle(context.Background(), tt.args.action)
 			require.Equal(t, tt.wantErr != nil, err != nil, "expected error: %v, got: %v", tt.wantErr, err)

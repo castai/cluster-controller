@@ -25,10 +25,10 @@ import (
 
 	"github.com/castai/cluster-controller/cmd/utils"
 	"github.com/castai/cluster-controller/health"
-	"github.com/castai/cluster-controller/internal/actions"
 	"github.com/castai/cluster-controller/internal/actions/csr"
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/config"
+	"github.com/castai/cluster-controller/internal/informer"
 	"github.com/castai/cluster-controller/internal/controller"
 	"github.com/castai/cluster-controller/internal/controller/logexporter"
 	"github.com/castai/cluster-controller/internal/controller/metricexporter"
@@ -134,7 +134,7 @@ func runController(
 
 	// Create global informer manager if enabled
 	log.Info("initializing global informer manager...")
-	informerManager := actions.NewInformerManager(
+	informerManager := informer.NewManager(
 		log,
 		clientset,
 		cfg.Informer.ResyncPeriod,

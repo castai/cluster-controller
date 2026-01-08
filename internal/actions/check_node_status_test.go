@@ -19,6 +19,7 @@ import (
 	k8stest "k8s.io/client-go/testing"
 
 	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/informer"
 )
 
 const (
@@ -195,7 +196,7 @@ func TestCheckNodeStatusHandler_Handle_Deleted(t *testing.T) {
 			log := logrus.New()
 			log.SetLevel(logrus.DebugLevel)
 
-			infMgr := NewInformerManager(log, clientSet, 10*time.Minute)
+			infMgr := informer.NewManager(log, clientSet, 10*time.Minute)
 
 			// Start informer manager
 			ctx, cancel := context.WithCancel(context.Background())
@@ -461,7 +462,7 @@ func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
 
 			log := logrus.New()
 			log.SetLevel(logrus.DebugLevel)
-			infMgr := NewInformerManager(log, clientSet, 10*time.Minute)
+			infMgr := informer.NewManager(log, clientSet, 10*time.Minute)
 
 			// Start informer manager
 			ctx, cancel := context.WithCancel(context.Background())
@@ -586,11 +587,8 @@ func TestCheckNodeStatusHandler_PatchNodeCapacity(t *testing.T) {
 			log := logrus.New()
 			log.SetLevel(logrus.DebugLevel)
 
-			infMgr := NewInformerManager(log, clientSet, 10*time.Minute)
-			h := NewCheckNodeStatusHandler(log, clientSet, infMgr)
-
 			ctx := context.Background()
-			h.patchNodeCapacityIfNeeded(ctx, log.WithField("test", tt.name), tt.node)
+			patchNodeCapacityIfNeeded(ctx, log.WithField("test", tt.name), clientSet, tt.node)
 
 			if tt.expectPatch && !tt.patchShouldErr {
 				// Verify patch was called
@@ -686,7 +684,7 @@ func TestCheckNodeStatusHandler_Handle_Deleted_WithEvents(t *testing.T) {
 			log := logrus.New()
 			log.SetLevel(logrus.DebugLevel)
 
-			infMgr := NewInformerManager(log, clientSet, 10*time.Minute)
+			infMgr := informer.NewManager(log, clientSet, 10*time.Minute)
 
 			ctx, cancel := context.WithCancel(context.Background())
 			t.Cleanup(func() {
@@ -772,7 +770,7 @@ func TestCheckNodeStatusHandler_Handle_Ready_WithAddEvent(t *testing.T) {
 				log := logrus.New()
 				log.SetLevel(logrus.DebugLevel)
 
-				infMgr := NewInformerManager(log, clientSet, 10*time.Minute)
+				infMgr := informer.NewManager(log, clientSet, 10*time.Minute)
 
 				ctx, cancel := context.WithCancel(context.Background())
 				t.Cleanup(func() {
@@ -858,7 +856,7 @@ func TestCheckNodeStatusHandler_Handle_Ready_AlreadyInCache(t *testing.T) {
 			log := logrus.New()
 			log.SetLevel(logrus.DebugLevel)
 
-			infMgr := NewInformerManager(log, clientSet, 10*time.Minute)
+			infMgr := informer.NewManager(log, clientSet, 10*time.Minute)
 
 			ctx, cancel := context.WithCancel(context.Background())
 			t.Cleanup(cancel)

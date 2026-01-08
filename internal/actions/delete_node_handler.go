@@ -36,18 +36,15 @@ func NewDeleteNodeHandler(log logrus.FieldLogger, clientset kubernetes.Interface
 			deleteRetryWait:     5 * time.Second,
 			podsTerminationWait: 30 * time.Second,
 		},
-		DrainNodeHandler: DrainNodeHandler{
-			log:       log,
-			clientset: clientset,
-		},
+		drainCfg: newDrainNodeConfig(""),
 	}
 }
 
 type DeleteNodeHandler struct {
-	DrainNodeHandler
 	log       logrus.FieldLogger
 	clientset kubernetes.Interface
 	cfg       deleteNodeConfig
+	drainCfg  drainNodeConfig
 }
 
 func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
@@ -142,7 +139,7 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 	// Create delete options with grace period 0 - force delete.
 	deleteOptions := metav1.NewDeleteOptions(0)
 	deletePod := func(ctx context.Context, pod v1.Pod) error {
-		return h.deletePod(ctx, *deleteOptions, pod)
+		return deletePodWithRetry(ctx, h.log, h.clientset, *deleteOptions, pod, h.drainCfg)
 	}
 
 	deletedPods, failedPods := executeBatchPodActions(ctx, log, pods, deletePod, "delete-pod")

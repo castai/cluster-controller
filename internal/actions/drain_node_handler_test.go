@@ -20,6 +20,7 @@ import (
 	ktest "k8s.io/client-go/testing"
 
 	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/informer"
 )
 
 func TestGetDrainTimeout(t *testing.T) {
@@ -37,12 +38,8 @@ func TestGetDrainTimeout(t *testing.T) {
 			},
 			CreatedAt: time.Now().UTC(),
 		}
-		h := DrainNodeHandler{
-			log: log,
-			cfg: drainNodeConfig{},
-		}
 
-		timeout := h.getDrainTimeout(action)
+		timeout := getDrainTimeout(action)
 
 		// We give some wiggle room as the test might get here a few milliseconds late.
 		r.InDelta((100 * time.Second).Milliseconds(), timeout.Milliseconds(), 10)
@@ -59,12 +56,8 @@ func TestGetDrainTimeout(t *testing.T) {
 			},
 			CreatedAt: time.Now().UTC().Add(-3 * time.Minute),
 		}
-		h := DrainNodeHandler{
-			log: log,
-			cfg: drainNodeConfig{},
-		}
 
-		timeout := h.getDrainTimeout(action)
+		timeout := getDrainTimeout(action)
 		r.Less(int(math.Floor(timeout.Seconds())), 600)
 	})
 
@@ -79,12 +72,8 @@ func TestGetDrainTimeout(t *testing.T) {
 			},
 			CreatedAt: time.Now().UTC().Add(-60 * time.Minute),
 		}
-		h := DrainNodeHandler{
-			log: log,
-			cfg: drainNodeConfig{},
-		}
 
-		timeout := h.getDrainTimeout(action)
+		timeout := getDrainTimeout(action)
 		r.Equal(0, int(timeout.Seconds()))
 	})
 }
@@ -390,7 +379,7 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 			wantErrorContains: "failed to drain via graceful eviction",
 		},
 		{
-			name: "when eviction timeout is reached and force=false, leaves node cordoned and skip deletion",
+			name: "when drain timeout is 0 and force=false, returns error without attempting eviction",
 			fields: fields{
 				clientSet: func(t *testing.T) *fake.Clientset {
 					c := setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
@@ -402,8 +391,8 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 				cfg:    drainNodeConfig{},
 				action: newActionDrainNode(nodeName, nodeID, providerID, 0, false),
 			},
-			wantErr:           context.DeadlineExceeded,
-			wantErrorContains: "failed to drain via graceful eviction",
+			wantErr:           errAction,
+			wantErrorContains: "drain timeout is 0",
 		},
 		{
 			name: "eviction fails and force=true, force remove pods: timeout during eviction",
@@ -580,7 +569,7 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 			clientset := tt.fields.clientSet(t)
 
 			// Create and start informer manager
-			infMgr := NewInformerManager(log, clientset, 10*time.Minute)
+			infMgr := informer.NewManager(log, clientset, 10*time.Minute)
 			ctx, cancel := context.WithCancel(context.Background())
 			t.Cleanup(cancel)
 
@@ -591,12 +580,7 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 			// Wait for informer caches to sync
 			time.Sleep(100 * time.Millisecond)
 
-			h := &DrainNodeHandler{
-				log:             log,
-				clientset:       clientset,
-				informerManager: infMgr,
-				cfg:             tt.args.cfg,
-			}
+			h := NewDrainNodeHandler(log, clientset, tt.args.cfg.castNamespace, infMgr)
 			err := h.Handle(context.Background(), tt.args.action)
 			require.Equal(t, tt.wantErr != nil, err != nil, "expected error: %v, got: %v", tt.wantErr, err)
 			if tt.wantErr != nil {
@@ -608,15 +592,15 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 				return
 			}
 
-			n, err := h.clientset.CoreV1().Nodes().Get(context.Background(), tt.args.action.ActionDrainNode.NodeName, metav1.GetOptions{})
+			n, err := clientset.CoreV1().Nodes().Get(context.Background(), tt.args.action.ActionDrainNode.NodeName, metav1.GetOptions{})
 			require.True(t, (err != nil && apierrors.IsNotFound(err)) ||
 				(err == nil && n.Spec.Unschedulable == !tt.wantNodeNotCordoned),
 				"expected node to be not found or cordoned, got: %v", err)
 
-			_, err = h.clientset.CoreV1().Pods("default").Get(context.Background(), podName, metav1.GetOptions{})
+			_, err = clientset.CoreV1().Pods("default").Get(context.Background(), podName, metav1.GetOptions{})
 			require.True(t, (tt.wantPodIsNotFound && apierrors.IsNotFound(err)) || (!tt.wantPodIsNotFound && err == nil), "expected pod to be not found, got: %v", err)
 
-			checkPods(t, h.clientset, "ds-pod", "static-pod", "job-pod")
+			checkPods(t, clientset, "ds-pod", "static-pod", "job-pod")
 		})
 	}
 }

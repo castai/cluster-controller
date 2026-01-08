@@ -1,4 +1,4 @@
-package actions
+package informer
 
 import (
 	"context"
@@ -13,14 +13,14 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 )
 
-func TestNewInformerManager(t *testing.T) {
+func TestNewManager(t *testing.T) {
 	t.Parallel()
 
 	log := logrus.New()
 	clientset := fake.NewSimpleClientset()
 	resyncPeriod := 12 * time.Hour
 
-	manager := NewInformerManager(log, clientset, resyncPeriod)
+	manager := NewManager(log, clientset, resyncPeriod)
 
 	require.NotNil(t, manager)
 	require.NotNil(t, manager.factory)
@@ -29,7 +29,7 @@ func TestNewInformerManager(t *testing.T) {
 	require.False(t, manager.IsStarted())
 }
 
-func TestInformerManager_Start_Success(t *testing.T) {
+func TestManager_Start_Success(t *testing.T) {
 	t.Parallel()
 
 	log := logrus.New()
@@ -51,7 +51,7 @@ func TestInformerManager_Start_Success(t *testing.T) {
 	}
 
 	clientset := fake.NewSimpleClientset(node1, node2)
-	manager := NewInformerManager(log, clientset, 0)
+	manager := NewManager(log, clientset, 0)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -74,14 +74,14 @@ func TestInformerManager_Start_Success(t *testing.T) {
 	require.False(t, manager.IsStarted())
 }
 
-func TestInformerManager_Start_AlreadyStarted(t *testing.T) {
+func TestManager_Start_AlreadyStarted(t *testing.T) {
 	t.Parallel()
 
 	log := logrus.New()
 	log.SetLevel(logrus.ErrorLevel)
 
 	clientset := fake.NewSimpleClientset()
-	manager := NewInformerManager(log, clientset, 0)
+	manager := NewManager(log, clientset, 0)
 
 	ctx := context.Background()
 
@@ -98,14 +98,14 @@ func TestInformerManager_Start_AlreadyStarted(t *testing.T) {
 	manager.Stop()
 }
 
-func TestInformerManager_Start_ContextCanceled(t *testing.T) {
+func TestManager_Start_ContextCanceled(t *testing.T) {
 	t.Parallel()
 
 	log := logrus.New()
 	log.SetLevel(logrus.ErrorLevel)
 
 	clientset := fake.NewSimpleClientset()
-	manager := NewInformerManager(log, clientset, 0)
+	manager := NewManager(log, clientset, 0)
 
 	// Create a context that's already canceled
 	ctx, cancel := context.WithCancel(context.Background())
@@ -118,7 +118,7 @@ func TestInformerManager_Start_ContextCanceled(t *testing.T) {
 	require.False(t, manager.IsStarted())
 }
 
-func TestInformerManager_GetNodeLister(t *testing.T) {
+func TestManager_GetNodeLister(t *testing.T) {
 	t.Parallel()
 
 	log := logrus.New()
@@ -137,7 +137,7 @@ func TestInformerManager_GetNodeLister(t *testing.T) {
 	}
 
 	clientset := fake.NewSimpleClientset(node)
-	manager := NewInformerManager(log, clientset, 0)
+	manager := NewManager(log, clientset, 0)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -166,14 +166,14 @@ func TestInformerManager_GetNodeLister(t *testing.T) {
 	require.Len(t, nodes, 1)
 }
 
-func TestInformerManager_Stop(t *testing.T) {
+func TestManager_Stop(t *testing.T) {
 	t.Parallel()
 
 	log := logrus.New()
 	log.SetLevel(logrus.ErrorLevel)
 
 	clientset := fake.NewSimpleClientset()
-	manager := NewInformerManager(log, clientset, 0)
+	manager := NewManager(log, clientset, 0)
 
 	// Stop when not started should be safe
 	manager.Stop()
@@ -195,14 +195,14 @@ func TestInformerManager_Stop(t *testing.T) {
 	require.False(t, manager.IsStarted())
 }
 
-func TestInformerManager_IsStarted(t *testing.T) {
+func TestManager_IsStarted(t *testing.T) {
 	t.Parallel()
 
 	log := logrus.New()
 	log.SetLevel(logrus.ErrorLevel)
 
 	clientset := fake.NewSimpleClientset()
-	manager := NewInformerManager(log, clientset, 0)
+	manager := NewManager(log, clientset, 0)
 
 	// Initially not started
 	require.False(t, manager.IsStarted())
@@ -220,18 +220,18 @@ func TestInformerManager_IsStarted(t *testing.T) {
 	require.False(t, manager.IsStarted())
 }
 
-func TestInformerManager_GetFactory(t *testing.T) {
+func TestManager_GetFactory(t *testing.T) {
 	t.Parallel()
 
 	log := logrus.New()
 	clientset := fake.NewSimpleClientset()
-	manager := NewInformerManager(log, clientset, 0)
+	manager := NewManager(log, clientset, 0)
 
 	factory := manager.GetFactory()
 	require.NotNil(t, factory)
 }
 
-func TestInformerManager_CacheUpdates(t *testing.T) {
+func TestManager_CacheUpdates(t *testing.T) {
 	t.Parallel()
 
 	log := logrus.New()
@@ -245,7 +245,7 @@ func TestInformerManager_CacheUpdates(t *testing.T) {
 	}
 
 	clientset := fake.NewSimpleClientset(node1)
-	manager := NewInformerManager(log, clientset, 0)
+	manager := NewManager(log, clientset, 0)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

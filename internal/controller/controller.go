@@ -18,6 +18,7 @@ import (
 	"github.com/castai/cluster-controller/internal/actions"
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/helm"
+	"github.com/castai/cluster-controller/internal/informer"
 	"github.com/castai/cluster-controller/internal/metrics"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
@@ -43,7 +44,7 @@ func NewService(
 	castaiClient castai.CastAIClient,
 	helmClient helm.Client,
 	healthCheck *health.HealthzProvider,
-	informerManager *actions.InformerManager,
+	informerManager *informer.Manager,
 ) *Controller {
 	return &Controller{
 		log:            log,
