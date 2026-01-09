@@ -34,13 +34,13 @@ func TestManager_Start(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name           string
-		objects        []runtime.Object
-		setupCtx       func(t *testing.T) (context.Context, context.CancelFunc)
-		wantErr        bool
-		errContains    string
-		expectedNodes  int
-		expectedPods   int
+		name          string
+		objects       []runtime.Object
+		setupCtx      func(t *testing.T) (context.Context, context.CancelFunc)
+		wantErr       bool
+		errContains   string
+		expectedNodes int
+		expectedPods  int
 	}{
 		{
 			name: "success with resources",
