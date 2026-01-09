@@ -6,6 +6,24 @@ The official CAST AI kubernetes cluster controller written in Go
 
 Check our official helm charts repo https://github.com/castai/castai-helm-charts
 
+## Configuration
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `API_KEY` | CAST AI API key (required) | - |
+| `API_URL` | CAST AI API URL (required) | - |
+| `CLUSTER_ID` | CAST AI cluster ID (required) | - |
+| `DRAIN_VOLUME_DETACH_TIMEOUT` | Default timeout for waiting for VolumeAttachments to detach during node drain | `60s` |
+| `CACHE_SYNC_TIMEOUT` | Timeout for VolumeAttachment informer cache sync | `120s` |
+
+### VolumeAttachment Wait Feature
+
+The cluster-controller supports waiting for VolumeAttachments to be deleted after draining a node. This helps prevent Multi-Attach errors when CSI drivers need time to clean up volumes.
+
+This feature is controlled per-action via the API (see [BACKEND-VA-WAIT.md](BACKEND-VA-WAIT.md) for API details). The `DRAIN_VOLUME_DETACH_TIMEOUT` environment variable provides the default timeout when the API doesn't specify a custom value.
+
 ## Testing
 
 ### Pull requests

@@ -82,12 +82,11 @@ type KubeClient struct {
 
 // Drain contains configuration for node drain operations.
 type Drain struct {
-	// WaitForVolumeDetach enables waiting for VolumeAttachments to be deleted after draining.
-	// This helps prevent Multi-Attach errors when CSI drivers need time to clean up.
-	WaitForVolumeDetach bool `mapstructure:"waitforvolumedetach"`
-	// VolumeDetachTimeout is the maximum time to wait for VolumeAttachments to be deleted.
+	// VolumeDetachTimeout is the default timeout for waiting for VolumeAttachments to be deleted.
+	// This is used when the API requests VA wait but doesn't specify a custom timeout.
+	// Can be overridden per-action via ActionDrainNode.VolumeDetachTimeoutSeconds.
 	VolumeDetachTimeout time.Duration `mapstructure:"volumedetachtimeout"`
-	// CacheSyncTimeout is the maximum time to wait for the controller-runtime cache to sync.
+	// CacheSyncTimeout is the maximum time to wait for the VolumeAttachment informer cache to sync.
 	// If the cache fails to sync, the VolumeAttachment wait feature will be disabled.
 	CacheSyncTimeout time.Duration `mapstructure:"cachesynctimeout"`
 }
@@ -122,7 +121,6 @@ func Get() Config {
 	_ = viper.BindEnv("metrics.port", "METRICS_PORT")
 	_ = viper.BindEnv("metrics.exportenabled", "METRICS_EXPORT_ENABLED")
 	_ = viper.BindEnv("metrics.exportinterval", "METRICS_EXPORT_INTERVAL")
-	_ = viper.BindEnv("drain.waitforvolumedetach", "DRAIN_WAIT_FOR_VOLUME_DETACH")
 	_ = viper.BindEnv("drain.volumedetachtimeout", "DRAIN_VOLUME_DETACH_TIMEOUT")
 	_ = viper.BindEnv("drain.cachesynctimeout", "CACHE_SYNC_TIMEOUT")
 
