@@ -54,6 +54,10 @@ func TestConfig(t *testing.T) {
 			ExportEnabled:  false,
 			ExportInterval: 30 * time.Second,
 		},
+		Drain: Drain{
+			VolumeDetachTimeout: 60 * time.Second,
+			CacheSyncTimeout:    120 * time.Second,
+		},
 	}
 
 	require.Equal(t, expected, cfg)
