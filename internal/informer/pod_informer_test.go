@@ -13,7 +13,7 @@ func TestPodInformer_Informer(t *testing.T) {
 	t.Parallel()
 
 	log := logrus.New()
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	manager := NewManager(log, clientset, time.Hour, 5*time.Second)
 
 	informer := manager.pods.Informer()
@@ -24,7 +24,7 @@ func TestPodInformer_Lister(t *testing.T) {
 	t.Parallel()
 
 	log := logrus.New()
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	manager := NewManager(log, clientset, time.Hour, 5*time.Second)
 
 	lister := manager.pods.Lister()
@@ -35,7 +35,7 @@ func TestPodInformer_HasSynced(t *testing.T) {
 	t.Parallel()
 
 	log := logrus.New()
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	manager := NewManager(log, clientset, time.Hour, 5*time.Second)
 
 	require.False(t, manager.pods.HasSynced())

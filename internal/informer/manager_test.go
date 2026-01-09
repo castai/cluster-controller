@@ -17,7 +17,7 @@ func TestNewManager(t *testing.T) {
 	t.Parallel()
 
 	log := logrus.New()
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 
 	manager := NewManager(log, clientset, time.Hour, 5*time.Second)
 
@@ -43,7 +43,7 @@ func TestManager_Start_Success(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "pod-1", Namespace: "default"},
 	}
 
-	clientset := fake.NewSimpleClientset(node, pod)
+	clientset := fake.NewClientset(node, pod)
 	manager := NewManager(log, clientset, 0, 5*time.Second)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -69,7 +69,7 @@ func TestManager_Start_AlreadyStarted(t *testing.T) {
 	log := logrus.New()
 	log.SetLevel(logrus.ErrorLevel)
 
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	manager := NewManager(log, clientset, 0, 5*time.Second)
 
 	ctx := context.Background()
@@ -89,7 +89,7 @@ func TestManager_Start_ContextCanceled(t *testing.T) {
 	log := logrus.New()
 	log.SetLevel(logrus.ErrorLevel)
 
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	manager := NewManager(log, clientset, 0, 5*time.Second)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -107,7 +107,7 @@ func TestManager_Stop(t *testing.T) {
 	log := logrus.New()
 	log.SetLevel(logrus.ErrorLevel)
 
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	manager := NewManager(log, clientset, 0, 5*time.Second)
 
 	manager.Stop()
@@ -137,7 +137,7 @@ func TestManager_CacheUpdates(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
 	}
 
-	clientset := fake.NewSimpleClientset(node)
+	clientset := fake.NewClientset(node)
 	manager := NewManager(log, clientset, 0, 5*time.Second)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
