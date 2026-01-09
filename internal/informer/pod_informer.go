@@ -8,6 +8,7 @@ import (
 type podInformer struct {
 	informer cache.SharedIndexInformer
 	lister   listerv1.PodLister
+	indexers cache.Indexers
 }
 
 func (p *podInformer) Informer() cache.SharedIndexInformer {

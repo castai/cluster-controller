@@ -17,26 +17,9 @@ func TestNodeInformer_Informer(t *testing.T) {
 	manager := NewManager(log, clientset, time.Hour)
 
 	informer := manager.nodes.Informer()
-	require.NotNil(t, informer)
-}
-
-func TestNodeInformer_Lister(t *testing.T) {
-	t.Parallel()
-
-	log := logrus.New()
-	clientset := fake.NewClientset()
-	manager := NewManager(log, clientset, time.Hour)
-
 	lister := manager.nodes.Lister()
-	require.NotNil(t, lister)
-}
-
-func TestNodeInformer_HasSynced(t *testing.T) {
-	t.Parallel()
-
-	log := logrus.New()
-	clientset := fake.NewClientset()
-	manager := NewManager(log, clientset, time.Hour)
 
 	require.False(t, manager.nodes.HasSynced())
+	require.NotNil(t, informer)
+	require.NotNil(t, lister)
 }

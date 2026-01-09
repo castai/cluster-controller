@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	listerv1 "k8s.io/client-go/listers/core/v1"
@@ -43,6 +42,20 @@ type Option func(*Manager)
 func WithCacheSyncTimeout(timeout time.Duration) Option {
 	return func(m *Manager) {
 		m.cacheSyncTimeout = timeout
+	}
+}
+
+// WithNodeIndexers sets custom indexers for the node informer.
+func WithNodeIndexers(indexers cache.Indexers) Option {
+	return func(m *Manager) {
+		m.nodes.indexers = indexers
+	}
+}
+
+// WithPodIndexers sets custom indexers for the pod informer.
+func WithPodIndexers(indexers cache.Indexers) Option {
+	return func(m *Manager) {
+		m.pods.indexers = indexers
 	}
 }
 
@@ -93,6 +106,11 @@ func (m *Manager) Start(ctx context.Context) error {
 
 	ctx, cancel := context.WithCancel(ctx)
 	m.cancelFunc = cancel
+
+	if err := m.addIndexers(); err != nil {
+		cancel()
+		return fmt.Errorf("adding indexers: %w", err)
+	}
 
 	stopCh := make(chan struct{})
 	go func() {
@@ -176,6 +194,20 @@ func (m *Manager) GetFactory() informers.SharedInformerFactory {
 	return m.factory
 }
 
+func (m *Manager) addIndexers() error {
+	if m.nodes.indexers != nil {
+		if err := m.nodes.informer.AddIndexers(m.nodes.indexers); err != nil {
+			return fmt.Errorf("adding node indexers: %w", err)
+		}
+	}
+	if m.pods.indexers != nil {
+		if err := m.pods.informer.AddIndexers(m.pods.indexers); err != nil {
+			return fmt.Errorf("adding pod indexers: %w", err)
+		}
+	}
+	return nil
+}
+
 func (m *Manager) reportCacheSize(ctx context.Context) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -185,23 +217,15 @@ func (m *Manager) reportCacheSize(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			nodes, err := m.nodes.Lister().List(labels.Everything())
-			if err != nil {
-				m.log.WithError(err).Warn("failed to list nodes for cache size metric")
-			} else {
-				size := len(nodes)
-				m.log.WithField("cache_size", size).Debug("node informer cache size")
-				metrics.SetInformerCacheSize("node", size)
-			}
+			nodes := m.nodes.Informer().GetStore().ListKeys()
+			size := len(nodes)
+			m.log.WithField("cache_size", size).Debug("node informer cache size")
+			metrics.SetInformerCacheSize("node", size)
 
-			pods, err := m.pods.Lister().List(labels.Everything())
-			if err != nil {
-				m.log.WithError(err).Warn("failed to list pods for cache size metric")
-			} else {
-				size := len(pods)
-				m.log.WithField("cache_size", size).Debug("pod informer cache size")
-				metrics.SetInformerCacheSize("pod", size)
-			}
+			pods := m.pods.Informer().GetStore().ListKeys()
+			size = len(pods)
+			m.log.WithField("cache_size", size).Debug("pod informer cache size")
+			metrics.SetInformerCacheSize("pod", size)
 		}
 	}
 }

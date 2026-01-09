@@ -8,6 +8,7 @@ import (
 type nodeInformer struct {
 	informer cache.SharedIndexInformer
 	lister   listerv1.NodeLister
+	indexers cache.Indexers
 }
 
 func (n *nodeInformer) Informer() cache.SharedIndexInformer {
