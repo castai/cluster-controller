@@ -84,12 +84,12 @@ func NewManager(
 // This method blocks until caches are synchronized or the context is canceled.
 func (m *Manager) Start(ctx context.Context) error {
 	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	if m.started {
-		m.mu.Unlock()
 		m.log.Warn("informer manager already started")
 		return nil
 	}
-	defer m.mu.Unlock()
 
 	ctx, cancel := context.WithCancel(ctx)
 	m.cancelFunc = cancel
