@@ -152,6 +152,7 @@ func (s *Controller) handleActions(ctx context.Context, clusterActions []*castai
 			handleErr := s.handleAction(ctx, action)
 			if errors.Is(handleErr, context.Canceled) {
 				// Action should be handled again on context canceled errors.
+				ackErr = ctx.Err()
 				return
 			}
 
