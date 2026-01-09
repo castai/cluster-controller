@@ -19,6 +19,9 @@ import (
 	"github.com/castai/cluster-controller/internal/waitext"
 )
 
+// gcCompletedActionAfterTimes specifies after how many GCs to remove the completed action from the store.
+const gcCompletedActionAfterTimes = 2
+
 type Config struct {
 	PollWaitInterval     time.Duration // How long to wait unit next long polling request.
 	PollTimeout          time.Duration // hard timeout. Normally server should return empty result before this timeout.
@@ -40,13 +43,14 @@ func NewService(
 	actionHandlers actions.ActionHandlers,
 ) *Controller {
 	return &Controller{
-		log:            log,
-		cfg:            cfg,
-		k8sVersion:     k8sVersion,
-		castAIClient:   castaiClient,
-		startedActions: map[string]struct{}{},
-		actionHandlers: actionHandlers,
-		healthCheck:    healthCheck,
+		log:                      log,
+		cfg:                      cfg,
+		k8sVersion:               k8sVersion,
+		castAIClient:             castaiClient,
+		startedActions:           make(map[string]struct{}),
+		recentlyCompletedActions: make(map[string]int8),
+		actionHandlers:           actionHandlers,
+		healthCheck:              healthCheck,
 	}
 }
 
@@ -59,10 +63,12 @@ type Controller struct {
 
 	actionHandlers actions.ActionHandlers
 
-	startedActionsWg sync.WaitGroup
-	startedActions   map[string]struct{}
-	startedActionsMu sync.Mutex
-	healthCheck      *health.HealthzProvider
+	startedActionsWg         sync.WaitGroup
+	actionsMu                sync.Mutex
+	startedActions           map[string]struct{} // protected by actionsMu
+	recentlyCompletedActions map[string]int8     // protected by actionsMu
+
+	healthCheck *health.HealthzProvider
 }
 
 func (s *Controller) Run(ctx context.Context) {
@@ -122,6 +128,7 @@ func (s *Controller) doWork(ctx context.Context) error {
 
 	s.log.WithFields(logrus.Fields{"n": strconv.Itoa(len(actions))}).Infof("received in %s", pollDuration)
 	s.handleActions(ctx, actions)
+	s.gcCompletedActions()
 	return nil
 }
 
@@ -132,7 +139,10 @@ func (s *Controller) handleActions(ctx context.Context, clusterActions []*castai
 		}
 
 		go func(action *castai.ClusterAction) {
-			defer s.finishProcessing(action.ID)
+			var ackErr error
+			defer func() {
+				s.finishProcessing(action.ID, ackErr)
+			}()
 
 			var err error
 
@@ -142,11 +152,12 @@ func (s *Controller) handleActions(ctx context.Context, clusterActions []*castai
 			handleErr := s.handleAction(ctx, action)
 			if errors.Is(handleErr, context.Canceled) {
 				// Action should be handled again on context canceled errors.
+				ackErr = ctx.Err()
 				return
 			}
 
 			handleDuration := time.Since(startTime)
-			ackErr := s.ackAction(ctx, action, handleErr, handleDuration)
+			ackErr = s.ackAction(ctx, action, handleErr, handleDuration)
 			if handleErr != nil {
 				err = handleErr
 			}
@@ -163,19 +174,29 @@ func (s *Controller) handleActions(ctx context.Context, clusterActions []*castai
 	}
 }
 
-func (s *Controller) finishProcessing(actionID string) {
-	s.startedActionsMu.Lock()
-	defer s.startedActionsMu.Unlock()
+func (s *Controller) finishProcessing(actionID string, ackErr error) {
+	s.actionsMu.Lock()
+	defer s.actionsMu.Unlock()
 
 	s.startedActionsWg.Done()
 	delete(s.startedActions, actionID)
+
+	if ackErr == nil {
+		// only mark the action as completed if it was successfully acknowledged so it can be retried quickly if not and still requested.
+		s.recentlyCompletedActions[actionID] = gcCompletedActionAfterTimes + 1
+	}
 }
 
 func (s *Controller) startProcessing(actionID string) bool {
-	s.startedActionsMu.Lock()
-	defer s.startedActionsMu.Unlock()
+	s.actionsMu.Lock()
+	defer s.actionsMu.Unlock()
 
 	if _, ok := s.startedActions[actionID]; ok {
+		return false
+	}
+
+	if _, ok := s.recentlyCompletedActions[actionID]; ok {
+		s.log.WithField(actions.ActionIDLogField, actionID).Debug("action has been recently completed, not starting")
 		return false
 	}
 
@@ -186,6 +207,7 @@ func (s *Controller) startProcessing(actionID string) bool {
 
 	s.startedActionsWg.Add(1)
 	s.startedActions[actionID] = struct{}{}
+
 	return true
 }
 
@@ -241,6 +263,25 @@ func (s *Controller) ackAction(ctx context.Context, action *castai.ClusterAction
 	}, func(err error) {
 		s.log.Debugf("ack failed, will retry: %v", err)
 	})
+}
+
+// gcCompletedActions removes recently completed actions from memory after they've been visited
+// a certain number of times during polling cycles. This prevents completed actions from being
+// re-executed while allowing enough time for duplicate action requests to be filtered out.
+// Actions are removed after gcCompletedActionAfterTimes visits to balance memory usage and
+// protection against duplicate execution.
+func (s *Controller) gcCompletedActions() {
+	s.actionsMu.Lock()
+	defer s.actionsMu.Unlock()
+
+	for actionID, timesVisited := range s.recentlyCompletedActions {
+		timesVisited--
+		if timesVisited <= 0 {
+			delete(s.recentlyCompletedActions, actionID)
+			continue
+		}
+		s.recentlyCompletedActions[actionID] = timesVisited
+	}
 }
 
 func getHandlerError(err error) *string {

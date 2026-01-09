@@ -4,12 +4,16 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strconv"
+	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 
@@ -262,6 +266,117 @@ func TestController_Run(t *testing.T) {
 			s.Run(tt.args.ctx())
 		})
 	}
+}
+
+func TestController_ParallelExecutionTest(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		cfg := Config{
+			PollWaitInterval:     time.Second,
+			PollTimeout:          50 * time.Millisecond,
+			AckTimeout:           time.Second,
+			AckRetriesCount:      2,
+			AckRetryWait:         time.Millisecond,
+			ClusterID:            uuid.New().String(),
+			MaxActionsInProgress: 2,
+		}
+
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		client := mock_castai.NewMockCastAIClient(ctrl)
+		handler := mock_actions.NewMockActionHandler(ctrl)
+
+		testActionHandlers := map[reflect.Type]actions.ActionHandler{
+			reflect.TypeFor[*castai.ActionCreateEvent](): handler,
+		}
+
+		const maxActions = 4
+		actions := make([]*castai.ClusterAction, 0, maxActions)
+		for i := range maxActions {
+			actions = append(actions, &castai.ClusterAction{
+				ID:        "action-" + strconv.Itoa(i),
+				CreatedAt: time.Now(),
+				ActionCreateEvent: &castai.ActionCreateEvent{
+					EventType: "fake",
+				},
+			})
+		}
+		actionsWithAckErr := map[string]struct{}{
+			actions[2].ID: {},
+		}
+
+		var (
+			mu                   sync.Mutex
+			currentlyExecuting   int
+			maxExecutingObserved int
+			executionCounts      = make(map[string]int)
+		)
+
+		handler.EXPECT().Handle(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(ctx context.Context, action *castai.ClusterAction) error {
+				mu.Lock()
+				currentlyExecuting++
+				executionCounts[action.ID]++
+				if currentlyExecuting > maxExecutingObserved {
+					maxExecutingObserved = currentlyExecuting
+				}
+				mu.Unlock()
+
+				time.Sleep(100 * time.Millisecond)
+
+				mu.Lock()
+				currentlyExecuting--
+				mu.Unlock()
+
+				return nil
+			},
+		).AnyTimes()
+
+		client.EXPECT().GetActions(gomock.Any(), gomock.Any()).Return(actions, nil).Times(1)
+		client.EXPECT().AckAction(gomock.Any(), gomock.Any(), &castai.AckClusterActionRequest{}).
+			DoAndReturn(func(ctx context.Context, actionID string, req *castai.AckClusterActionRequest) error {
+				if _, ok := actionsWithAckErr[actionID]; ok {
+					return assert.AnError
+				}
+				return nil
+			}).AnyTimes()
+
+		client.EXPECT().GetActions(gomock.Any(), gomock.Any()).Return(actions, nil).Times(3)
+
+		client.EXPECT().GetActions(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+
+		logger := logrus.New()
+		svc := NewService(
+			logger,
+			cfg,
+			"v0",
+			client,
+			health.NewHealthzProvider(health.HealthzCfg{HealthyPollIntervalLimit: cfg.PollTimeout}, logger),
+			testActionHandlers,
+		)
+
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+		defer cancel()
+
+		go svc.Run(ctx)
+
+		synctest.Wait()
+		<-ctx.Done()
+		svc.startedActionsWg.Wait()
+
+		require.LessOrEqual(t, maxExecutingObserved, 2, "Expected no more than 2 actions to execute concurrently, but observed %d", maxExecutingObserved)
+
+		for _, action := range actions {
+			count := executionCounts[action.ID]
+			if _, ok := actionsWithAckErr[action.ID]; ok {
+				assert.Equal(t, 3, count, "Expected action %s to be executed three times because of ack errors, but it was executed %d times", action.ID, count)
+				continue
+			}
+			assert.Equal(t, 1, count, "Expected action %s to be executed exactly once, but it was executed %d times", action.ID, count)
+		}
+	})
 }
 
 func TestMain(m *testing.M) {
