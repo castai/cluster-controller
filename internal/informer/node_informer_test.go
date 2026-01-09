@@ -14,7 +14,7 @@ func TestNodeInformer_Informer(t *testing.T) {
 
 	log := logrus.New()
 	clientset := fake.NewClientset()
-	manager := NewManager(log, clientset, time.Hour, 5*time.Second)
+	manager := NewManager(log, clientset, time.Hour)
 
 	informer := manager.nodes.Informer()
 	require.NotNil(t, informer)
@@ -25,7 +25,7 @@ func TestNodeInformer_Lister(t *testing.T) {
 
 	log := logrus.New()
 	clientset := fake.NewClientset()
-	manager := NewManager(log, clientset, time.Hour, 5*time.Second)
+	manager := NewManager(log, clientset, time.Hour)
 
 	lister := manager.nodes.Lister()
 	require.NotNil(t, lister)
@@ -36,7 +36,7 @@ func TestNodeInformer_HasSynced(t *testing.T) {
 
 	log := logrus.New()
 	clientset := fake.NewClientset()
-	manager := NewManager(log, clientset, time.Hour, 5*time.Second)
+	manager := NewManager(log, clientset, time.Hour)
 
 	require.False(t, manager.nodes.HasSynced())
 }

@@ -19,7 +19,7 @@ func TestNewManager(t *testing.T) {
 	log := logrus.New()
 	clientset := fake.NewClientset()
 
-	manager := NewManager(log, clientset, time.Hour, 5*time.Second)
+	manager := NewManager(log, clientset, time.Hour)
 
 	require.NotNil(t, manager)
 	require.NotNil(t, manager.GetFactory())
@@ -44,7 +44,7 @@ func TestManager_Start_Success(t *testing.T) {
 	}
 
 	clientset := fake.NewClientset(node, pod)
-	manager := NewManager(log, clientset, 0, 5*time.Second)
+	manager := NewManager(log, clientset, 0)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -70,7 +70,7 @@ func TestManager_Start_AlreadyStarted(t *testing.T) {
 	log.SetLevel(logrus.ErrorLevel)
 
 	clientset := fake.NewClientset()
-	manager := NewManager(log, clientset, 0, 5*time.Second)
+	manager := NewManager(log, clientset, 0)
 
 	ctx := context.Background()
 
@@ -90,7 +90,7 @@ func TestManager_Start_ContextCanceled(t *testing.T) {
 	log.SetLevel(logrus.ErrorLevel)
 
 	clientset := fake.NewClientset()
-	manager := NewManager(log, clientset, 0, 5*time.Second)
+	manager := NewManager(log, clientset, 0)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -108,7 +108,7 @@ func TestManager_Stop(t *testing.T) {
 	log.SetLevel(logrus.ErrorLevel)
 
 	clientset := fake.NewClientset()
-	manager := NewManager(log, clientset, 0, 5*time.Second)
+	manager := NewManager(log, clientset, 0)
 
 	manager.Stop()
 	require.False(t, manager.IsStarted())
@@ -138,7 +138,7 @@ func TestManager_CacheUpdates(t *testing.T) {
 	}
 
 	clientset := fake.NewClientset(node)
-	manager := NewManager(log, clientset, 0, 5*time.Second)
+	manager := NewManager(log, clientset, 0)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

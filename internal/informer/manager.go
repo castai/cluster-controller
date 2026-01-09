@@ -17,6 +17,10 @@ import (
 	"github.com/castai/cluster-controller/internal/metrics"
 )
 
+const (
+	defaultCacheSyncTimeout = 30 * time.Second
+)
+
 // Manager manages the global SharedInformerFactory and provides
 // access to specific informers and listers.
 type Manager struct {
@@ -32,12 +36,22 @@ type Manager struct {
 	mu         sync.RWMutex
 }
 
-// NewManager creates a new Manager with the given clientset, resync period, and cache sync timeout.
+// Option is a functional option for configuring the Manager.
+type Option func(*Manager)
+
+// WithCacheSyncTimeout sets the timeout for waiting for informer caches to sync.
+func WithCacheSyncTimeout(timeout time.Duration) Option {
+	return func(m *Manager) {
+		m.cacheSyncTimeout = timeout
+	}
+}
+
+// NewManager creates a new Manager with the given clientset and resync period.
 func NewManager(
 	log logrus.FieldLogger,
 	clientset kubernetes.Interface,
 	resyncPeriod time.Duration,
-	cacheSyncTimeout time.Duration,
+	opts ...Option,
 ) *Manager {
 	factory := informers.NewSharedInformerFactory(clientset, resyncPeriod)
 
@@ -51,13 +65,19 @@ func NewManager(
 		lister:   factory.Core().V1().Pods().Lister(),
 	}
 
-	return &Manager{
+	m := &Manager{
 		log:              log,
 		factory:          factory,
-		cacheSyncTimeout: cacheSyncTimeout,
+		cacheSyncTimeout: defaultCacheSyncTimeout,
 		nodes:            nodes,
 		pods:             pods,
 	}
+
+	for _, opt := range opts {
+		opt(m)
+	}
+
+	return m
 }
 
 // Start starts the informer factory and waits for all caches to sync.
