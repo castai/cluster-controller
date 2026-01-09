@@ -96,9 +96,6 @@ func NewManager(
 // Start starts the informer factory and waits for all caches to sync.
 // This method blocks until caches are synchronized or the context is canceled.
 func (m *Manager) Start(ctx context.Context) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	if m.started {
 		m.log.Warn("informer manager already started")
 		return nil
@@ -112,14 +109,8 @@ func (m *Manager) Start(ctx context.Context) error {
 		return fmt.Errorf("adding indexers: %w", err)
 	}
 
-	stopCh := make(chan struct{})
-	go func() {
-		<-ctx.Done()
-		close(stopCh)
-	}()
-
 	m.log.Info("starting shared informer factory...")
-	m.factory.Start(stopCh)
+	m.factory.Start(ctx.Done())
 
 	syncCtx, syncCancel := context.WithTimeout(ctx, m.cacheSyncTimeout)
 	defer syncCancel()
@@ -127,8 +118,6 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.log.Info("waiting for informer caches to sync...")
 	if !cache.WaitForCacheSync(syncCtx.Done(), m.nodes.HasSynced, m.pods.HasSynced) {
 		cancel()
-		metrics.IncrementInformerCacheSyncs("node", "failure")
-		metrics.IncrementInformerCacheSyncs("pod", "failure")
 		return fmt.Errorf("failed to sync informer caches within %v", m.cacheSyncTimeout)
 	}
 
@@ -146,9 +135,6 @@ func (m *Manager) Start(ctx context.Context) error {
 
 // Stop gracefully stops the informer factory.
 func (m *Manager) Stop() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	if !m.started {
 		return
 	}
@@ -160,13 +146,6 @@ func (m *Manager) Stop() {
 	}
 	m.started = false
 	m.log.Info("informer manager stopped")
-}
-
-// IsStarted returns true if the informer manager has been started and caches are synced.
-func (m *Manager) IsStarted() bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.started
 }
 
 // GetNodeLister returns the node lister for querying the node cache.
