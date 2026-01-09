@@ -16,11 +16,12 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
+	storagev1listers "k8s.io/client-go/listers/storage/v1"
 	ktest "k8s.io/client-go/testing"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	fakectrl "sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/castai/cluster-controller/internal/castai"
 )
@@ -630,47 +631,62 @@ func newActionDrainNode(nodeName, nodeID, providerID string, drainTimeoutSeconds
 	}
 }
 
-// newTestCachedClient creates a fake controller-runtime client with field indexes for testing.
-func newTestCachedClient(t *testing.T, objects ...client.Object) client.Client {
+// newTestVAInformer creates a fake informer with VolumeAttachments indexed by node name for testing.
+// Returns the lister, indexer, and the fake clientset for dynamic updates during tests.
+func newTestVAInformer(t *testing.T, vas ...*storagev1.VolumeAttachment) (storagev1listers.VolumeAttachmentLister, cache.Indexer, kubernetes.Interface) {
 	t.Helper()
-	scheme := runtime.NewScheme()
-	_ = v1.AddToScheme(scheme)
-	_ = storagev1.AddToScheme(scheme)
 
-	builder := fakectrl.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(objects...).
-		WithIndex(&storagev1.VolumeAttachment{}, "spec.nodeName", func(obj client.Object) []string {
-			va := obj.(*storagev1.VolumeAttachment)
-			return []string{va.Spec.NodeName}
-		}).
-		WithIndex(&v1.Pod{}, "spec.nodeName", func(obj client.Object) []string {
-			pod := obj.(*v1.Pod)
-			if pod.Spec.NodeName == "" {
-				return nil
+	// Convert VAs to runtime.Object slice for fake clientset
+	objs := make([]runtime.Object, 0, len(vas))
+	for _, va := range vas {
+		objs = append(objs, va)
+	}
+
+	clientset := fake.NewClientset(objs...)
+	factory := informers.NewSharedInformerFactory(clientset, 0)
+	vaInformer := factory.Storage().V1().VolumeAttachments()
+
+	// Add the node name indexer
+	err := vaInformer.Informer().AddIndexers(cache.Indexers{
+		vaNodeNameIndexer: func(obj interface{}) ([]string, error) {
+			va, ok := obj.(*storagev1.VolumeAttachment)
+			if !ok {
+				return nil, nil
 			}
-			return []string{pod.Spec.NodeName}
-		})
+			return []string{va.Spec.NodeName}, nil
+		},
+	})
+	require.NoError(t, err)
 
-	return builder.Build()
+	// Start and sync
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	factory.Start(ctx.Done())
+	synced := factory.WaitForCacheSync(ctx.Done())
+	for typ, ok := range synced {
+		require.True(t, ok, "failed to sync informer for %v", typ)
+	}
+
+	return vaInformer.Lister(), vaInformer.Informer().GetIndexer(), clientset
 }
 
 func TestGetVolumeAttachmentsForNode(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should return error when cached client is nil", func(t *testing.T) {
+	t.Run("should return error when indexer is nil", func(t *testing.T) {
 		t.Parallel()
 		r := require.New(t)
 		log := logrus.New()
 
 		h := &DrainNodeHandler{
-			log:          log,
-			cachedClient: nil,
+			log:       log,
+			vaIndexer: nil,
 		}
 
-		vaNames, err := h.getVolumeAttachmentsForNode(context.Background(), log, "node1")
+		vaNames, err := h.getVolumeAttachmentsForNode(context.Background(), log, "node1", nil)
 		r.Error(err)
-		r.Contains(err.Error(), "cached client not available")
+		r.Contains(err.Error(), "indexer not available")
 		r.Nil(vaNames)
 	})
 
@@ -678,14 +694,15 @@ func TestGetVolumeAttachmentsForNode(t *testing.T) {
 		t.Parallel()
 		r := require.New(t)
 		log := logrus.New()
-		cachedClient := newTestCachedClient(t)
+		vaLister, vaIndexer, _ := newTestVAInformer(t)
 
 		h := &DrainNodeHandler{
-			log:          log,
-			cachedClient: cachedClient,
+			log:       log,
+			vaLister:  vaLister,
+			vaIndexer: vaIndexer,
 		}
 
-		vaNames, err := h.getVolumeAttachmentsForNode(context.Background(), log, "node1")
+		vaNames, err := h.getVolumeAttachmentsForNode(context.Background(), log, "node1", nil)
 		r.NoError(err)
 		r.Empty(vaNames)
 	})
@@ -702,22 +719,17 @@ func TestGetVolumeAttachmentsForNode(t *testing.T) {
 				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: strPtr("pv1")},
 			},
 		}
-		// Regular pod (drainable)
-		pod := &v1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"},
-			Spec: v1.PodSpec{
-				NodeName: "node1",
-			},
-		}
 
-		cachedClient := newTestCachedClient(t, va, pod)
+		vaLister, vaIndexer, _ := newTestVAInformer(t, va)
 
 		h := &DrainNodeHandler{
-			log:          log,
-			cachedClient: cachedClient,
+			log:       log,
+			vaLister:  vaLister,
+			vaIndexer: vaIndexer,
 		}
 
-		vaNames, err := h.getVolumeAttachmentsForNode(context.Background(), log, "node1")
+		// No non-evictable pods
+		vaNames, err := h.getVolumeAttachmentsForNode(context.Background(), log, "node1", nil)
 		r.NoError(err)
 		r.Equal([]string{"va1"}, vaNames)
 	})
@@ -747,7 +759,7 @@ func TestGetVolumeAttachmentsForNode(t *testing.T) {
 		}
 
 		controller := true
-		dsPod := &v1.Pod{
+		dsPod := v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "ds-pod",
 				Namespace: "default",
@@ -768,14 +780,19 @@ func TestGetVolumeAttachmentsForNode(t *testing.T) {
 			},
 		}
 
-		cachedClient := newTestCachedClient(t, pvc, vaFromDS, vaFromRegular, dsPod)
+		vaLister, vaIndexer, _ := newTestVAInformer(t, vaFromDS, vaFromRegular)
+		// Create a clientset with the PVC for lookup
+		clientset := fake.NewClientset(pvc)
 
 		h := &DrainNodeHandler{
-			log:          log,
-			cachedClient: cachedClient,
+			log:       log,
+			clientset: clientset,
+			vaLister:  vaLister,
+			vaIndexer: vaIndexer,
 		}
 
-		vaNames, err := h.getVolumeAttachmentsForNode(context.Background(), log, "node1")
+		// Pass the DaemonSet pod as non-evictable
+		vaNames, err := h.getVolumeAttachmentsForNode(context.Background(), log, "node1", []v1.Pod{dsPod})
 		r.NoError(err)
 		// Should only return va-regular, not va-ds (excluded because owned by DaemonSet)
 		r.Equal([]string{"va-regular"}, vaNames)
@@ -806,7 +823,7 @@ func TestGetVolumeAttachmentsForNode(t *testing.T) {
 		}
 
 		controller := true
-		staticPod := &v1.Pod{
+		staticPod := v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "static-pod",
 				Namespace: "default",
@@ -827,14 +844,19 @@ func TestGetVolumeAttachmentsForNode(t *testing.T) {
 			},
 		}
 
-		cachedClient := newTestCachedClient(t, pvc, vaFromStatic, vaFromRegular, staticPod)
+		vaLister, vaIndexer, _ := newTestVAInformer(t, vaFromStatic, vaFromRegular)
+		// Create a clientset with the PVC for lookup
+		clientset := fake.NewClientset(pvc)
 
 		h := &DrainNodeHandler{
-			log:          log,
-			cachedClient: cachedClient,
+			log:       log,
+			clientset: clientset,
+			vaLister:  vaLister,
+			vaIndexer: vaIndexer,
 		}
 
-		vaNames, err := h.getVolumeAttachmentsForNode(context.Background(), log, "node1")
+		// Pass the static pod as non-evictable
+		vaNames, err := h.getVolumeAttachmentsForNode(context.Background(), log, "node1", []v1.Pod{staticPod})
 		r.NoError(err)
 		// Should only return va-regular, not va-static (excluded because owned by Node/static)
 		r.Equal([]string{"va-regular"}, vaNames)
@@ -860,14 +882,15 @@ func TestGetVolumeAttachmentsForNode(t *testing.T) {
 			},
 		}
 
-		cachedClient := newTestCachedClient(t, vaNode1, vaNode2)
+		vaLister, vaIndexer, _ := newTestVAInformer(t, vaNode1, vaNode2)
 
 		h := &DrainNodeHandler{
-			log:          log,
-			cachedClient: cachedClient,
+			log:       log,
+			vaLister:  vaLister,
+			vaIndexer: vaIndexer,
 		}
 
-		vaNames, err := h.getVolumeAttachmentsForNode(context.Background(), log, "node1")
+		vaNames, err := h.getVolumeAttachmentsForNode(context.Background(), log, "node1", nil)
 		r.NoError(err)
 		r.Equal([]string{"va-node1"}, vaNames)
 	})
@@ -892,20 +915,20 @@ func TestWaitForVolumeDetach(t *testing.T) {
 		r.NoError(err)
 	})
 
-	t.Run("should return immediately when cachedClient is nil", func(t *testing.T) {
+	t.Run("should return immediately when vaIndexer is nil", func(t *testing.T) {
 		t.Parallel()
 		r := require.New(t)
 		log := logrus.New()
 
 		h := &DrainNodeHandler{
-			log:          log,
-			cachedClient: nil,
+			log:       log,
+			vaIndexer: nil,
 			cfg: drainNodeConfig{
 				volumeDetachPollInterval: 100 * time.Millisecond,
 			},
 		}
 
-		// Should skip waiting and return nil when cachedClient is nil
+		// Should skip waiting and return nil when vaIndexer is nil
 		err := h.waitForVolumeDetach(context.Background(), log, "node1", []string{"va1"})
 		r.NoError(err)
 	})
@@ -922,20 +945,21 @@ func TestWaitForVolumeDetach(t *testing.T) {
 				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: strPtr("pv1")},
 			},
 		}
-		cachedClient := newTestCachedClient(t, va)
+		vaLister, vaIndexer, clientset := newTestVAInformer(t, va)
 
 		h := &DrainNodeHandler{
-			log:          log,
-			cachedClient: cachedClient,
+			log:       log,
+			vaLister:  vaLister,
+			vaIndexer: vaIndexer,
 			cfg: drainNodeConfig{
 				volumeDetachPollInterval: 50 * time.Millisecond,
 			},
 		}
 
-		// Delete VA in background
+		// Delete VA in background using the clientset
 		go func() {
 			time.Sleep(100 * time.Millisecond)
-			err := cachedClient.Delete(context.Background(), va)
+			err := clientset.StorageV1().VolumeAttachments().Delete(context.Background(), va.Name, metav1.DeleteOptions{})
 			r.NoError(err)
 		}()
 
@@ -958,11 +982,12 @@ func TestWaitForVolumeDetach(t *testing.T) {
 				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: strPtr("pv1")},
 			},
 		}
-		cachedClient := newTestCachedClient(t, va)
+		vaLister, vaIndexer, _ := newTestVAInformer(t, va)
 
 		h := &DrainNodeHandler{
-			log:          log,
-			cachedClient: cachedClient,
+			log:       log,
+			vaLister:  vaLister,
+			vaIndexer: vaIndexer,
 			cfg: drainNodeConfig{
 				volumeDetachPollInterval: 50 * time.Millisecond,
 			},
@@ -988,11 +1013,12 @@ func TestWaitForVolumeDetach(t *testing.T) {
 				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: strPtr("pv1")},
 			},
 		}
-		cachedClient := newTestCachedClient(t, va)
+		vaLister, vaIndexer, _ := newTestVAInformer(t, va)
 
 		h := &DrainNodeHandler{
-			log:          log,
-			cachedClient: cachedClient,
+			log:       log,
+			vaLister:  vaLister,
+			vaIndexer: vaIndexer,
 			cfg: drainNodeConfig{
 				volumeDetachPollInterval: 50 * time.Millisecond,
 			},
@@ -1014,7 +1040,7 @@ func TestWaitForVolumeDetach(t *testing.T) {
 func TestWaitForVolumeDetachIfEnabled(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should do nothing when feature is disabled", func(t *testing.T) {
+	t.Run("should do nothing when WaitForVolumeDetach is nil (default disabled)", func(t *testing.T) {
 		t.Parallel()
 		log := logrus.New()
 		clientset := fake.NewClientset()
@@ -1022,37 +1048,69 @@ func TestWaitForVolumeDetachIfEnabled(t *testing.T) {
 		h := &DrainNodeHandler{
 			log:       log,
 			clientset: clientset,
-			cfg: drainNodeConfig{
-				waitForVolumeDetach: false,
-			},
+			cfg:       drainNodeConfig{},
+		}
+
+		// Action with nil WaitForVolumeDetach (default behavior = disabled)
+		req := &castai.ActionDrainNode{
+			NodeName: "node1",
 		}
 
 		// Should return without doing anything
-		h.waitForVolumeDetachIfEnabled(context.Background(), log, "node1")
+		h.waitForVolumeDetachIfEnabled(context.Background(), log, "node1", req, nil)
 		// No assertions needed - just ensuring no panic/error
 	})
 
-	t.Run("should do nothing when cachedClient is nil", func(t *testing.T) {
+	t.Run("should do nothing when WaitForVolumeDetach is explicitly false", func(t *testing.T) {
 		t.Parallel()
 		log := logrus.New()
 		clientset := fake.NewClientset()
 
 		h := &DrainNodeHandler{
-			log:          log,
-			clientset:    clientset,
-			cachedClient: nil, // No cached client
+			log:       log,
+			clientset: clientset,
+			cfg:       drainNodeConfig{},
+		}
+
+		// Action with WaitForVolumeDetach explicitly set to false
+		waitForVA := false
+		req := &castai.ActionDrainNode{
+			NodeName:            "node1",
+			WaitForVolumeDetach: &waitForVA,
+		}
+
+		// Should return without doing anything
+		h.waitForVolumeDetachIfEnabled(context.Background(), log, "node1", req, nil)
+		// No assertions needed - just ensuring no panic/error
+	})
+
+	t.Run("should do nothing when vaIndexer is nil even if enabled", func(t *testing.T) {
+		t.Parallel()
+		log := logrus.New()
+		clientset := fake.NewClientset()
+
+		h := &DrainNodeHandler{
+			log:       log,
+			clientset: clientset,
+			vaIndexer: nil, // No indexer
 			cfg: drainNodeConfig{
-				waitForVolumeDetach:      true,
 				volumeDetachTimeout:      1 * time.Second,
 				volumeDetachPollInterval: 100 * time.Millisecond,
 			},
 		}
 
-		h.waitForVolumeDetachIfEnabled(context.Background(), log, "node1")
+		// Action with WaitForVolumeDetach enabled
+		waitForVA := true
+		req := &castai.ActionDrainNode{
+			NodeName:            "node1",
+			WaitForVolumeDetach: &waitForVA,
+		}
+
+		h.waitForVolumeDetachIfEnabled(context.Background(), log, "node1", req, nil)
 		// No assertions needed - just ensuring no panic/error
 	})
 
-	t.Run("should wait when feature is enabled and VAs exist", func(t *testing.T) {
+	t.Run("should wait when WaitForVolumeDetach is true and VAs exist", func(t *testing.T) {
 		t.Parallel()
 		r := require.New(t)
 		log := logrus.New()
@@ -1065,18 +1123,24 @@ func TestWaitForVolumeDetachIfEnabled(t *testing.T) {
 			},
 		}
 
-		cachedClient := newTestCachedClient(t, va)
-		clientset := fake.NewClientset(va)
+		vaLister, vaIndexer, clientset := newTestVAInformer(t, va)
 
 		h := &DrainNodeHandler{
-			log:          log,
-			clientset:    clientset,
-			cachedClient: cachedClient,
+			log:       log,
+			clientset: clientset,
+			vaLister:  vaLister,
+			vaIndexer: vaIndexer,
 			cfg: drainNodeConfig{
-				waitForVolumeDetach:      true,
 				volumeDetachTimeout:      2 * time.Second,
 				volumeDetachPollInterval: 50 * time.Millisecond,
 			},
+		}
+
+		// Action with WaitForVolumeDetach enabled
+		waitForVA := true
+		req := &castai.ActionDrainNode{
+			NodeName:            "node1",
+			WaitForVolumeDetach: &waitForVA,
 		}
 
 		// Delete VA in background
@@ -1086,8 +1150,188 @@ func TestWaitForVolumeDetachIfEnabled(t *testing.T) {
 			r.NoError(err)
 		}()
 
-		h.waitForVolumeDetachIfEnabled(context.Background(), log, "node1")
+		h.waitForVolumeDetachIfEnabled(context.Background(), log, "node1", req, nil)
 		// No assertions needed - just ensuring no panic/error and it completes
+	})
+
+	t.Run("should use per-action timeout when specified", func(t *testing.T) {
+		t.Parallel()
+		log := logrus.New()
+
+		va := &storagev1.VolumeAttachment{
+			ObjectMeta: metav1.ObjectMeta{Name: "va1"},
+			Spec: storagev1.VolumeAttachmentSpec{
+				NodeName: "node1",
+				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: strPtr("pv1")},
+			},
+		}
+
+		vaLister, vaIndexer, clientset := newTestVAInformer(t, va)
+
+		h := &DrainNodeHandler{
+			log:       log,
+			clientset: clientset,
+			vaLister:  vaLister,
+			vaIndexer: vaIndexer,
+			cfg: drainNodeConfig{
+				volumeDetachTimeout:      60 * time.Second, // Default timeout (should be overridden)
+				volumeDetachPollInterval: 50 * time.Millisecond,
+			},
+		}
+
+		// Action with custom timeout of 100ms
+		waitForVA := true
+		customTimeoutSec := 1 // 1 second
+		req := &castai.ActionDrainNode{
+			NodeName:                   "node1",
+			WaitForVolumeDetach:        &waitForVA,
+			VolumeDetachTimeoutSeconds: &customTimeoutSec,
+		}
+
+		start := time.Now()
+		h.waitForVolumeDetachIfEnabled(context.Background(), log, "node1", req, nil)
+		elapsed := time.Since(start)
+
+		// Should timeout around custom timeout (1s), not default (60s)
+		// Allow some tolerance
+		if elapsed > 5*time.Second {
+			t.Errorf("expected timeout around 1s, but took %v (default 60s was not overridden)", elapsed)
+		}
+	})
+
+	t.Run("should use default timeout when per-action timeout is nil", func(t *testing.T) {
+		t.Parallel()
+		log := logrus.New()
+
+		va := &storagev1.VolumeAttachment{
+			ObjectMeta: metav1.ObjectMeta{Name: "va1"},
+			Spec: storagev1.VolumeAttachmentSpec{
+				NodeName: "node1",
+				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: strPtr("pv1")},
+			},
+		}
+
+		vaLister, vaIndexer, clientset := newTestVAInformer(t, va)
+
+		h := &DrainNodeHandler{
+			log:       log,
+			clientset: clientset,
+			vaLister:  vaLister,
+			vaIndexer: vaIndexer,
+			cfg: drainNodeConfig{
+				volumeDetachTimeout:      200 * time.Millisecond, // Short default for testing
+				volumeDetachPollInterval: 50 * time.Millisecond,
+			},
+		}
+
+		// Action with nil VolumeDetachTimeoutSeconds (should use default)
+		waitForVA := true
+		req := &castai.ActionDrainNode{
+			NodeName:                   "node1",
+			WaitForVolumeDetach:        &waitForVA,
+			VolumeDetachTimeoutSeconds: nil,
+		}
+
+		start := time.Now()
+		h.waitForVolumeDetachIfEnabled(context.Background(), log, "node1", req, nil)
+		elapsed := time.Since(start)
+
+		// Should timeout around 200ms (default)
+		if elapsed > 2*time.Second {
+			t.Errorf("expected timeout around 200ms (default), but took %v", elapsed)
+		}
+	})
+}
+
+func TestShouldWaitForVolumeDetach(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns false when WaitForVolumeDetach is nil", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+
+		h := &DrainNodeHandler{}
+		req := &castai.ActionDrainNode{}
+
+		r.False(h.shouldWaitForVolumeDetach(req))
+	})
+
+	t.Run("returns true when WaitForVolumeDetach is true", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+
+		h := &DrainNodeHandler{}
+		waitForVA := true
+		req := &castai.ActionDrainNode{
+			WaitForVolumeDetach: &waitForVA,
+		}
+
+		r.True(h.shouldWaitForVolumeDetach(req))
+	})
+
+	t.Run("returns false when WaitForVolumeDetach is false", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+
+		h := &DrainNodeHandler{}
+		waitForVA := false
+		req := &castai.ActionDrainNode{
+			WaitForVolumeDetach: &waitForVA,
+		}
+
+		r.False(h.shouldWaitForVolumeDetach(req))
+	})
+}
+
+func TestGetVolumeDetachTimeout(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns default when VolumeDetachTimeoutSeconds is nil", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+
+		h := &DrainNodeHandler{
+			cfg: drainNodeConfig{
+				volumeDetachTimeout: 60 * time.Second,
+			},
+		}
+		req := &castai.ActionDrainNode{}
+
+		r.Equal(60*time.Second, h.getVolumeDetachTimeout(req))
+	})
+
+	t.Run("returns default when VolumeDetachTimeoutSeconds is 0", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+
+		h := &DrainNodeHandler{
+			cfg: drainNodeConfig{
+				volumeDetachTimeout: 60 * time.Second,
+			},
+		}
+		zeroTimeout := 0
+		req := &castai.ActionDrainNode{
+			VolumeDetachTimeoutSeconds: &zeroTimeout,
+		}
+
+		r.Equal(60*time.Second, h.getVolumeDetachTimeout(req))
+	})
+
+	t.Run("returns per-action timeout when set", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+
+		h := &DrainNodeHandler{
+			cfg: drainNodeConfig{
+				volumeDetachTimeout: 60 * time.Second,
+			},
+		}
+		customTimeout := 120
+		req := &castai.ActionDrainNode{
+			VolumeDetachTimeoutSeconds: &customTimeout,
+		}
+
+		r.Equal(120*time.Second, h.getVolumeDetachTimeout(req))
 	})
 }
 

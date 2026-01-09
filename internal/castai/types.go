@@ -159,6 +159,12 @@ type ActionDrainNode struct {
 	ProviderId          string `json:"providerId"`
 	DrainTimeoutSeconds int    `json:"drainTimeoutSeconds"`
 	Force               bool   `json:"force"`
+	// WaitForVolumeDetach enables waiting for VolumeAttachments to be deleted after draining.
+	// When nil (not set), defaults to false (disabled).
+	WaitForVolumeDetach *bool `json:"waitForVolumeDetach,omitempty"`
+	// VolumeDetachTimeoutSeconds is the maximum time to wait for VolumeAttachments to be deleted.
+	// When nil or 0, uses the default from DRAIN_VOLUME_DETACH_TIMEOUT env var.
+	VolumeDetachTimeoutSeconds *int `json:"volumeDetachTimeoutSeconds,omitempty"`
 }
 
 type ActionEvictPod struct {
