@@ -32,7 +32,6 @@ func TestNewManager(t *testing.T) {
 
 func TestManager_Start(t *testing.T) {
 	t.Parallel()
-
 	tests := []struct {
 		name          string
 		objects       []runtime.Object
