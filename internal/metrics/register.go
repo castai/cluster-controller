@@ -9,5 +9,7 @@ func RegisterCustomMetrics() {
 		actionStartedCounter,
 		actionExecutedCounter,
 		actionExecutedDuration,
+		informerCacheSize,
+		informerCacheSyncs,
 	)
 }
