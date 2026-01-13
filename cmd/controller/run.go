@@ -19,7 +19,6 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
-	storagev1listers "k8s.io/client-go/listers/storage/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/leaderelection"
@@ -136,10 +135,10 @@ func runController(
 
 	log.Infof("running castai-cluster-controller version %v, log-level: %v", binVersion, logger.Level)
 
-	// Setup VolumeAttachment informer for DrainNodeHandler (always enabled, used when API requests VA wait)
-	vaLister, vaIndexer := setupVAInformer(ctx, log, clientset, cfg.Drain.CacheSyncTimeout)
-	if vaLister == nil {
-		log.Warn("VA informer not available, VA wait feature will be disabled even if requested by API")
+	// Setup VolumeDetachmentWaiter for DrainNodeHandler (always enabled, used when API requests VA wait)
+	vaWaiter := setupVolumeDetachmentWaiter(ctx, log, clientset, cfg.Drain.CacheSyncTimeout)
+	if vaWaiter == nil {
+		log.Warn("VA waiter not available, VA wait feature will be disabled even if requested by API")
 	}
 
 	actionHandlers := actions.NewDefaultActionHandlers(
@@ -151,8 +150,7 @@ func runController(
 		helmClient,
 		actions.DrainConfig{
 			VolumeDetachTimeout: cfg.Drain.VolumeDetachTimeout,
-			VALister:            vaLister,
-			VAIndexer:           vaIndexer,
+			VAWaiter:            vaWaiter,
 		},
 	)
 
@@ -394,20 +392,20 @@ func saveMetadata(clusterID string, cfg config.Config, log *logrus.Entry) error 
 
 const vaNodeNameIndexer = "spec.nodeName"
 
-// setupVAInformer creates a VolumeAttachment informer with nodeName index.
-// Returns lister and indexer, or nils if setup fails.
-func setupVAInformer(
+// setupVolumeDetachmentWaiter creates a VolumeDetachmentWaiter with a VolumeAttachment informer.
+// Returns nil if setup fails.
+func setupVolumeDetachmentWaiter(
 	ctx context.Context,
 	log logrus.FieldLogger,
 	clientset kubernetes.Interface,
 	syncTimeout time.Duration,
-) (storagev1listers.VolumeAttachmentLister, cache.Indexer) {
+) actions.VolumeDetachmentWaiter {
 	factory := informers.NewSharedInformerFactory(clientset, 12*time.Hour)
 	vaInformer := factory.Storage().V1().VolumeAttachments()
 
 	// Add custom index for nodeName lookup
 	if err := vaInformer.Informer().AddIndexers(cache.Indexers{
-		vaNodeNameIndexer: func(obj interface{}) ([]string, error) {
+		vaNodeNameIndexer: func(obj any) ([]string, error) {
 			va, ok := obj.(*storagev1.VolumeAttachment)
 			if !ok {
 				return nil, nil
@@ -416,7 +414,7 @@ func setupVAInformer(
 		},
 	}); err != nil {
 		log.Warnf("failed to add VolumeAttachment nodeName index: %v", err)
-		return nil, nil
+		return nil
 	}
 
 	// Start informer
@@ -433,9 +431,9 @@ func setupVAInformer(
 
 	if !cache.WaitForCacheSync(syncCtx.Done(), vaInformer.Informer().HasSynced) {
 		log.Warnf("VolumeAttachment informer sync timed out after %v", syncTimeout)
-		return nil, nil
+		return nil
 	}
 
 	log.Info("VolumeAttachment informer synced, VA wait feature enabled")
-	return vaInformer.Lister(), vaInformer.Informer().GetIndexer()
+	return actions.NewVolumeDetachmentWaiter(clientset, vaInformer.Informer().GetIndexer(), 5*time.Second)
 }
