@@ -27,7 +27,7 @@ type Manager struct {
 	factory          informers.SharedInformerFactory
 	cacheSyncTimeout time.Duration
 
-	nodes *nodeInformer
+	nodes NodeInformer
 	pods  *podInformer
 
 	started    bool
@@ -42,13 +42,6 @@ type Option func(*Manager)
 func WithCacheSyncTimeout(timeout time.Duration) Option {
 	return func(m *Manager) {
 		m.cacheSyncTimeout = timeout
-	}
-}
-
-// WithNodeIndexers sets custom indexers for the node informer.
-func WithNodeIndexers(indexers cache.Indexers) Option {
-	return func(m *Manager) {
-		m.nodes.indexers = indexers
 	}
 }
 
@@ -148,14 +141,9 @@ func (m *Manager) Stop() {
 	m.log.Info("informer manager stopped")
 }
 
-// GetNodeLister returns the node lister for querying the node cache.
-func (m *Manager) GetNodeLister() listerv1.NodeLister {
-	return m.nodes.Lister()
-}
-
 // GetNodeInformer returns the node informer for watching node events.
-func (m *Manager) GetNodeInformer() cache.SharedIndexInformer {
-	return m.nodes.Informer()
+func (m *Manager) GetNodeInformer() NodeInformer {
+	return m.nodes
 }
 
 // GetPodLister returns the pod lister for querying the pod cache.
@@ -174,8 +162,8 @@ func (m *Manager) GetFactory() informers.SharedInformerFactory {
 }
 
 func (m *Manager) addIndexers() error {
-	if m.nodes.indexers != nil {
-		if err := m.nodes.informer.AddIndexers(m.nodes.indexers); err != nil {
+	if m.nodes.Indexers() != nil {
+		if err := m.nodes.Informer().AddIndexers(m.nodes.Indexers()); err != nil {
 			return fmt.Errorf("adding node indexers: %w", err)
 		}
 	}

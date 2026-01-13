@@ -9,7 +9,6 @@ import (
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/cache"
 
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/informer"
@@ -80,41 +79,13 @@ func (h *checkNodeStatusInformerHandler) checkNodeReady(ctx context.Context, log
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	lister := h.informerManager.GetNodeLister()
-	node, err := lister.Get(req.NodeName)
-	if err == nil && isNodeReady(h.log, node, req.NodeID, req.ProviderId) {
-		log.Info("node already ready in cache")
-		return nil
-	}
-
-	ready := make(chan struct{})
-	nodeInformer := h.informerManager.GetNodeInformer()
-
-	registration, err := nodeInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj any) {
-			h.handleNodeReadyEvent(obj, req, ready, log, "add event")
-		},
-		UpdateFunc: func(oldObj, newObj any) {
-			h.handleNodeReadyEvent(newObj, req, ready, log, "update event")
-		},
+	ready := h.informerManager.GetNodeInformer().Wait(ctx, req.NodeName, func(node *corev1.Node) (bool, error) {
+		return isNodeReady(log, node, req.NodeID, req.ProviderId), nil
 	})
-	if err != nil {
-		return fmt.Errorf("failed to add event handler: %w", err)
-	}
-	defer func() {
-		if err := nodeInformer.RemoveEventHandler(registration); err != nil {
-			log.WithError(err).Warn("failed to remove event handler")
-		}
-	}()
 
 	select {
-	case <-ready:
-		_, err := lister.Get(req.NodeName)
-		if err != nil {
-			log.WithError(err).Error("failed to get node, will skip patch")
-			return nil
-		}
-		return nil
+	case err := <-ready:
+		return err
 	case <-ctx.Done():
 		return fmt.Errorf("timeout waiting for node to be ready: %w", ctx.Err())
 	}
