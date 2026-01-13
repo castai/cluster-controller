@@ -652,7 +652,6 @@ func TestWaitForVolumeDetachIfEnabled(t *testing.T) {
 			cfg:      drainNodeConfig{},
 		}
 
-		// Action with nil WaitForVolumeDetach (default behavior = disabled)
 		req := &castai.ActionDrainNode{
 			NodeName: "node1",
 		}
@@ -672,7 +671,6 @@ func TestWaitForVolumeDetachIfEnabled(t *testing.T) {
 			cfg:      drainNodeConfig{},
 		}
 
-		// Action with WaitForVolumeDetach explicitly set to false
 		waitForVA := false
 		req := &castai.ActionDrainNode{
 			NodeName:            "node1",
@@ -689,20 +687,18 @@ func TestWaitForVolumeDetachIfEnabled(t *testing.T) {
 
 		h := &DrainNodeHandler{
 			log:      log,
-			vaWaiter: nil, // No waiter
+			vaWaiter: nil,
 			cfg: drainNodeConfig{
 				volumeDetachTimeout: 1 * time.Second,
 			},
 		}
 
-		// Action with WaitForVolumeDetach enabled
 		waitForVA := true
 		req := &castai.ActionDrainNode{
 			NodeName:            "node1",
 			WaitForVolumeDetach: &waitForVA,
 		}
 
-		// Should not panic
 		h.waitForVolumeDetachIfEnabled(context.Background(), log, "node1", req, nil)
 	})
 
@@ -719,7 +715,6 @@ func TestWaitForVolumeDetachIfEnabled(t *testing.T) {
 			},
 		}
 
-		// Action with WaitForVolumeDetach enabled
 		waitForVA := true
 		req := &castai.ActionDrainNode{
 			NodeName:            "node1",
@@ -739,11 +734,10 @@ func TestWaitForVolumeDetachIfEnabled(t *testing.T) {
 			log:      log,
 			vaWaiter: mockWaiter,
 			cfg: drainNodeConfig{
-				volumeDetachTimeout: 60 * time.Second, // Default timeout
+				volumeDetachTimeout: 60 * time.Second,
 			},
 		}
 
-		// Action with custom timeout
 		waitForVA := true
 		customTimeoutSec := 120
 		req := &castai.ActionDrainNode{
@@ -752,7 +746,6 @@ func TestWaitForVolumeDetachIfEnabled(t *testing.T) {
 			VolumeDetachTimeoutSeconds: &customTimeoutSec,
 		}
 
-		// getVolumeDetachTimeout should return the per-action timeout
 		timeout := h.getVolumeDetachTimeout(req)
 		require.Equal(t, 120*time.Second, timeout)
 

@@ -28,6 +28,7 @@ type Config struct {
 	Metrics        Metrics
 	LeaderElection LeaderElection
 	Drain          Drain
+	Informer       Informer
 	// AutoscalingDisabled is a flag to disable approving csr.
 	AutoscalingDisabled bool `mapstructure:"autoscaling_disabled"`
 	// MaxActionsInProgress serves as a safeguard to limit the number of Goroutines in progress.
@@ -80,14 +81,11 @@ type KubeClient struct {
 	Burst int
 }
 
-// Drain contains configuration for node drain operations.
 type Drain struct {
-	// VolumeDetachTimeout is the default timeout for waiting for VolumeAttachments to be deleted.
-	// This is used when the API requests VA wait but doesn't specify a custom timeout.
-	// Can be overridden per-action via ActionDrainNode.VolumeDetachTimeoutSeconds.
 	VolumeDetachTimeout time.Duration `mapstructure:"volumedetachtimeout"`
+}
 
-	// CacheSyncTimeout is the timeout for waiting for informer caches to sync at startup.
+type Informer struct {
 	CacheSyncTimeout time.Duration `mapstructure:"cachesynctimeout"`
 }
 
@@ -122,7 +120,7 @@ func Get() Config {
 	_ = viper.BindEnv("metrics.exportenabled", "METRICS_EXPORT_ENABLED")
 	_ = viper.BindEnv("metrics.exportinterval", "METRICS_EXPORT_INTERVAL")
 	_ = viper.BindEnv("drain.volumedetachtimeout", "DRAIN_VOLUME_DETACH_TIMEOUT")
-	_ = viper.BindEnv("drain.cachesynctimeout", "CACHE_SYNC_TIMEOUT")
+	_ = viper.BindEnv("informer.cachesynctimeout", "INFORMER_CACHE_SYNC_TIMEOUT")
 
 	cfg = &Config{}
 	if err := viper.Unmarshal(&cfg); err != nil {
@@ -191,8 +189,8 @@ func Get() Config {
 		cfg.Drain.VolumeDetachTimeout = 60 * time.Second
 	}
 
-	if cfg.Drain.CacheSyncTimeout == 0 {
-		cfg.Drain.CacheSyncTimeout = 120 * time.Second
+	if cfg.Informer.CacheSyncTimeout == 0 {
+		cfg.Informer.CacheSyncTimeout = 1 * time.Minute
 	}
 
 	return *cfg

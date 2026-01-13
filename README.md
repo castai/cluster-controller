@@ -4,7 +4,7 @@ The official CAST AI kubernetes cluster controller written in Go
 
 ## Installation
 
-Check our official helm charts repo https://github.com/castai/castai-helm-charts
+Check our official helm charts repo <https://github.com/castai/castai-helm-charts>
 
 ## Configuration
 
@@ -16,13 +16,13 @@ Check our official helm charts repo https://github.com/castai/castai-helm-charts
 | `API_URL` | CAST AI API URL (required) | - |
 | `CLUSTER_ID` | CAST AI cluster ID (required) | - |
 | `DRAIN_VOLUME_DETACH_TIMEOUT` | Default timeout for waiting for VolumeAttachments to detach during node drain | `60s` |
-| `CACHE_SYNC_TIMEOUT` | Timeout for VolumeAttachment informer cache sync | `120s` |
+| `INFORMER_CACHE_SYNC_TIMEOUT` | Timeout for informer cache sync at startup | `1m` |
 
 ### VolumeAttachment Wait Feature
 
 The cluster-controller supports waiting for VolumeAttachments to be deleted after draining a node. This helps prevent Multi-Attach errors when CSI drivers need time to clean up volumes.
 
-This feature is controlled per-action via the API (see [BACKEND-VA-WAIT.md](BACKEND-VA-WAIT.md) for API details). The `DRAIN_VOLUME_DETACH_TIMEOUT` environment variable provides the default timeout when the API doesn't specify a custom value.
+This feature is controlled per-action via the API. The `DRAIN_VOLUME_DETACH_TIMEOUT` environment variable provides the default timeout when the API doesn't specify a custom value.
 
 ## Testing
 
@@ -37,11 +37,13 @@ Deploy cluster-controller to already connected remote cluster.
 *NOTE*: Make sure your kubectl context is pointing to your remote cluster.
 
 Have a configured `gcloud`. Make sure to docker login with
+
 ```shell
 gcloud auth configure-docker gcr.io
 ```
 
-Clone https://github.com/castai/castai-helm-charts adjacent to repo root folder. It will be used by our scripts
+Clone <https://github.com/castai/castai-helm-charts> adjacent to repo root folder. It will be used by our scripts
+
 ```shell
 cd <cluster-controller-parent-directory>
 git clone https://github.com/castai/castai-helm-charts gh-helm-charts
@@ -74,8 +76,10 @@ The cluster-controller can be tested locally with a full e2e flow using `kind`: 
 Setup a `kind` cluster with a local docker registry by running the `./hack/kind/run.sh` script.
 
 Option 1. Deploy controller in Kind cluster.
+
 * Build your local code and push it to the local registry with `./hack/kind/build.sh`.
 * Deploy the chart to the `kind` cluster with
+
   ```shell
   helm repo add castai-helm https://castai.github.io/helm-charts
   helm repo update
@@ -87,12 +91,13 @@ Option 1. Deploy controller in Kind cluster.
   ```
 
 ### Load tests
+
 See [docs](loadtest/README.md)
 
 ## Community
 
-- [Twitter](https://twitter.com/cast_ai)
-- [Discord](https://discord.gg/4sFCFVJ)
+* [Twitter](https://twitter.com/cast_ai)
+* [Discord](https://discord.gg/4sFCFVJ)
 
 ## Contributing
 

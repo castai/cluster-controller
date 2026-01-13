@@ -38,9 +38,7 @@ type drainNodeConfig struct {
 	podsTerminationWaitRetryDelay time.Duration
 	castNamespace                 string
 	skipDeletedTimeoutSeconds     int
-	// volumeDetachTimeout is the default timeout for waiting for VolumeAttachments to be deleted.
-	// Can be overridden per-action via ActionDrainNode.VolumeDetachTimeoutSeconds.
-	volumeDetachTimeout time.Duration
+	volumeDetachTimeout           time.Duration
 }
 
 func NewDrainNodeHandler(
@@ -85,10 +83,9 @@ type DrainNodeHandler struct {
 	cfg       drainNodeConfig
 }
 
-// nodePods contains categorized pods from a node for drain operations.
 type nodePods struct {
-	toEvict      []v1.Pod // Pods to be evicted (regular workloads)
-	nonEvictable []v1.Pod // DaemonSet + static pods (won't be evicted)
+	toEvict      []v1.Pod
+	nonEvictable []v1.Pod
 }
 
 func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
@@ -217,7 +214,7 @@ func (h *DrainNodeHandler) shouldWaitForVolumeDetach(req *castai.ActionDrainNode
 	if req.WaitForVolumeDetach != nil {
 		return *req.WaitForVolumeDetach
 	}
-	return false // Disabled by default
+	return false
 }
 
 // getVolumeDetachTimeout returns the timeout for waiting for VolumeAttachments.
@@ -226,7 +223,7 @@ func (h *DrainNodeHandler) getVolumeDetachTimeout(req *castai.ActionDrainNode) t
 	if req.VolumeDetachTimeoutSeconds != nil && *req.VolumeDetachTimeoutSeconds > 0 {
 		return time.Duration(*req.VolumeDetachTimeoutSeconds) * time.Second
 	}
-	return h.cfg.volumeDetachTimeout // Env var default
+	return h.cfg.volumeDetachTimeout
 }
 
 // waitForVolumeDetachIfEnabled waits for VolumeAttachments to be deleted if the feature is enabled.
@@ -405,13 +402,11 @@ func (h *DrainNodeHandler) listNodePods(ctx context.Context, log logrus.FieldLog
 			continue
 		}
 
-		// Categorize non-evictable pods (DaemonSet, static)
 		if isDaemonSetPod(&p) || isStaticPod(&p) {
 			result.nonEvictable = append(result.nonEvictable, p)
 			continue
 		}
 
-		// CAST namespace pods go last in eviction order
 		if p.Namespace == h.cfg.castNamespace {
 			castPods = append(castPods, p)
 			continue

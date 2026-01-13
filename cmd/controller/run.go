@@ -133,12 +133,11 @@ func runController(
 
 	log.Infof("running castai-cluster-controller version %v, log-level: %v", binVersion, logger.Level)
 
-	// Setup informer manager with VA indexer for VolumeDetachmentWaiter
 	informerManager := informer.NewManager(
 		log,
 		clientset,
-		12*time.Hour, // resync period
-		informer.WithCacheSyncTimeout(1*time.Minute),
+		12*time.Hour,
+		informer.WithCacheSyncTimeout(cfg.Informer.CacheSyncTimeout),
 		informer.WithDefaultVANodeNameIndexer(),
 	)
 	if err := informerManager.Start(ctx); err != nil {
@@ -146,7 +145,6 @@ func runController(
 	}
 	defer informerManager.Stop()
 
-	// Create VolumeDetachmentWaiter using the manager's VA indexer
 	vaWaiter := actions.NewVolumeDetachmentWaiter(clientset, informerManager.GetVAIndexer(), 5*time.Second)
 	if vaWaiter == nil {
 		log.Warn("VA waiter not available, VA wait feature will be disabled even if requested by API")

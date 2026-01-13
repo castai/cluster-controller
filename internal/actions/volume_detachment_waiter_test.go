@@ -23,7 +23,6 @@ import (
 func newTestWaiterVAInformer(t *testing.T, vas []*storagev1.VolumeAttachment, additionalObjs ...runtime.Object) (cache.Indexer, kubernetes.Interface) {
 	t.Helper()
 
-	// Convert VAs to runtime.Object slice for fake clientset
 	objs := make([]runtime.Object, 0, len(vas)+len(additionalObjs))
 	for _, va := range vas {
 		objs = append(objs, va)
@@ -34,7 +33,6 @@ func newTestWaiterVAInformer(t *testing.T, vas []*storagev1.VolumeAttachment, ad
 	factory := informers.NewSharedInformerFactory(clientset, 0)
 	vaInformer := factory.Storage().V1().VolumeAttachments()
 
-	// Add the node name indexer
 	err := vaInformer.Informer().AddIndexers(cache.Indexers{
 		informer.VANodeNameIndexer: func(obj any) ([]string, error) {
 			va, ok := obj.(*storagev1.VolumeAttachment)
@@ -46,7 +44,6 @@ func newTestWaiterVAInformer(t *testing.T, vas []*storagev1.VolumeAttachment, ad
 	})
 	require.NoError(t, err)
 
-	// Start informer and keep it running for the duration of the test
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
@@ -120,11 +117,9 @@ func TestVolumeDetachmentWaiter_Wait(t *testing.T) {
 			vaIndexer, clientset := newTestWaiterVAInformer(t, []*storagev1.VolumeAttachment{va})
 			waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
 
-			// Delete VA in background
 			go func() {
 				time.Sleep(100 * time.Millisecond)
-				err := clientset.StorageV1().VolumeAttachments().Delete(context.Background(), va.Name, metav1.DeleteOptions{})
-				r.NoError(err)
+				_ = clientset.StorageV1().VolumeAttachments().Delete(context.Background(), va.Name, metav1.DeleteOptions{})
 			}()
 
 			err := waiter.Wait(context.Background(), log, VolumeDetachmentWaitOptions{
@@ -150,12 +145,11 @@ func TestVolumeDetachmentWaiter_Wait(t *testing.T) {
 			vaIndexer, clientset := newTestWaiterVAInformer(t, []*storagev1.VolumeAttachment{va})
 			waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
 
-			// VA will not be deleted, should timeout but return nil
 			err := waiter.Wait(context.Background(), log, VolumeDetachmentWaitOptions{
 				NodeName: "node1",
 				Timeout:  150 * time.Millisecond,
 			})
-			r.NoError(err) // Timeout is handled gracefully
+			r.NoError(err)
 		})
 	})
 
@@ -176,7 +170,6 @@ func TestVolumeDetachmentWaiter_Wait(t *testing.T) {
 
 			ctx, cancel := context.WithCancel(context.Background())
 
-			// Cancel context after short delay
 			go func() {
 				time.Sleep(50 * time.Millisecond)
 				cancel()
@@ -213,14 +206,11 @@ func TestVolumeDetachmentWaiter_Wait(t *testing.T) {
 			vaIndexer, clientset := newTestWaiterVAInformer(t, []*storagev1.VolumeAttachment{vaNode1, vaNode2})
 			waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
 
-			// Delete VA for node1 only
 			go func() {
 				time.Sleep(100 * time.Millisecond)
-				err := clientset.StorageV1().VolumeAttachments().Delete(context.Background(), vaNode1.Name, metav1.DeleteOptions{})
-				r.NoError(err)
+				_ = clientset.StorageV1().VolumeAttachments().Delete(context.Background(), vaNode1.Name, metav1.DeleteOptions{})
 			}()
 
-			// Should complete when node1's VA is deleted (node2's VA still exists)
 			err := waiter.Wait(context.Background(), log, VolumeDetachmentWaitOptions{
 				NodeName: "node1",
 				Timeout:  2 * time.Second,
@@ -278,14 +268,11 @@ func TestVolumeDetachmentWaiter_Wait(t *testing.T) {
 			vaIndexer, clientset := newTestWaiterVAInformer(t, []*storagev1.VolumeAttachment{vaFromDS, vaFromRegular}, pvc)
 			waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
 
-			// Delete only the regular VA
 			go func() {
 				time.Sleep(100 * time.Millisecond)
-				err := clientset.StorageV1().VolumeAttachments().Delete(context.Background(), "va-regular", metav1.DeleteOptions{})
-				r.NoError(err)
+				_ = clientset.StorageV1().VolumeAttachments().Delete(context.Background(), "va-regular", metav1.DeleteOptions{})
 			}()
 
-			// Should complete when va-regular is deleted, ignoring va-ds (excluded via dsPod)
 			err := waiter.Wait(context.Background(), log, VolumeDetachmentWaitOptions{
 				NodeName:      "node1",
 				Timeout:       2 * time.Second,
@@ -344,14 +331,11 @@ func TestVolumeDetachmentWaiter_Wait(t *testing.T) {
 			vaIndexer, clientset := newTestWaiterVAInformer(t, []*storagev1.VolumeAttachment{vaFromStatic, vaFromRegular}, pvc)
 			waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
 
-			// Delete only the regular VA
 			go func() {
 				time.Sleep(100 * time.Millisecond)
-				err := clientset.StorageV1().VolumeAttachments().Delete(context.Background(), "va-regular", metav1.DeleteOptions{})
-				r.NoError(err)
+				_ = clientset.StorageV1().VolumeAttachments().Delete(context.Background(), "va-regular", metav1.DeleteOptions{})
 			}()
 
-			// Should complete when va-regular is deleted, ignoring va-static (excluded via staticPod)
 			err := waiter.Wait(context.Background(), log, VolumeDetachmentWaitOptions{
 				NodeName:      "node1",
 				Timeout:       2 * time.Second,

@@ -56,7 +56,9 @@ func TestConfig(t *testing.T) {
 		},
 		Drain: Drain{
 			VolumeDetachTimeout: 60 * time.Second,
-			CacheSyncTimeout:    120 * time.Second,
+		},
+		Informer: Informer{
+			CacheSyncTimeout: 1 * time.Minute,
 		},
 	}
 

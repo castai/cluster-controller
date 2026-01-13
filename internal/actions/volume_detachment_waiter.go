@@ -107,7 +107,6 @@ func (w *volumeDetachmentWaiter) getVolumeAttachmentsForNode(
 	nodeName string,
 	podsToExclude []v1.Pod,
 ) ([]string, error) {
-	// Step 1: List all VolumeAttachments for this node using indexer
 	vaObjects, err := w.vaIndexer.ByIndex(informer.VANodeNameIndexer, nodeName)
 	if err != nil {
 		return nil, fmt.Errorf("listing VolumeAttachments by index: %w", err)
@@ -120,9 +119,6 @@ func (w *volumeDetachmentWaiter) getVolumeAttachmentsForNode(
 
 	log.Debugf("found %d VolumeAttachments for node %s", len(vaObjects), nodeName)
 
-	// Step 2: Build exclusion set - PVs used by excluded pods (e.g., DaemonSets, static pods)
-	// These pods won't be evicted, so their VAs will never be cleaned up naturally.
-	// Waiting for them would cause a deadlock.
 	excludedPVs := make(map[string]struct{})
 	for i := range podsToExclude {
 		pod := &podsToExclude[i]
@@ -140,7 +136,6 @@ func (w *volumeDetachmentWaiter) getVolumeAttachmentsForNode(
 		}
 	}
 
-	// Step 3: Return VAs whose PV is NOT in exclusion set
 	var vaNames []string
 	for _, obj := range vaObjects {
 		va, ok := obj.(*storagev1.VolumeAttachment)
