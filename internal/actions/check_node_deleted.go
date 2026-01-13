@@ -9,6 +9,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
+	v1 "k8s.io/client-go/kubernetes/typed/core/v1"
 
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/waitext"
@@ -73,10 +74,36 @@ func (h *CheckNodeDeletedHandler) Handle(ctx context.Context, action *castai.Clu
 		boff,
 		h.cfg.retries,
 		func(ctx context.Context) (bool, error) {
-			return checkNodeDeleted(ctx, h.clientset.CoreV1().Nodes(), req.NodeName, req.NodeID, req.ProviderId, log)
+			return h.checkNodeDeleted(ctx, h.clientset.CoreV1().Nodes(), req.NodeName, req.NodeID, req.ProviderId, log)
 		},
 		func(err error) {
 			log.Warnf("node deletion check failed, will retry: %v", err)
 		},
 	)
+}
+
+func (h *CheckNodeDeletedHandler) checkNodeDeleted(ctx context.Context, clientSet v1.NodeInterface, nodeName, nodeID, providerID string, log logrus.FieldLogger) (bool, error) {
+	// If node is nil - deleted
+	// If providerID or label have mismatch, then it's reused and deleted
+	// If label is present and matches - node is not deleted
+	// All other use cases can be found in tests
+	n, err := getNodeByIDs(ctx, clientSet, nodeName, nodeID, providerID, log)
+	if errors.Is(err, errNodeDoesNotMatch) {
+		// it means that node with given name exists, but it does not match requested node ID or provider ID.
+		return false, nil
+	}
+
+	if errors.Is(err, errNodeNotFound) {
+		return false, nil
+	}
+
+	if err != nil {
+		return true, err
+	}
+
+	if n == nil {
+		return false, nil
+	}
+
+	return false, errNodeNotDeleted
 }
