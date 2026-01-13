@@ -633,7 +633,7 @@ type mockVolumeDetachmentWaiter struct {
 	waitErr    error
 }
 
-func (m *mockVolumeDetachmentWaiter) Wait(_ context.Context, _ logrus.FieldLogger, _ string, _ time.Duration, _ []v1.Pod) error {
+func (m *mockVolumeDetachmentWaiter) Wait(_ context.Context, _ logrus.FieldLogger, _ VolumeDetachmentWaitOptions) error {
 	m.waitCalled = true
 	return m.waitErr
 }

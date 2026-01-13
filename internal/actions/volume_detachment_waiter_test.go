@@ -3,6 +3,7 @@ package actions
 import (
 	"context"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -17,16 +18,15 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-// newTestWaiterVAInformer creates a fake informer with VolumeAttachments indexed by node name for testing.
-// Returns the indexer and the fake clientset for dynamic updates during tests.
-func newTestWaiterVAInformer(t *testing.T, vas ...*storagev1.VolumeAttachment) (cache.Indexer, kubernetes.Interface) {
+func newTestWaiterVAInformer(t *testing.T, vas []*storagev1.VolumeAttachment, additionalObjs ...runtime.Object) (cache.Indexer, kubernetes.Interface) {
 	t.Helper()
 
 	// Convert VAs to runtime.Object slice for fake clientset
-	objs := make([]runtime.Object, 0, len(vas))
+	objs := make([]runtime.Object, 0, len(vas)+len(additionalObjs))
 	for _, va := range vas {
 		objs = append(objs, va)
 	}
+	objs = append(objs, additionalObjs...)
 
 	clientset := fake.NewClientset(objs...)
 	factory := informers.NewSharedInformerFactory(clientset, 0)
@@ -34,7 +34,7 @@ func newTestWaiterVAInformer(t *testing.T, vas ...*storagev1.VolumeAttachment) (
 
 	// Add the node name indexer
 	err := vaInformer.Informer().AddIndexers(cache.Indexers{
-		vaNodeNameIndexer: func(obj interface{}) ([]string, error) {
+		vaNodeNameIndexer: func(obj any) ([]string, error) {
 			va, ok := obj.(*storagev1.VolumeAttachment)
 			if !ok {
 				return nil, nil
@@ -44,9 +44,9 @@ func newTestWaiterVAInformer(t *testing.T, vas ...*storagev1.VolumeAttachment) (
 	})
 	require.NoError(t, err)
 
-	// Start and sync
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	// Start informer and keep it running for the duration of the test
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
 
 	factory.Start(ctx.Done())
 	synced := factory.WaitForCacheSync(ctx.Done())
@@ -65,20 +65,22 @@ func TestNewVolumeDetachmentWaiter(t *testing.T) {
 	t.Parallel()
 
 	t.Run("returns nil when vaIndexer is nil", func(t *testing.T) {
-		t.Parallel()
-		r := require.New(t)
+		synctest.Test(t, func(t *testing.T) {
+			r := require.New(t)
 
-		waiter := NewVolumeDetachmentWaiter(fake.NewClientset(), nil, 5*time.Second)
-		r.Nil(waiter)
+			waiter := NewVolumeDetachmentWaiter(fake.NewClientset(), nil, 5*time.Second)
+			r.Nil(waiter)
+		})
 	})
 
 	t.Run("returns waiter when vaIndexer is provided", func(t *testing.T) {
-		t.Parallel()
-		r := require.New(t)
+		synctest.Test(t, func(t *testing.T) {
+			r := require.New(t)
 
-		vaIndexer, clientset := newTestWaiterVAInformer(t)
-		waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 5*time.Second)
-		r.NotNil(waiter)
+			vaIndexer, clientset := newTestWaiterVAInformer(t, nil)
+			waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 5*time.Second)
+			r.NotNil(waiter)
+		})
 	})
 }
 
@@ -86,250 +88,274 @@ func TestVolumeDetachmentWaiter_Wait(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return immediately when no VAs on node", func(t *testing.T) {
-		t.Parallel()
-		r := require.New(t)
-		log := logrus.New()
+		synctest.Test(t, func(t *testing.T) {
+			r := require.New(t)
+			log := logrus.New()
 
-		vaIndexer, clientset := newTestWaiterVAInformer(t)
-		waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
+			vaIndexer, clientset := newTestWaiterVAInformer(t, nil)
+			waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
 
-		err := waiter.Wait(context.Background(), log, "node1", 1*time.Second, nil)
-		r.NoError(err)
+			err := waiter.Wait(context.Background(), log, VolumeDetachmentWaitOptions{
+				NodeName: "node1",
+				Timeout:  1 * time.Second,
+			})
+			r.NoError(err)
+		})
 	})
 
 	t.Run("should complete when VAs are deleted", func(t *testing.T) {
-		t.Parallel()
-		r := require.New(t)
-		log := logrus.New()
+		synctest.Test(t, func(t *testing.T) {
+			r := require.New(t)
+			log := logrus.New()
 
-		va := &storagev1.VolumeAttachment{
-			ObjectMeta: metav1.ObjectMeta{Name: "va1"},
-			Spec: storagev1.VolumeAttachmentSpec{
+			va := &storagev1.VolumeAttachment{
+				ObjectMeta: metav1.ObjectMeta{Name: "va1"},
+				Spec: storagev1.VolumeAttachmentSpec{
+					NodeName: "node1",
+					Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: vaStrPtr("pv1")},
+				},
+			}
+			vaIndexer, clientset := newTestWaiterVAInformer(t, []*storagev1.VolumeAttachment{va})
+			waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
+
+			// Delete VA in background
+			go func() {
+				time.Sleep(100 * time.Millisecond)
+				err := clientset.StorageV1().VolumeAttachments().Delete(context.Background(), va.Name, metav1.DeleteOptions{})
+				r.NoError(err)
+			}()
+
+			err := waiter.Wait(context.Background(), log, VolumeDetachmentWaitOptions{
 				NodeName: "node1",
-				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: vaStrPtr("pv1")},
-			},
-		}
-		vaIndexer, clientset := newTestWaiterVAInformer(t, va)
-		waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
-
-		// Delete VA in background
-		go func() {
-			time.Sleep(100 * time.Millisecond)
-			err := clientset.StorageV1().VolumeAttachments().Delete(context.Background(), va.Name, metav1.DeleteOptions{})
+				Timeout:  2 * time.Second,
+			})
 			r.NoError(err)
-		}()
-
-		err := waiter.Wait(context.Background(), log, "node1", 2*time.Second, nil)
-		r.NoError(err)
+		})
 	})
 
 	t.Run("should timeout gracefully and return nil", func(t *testing.T) {
-		t.Parallel()
-		r := require.New(t)
-		log := logrus.New()
+		synctest.Test(t, func(t *testing.T) {
+			r := require.New(t)
+			log := logrus.New()
 
-		va := &storagev1.VolumeAttachment{
-			ObjectMeta: metav1.ObjectMeta{Name: "va1"},
-			Spec: storagev1.VolumeAttachmentSpec{
+			va := &storagev1.VolumeAttachment{
+				ObjectMeta: metav1.ObjectMeta{Name: "va1"},
+				Spec: storagev1.VolumeAttachmentSpec{
+					NodeName: "node1",
+					Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: vaStrPtr("pv1")},
+				},
+			}
+			vaIndexer, clientset := newTestWaiterVAInformer(t, []*storagev1.VolumeAttachment{va})
+			waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
+
+			// VA will not be deleted, should timeout but return nil
+			err := waiter.Wait(context.Background(), log, VolumeDetachmentWaitOptions{
 				NodeName: "node1",
-				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: vaStrPtr("pv1")},
-			},
-		}
-		vaIndexer, clientset := newTestWaiterVAInformer(t, va)
-		waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
-
-		// VA will not be deleted, should timeout but return nil
-		err := waiter.Wait(context.Background(), log, "node1", 150*time.Millisecond, nil)
-		r.NoError(err) // Timeout is handled gracefully
+				Timeout:  150 * time.Millisecond,
+			})
+			r.NoError(err) // Timeout is handled gracefully
+		})
 	})
 
 	t.Run("should respect context cancellation", func(t *testing.T) {
-		t.Parallel()
-		r := require.New(t)
-		log := logrus.New()
+		synctest.Test(t, func(t *testing.T) {
+			r := require.New(t)
+			log := logrus.New()
 
-		va := &storagev1.VolumeAttachment{
-			ObjectMeta: metav1.ObjectMeta{Name: "va1"},
-			Spec: storagev1.VolumeAttachmentSpec{
+			va := &storagev1.VolumeAttachment{
+				ObjectMeta: metav1.ObjectMeta{Name: "va1"},
+				Spec: storagev1.VolumeAttachmentSpec{
+					NodeName: "node1",
+					Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: vaStrPtr("pv1")},
+				},
+			}
+			vaIndexer, clientset := newTestWaiterVAInformer(t, []*storagev1.VolumeAttachment{va})
+			waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
+
+			ctx, cancel := context.WithCancel(context.Background())
+
+			// Cancel context after short delay
+			go func() {
+				time.Sleep(50 * time.Millisecond)
+				cancel()
+			}()
+
+			err := waiter.Wait(ctx, log, VolumeDetachmentWaitOptions{
 				NodeName: "node1",
-				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: vaStrPtr("pv1")},
-			},
-		}
-		vaIndexer, clientset := newTestWaiterVAInformer(t, va)
-		waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
-
-		ctx, cancel := context.WithCancel(context.Background())
-
-		// Cancel context after short delay
-		go func() {
-			time.Sleep(50 * time.Millisecond)
-			cancel()
-		}()
-
-		err := waiter.Wait(ctx, log, "node1", 5*time.Second, nil)
-		r.ErrorIs(err, context.Canceled)
+				Timeout:  5 * time.Second,
+			})
+			r.ErrorIs(err, context.Canceled)
+		})
 	})
 
 	t.Run("should only wait for VAs on specified node", func(t *testing.T) {
-		t.Parallel()
-		r := require.New(t)
-		log := logrus.New()
+		synctest.Test(t, func(t *testing.T) {
+			r := require.New(t)
+			log := logrus.New()
 
-		vaNode1 := &storagev1.VolumeAttachment{
-			ObjectMeta: metav1.ObjectMeta{Name: "va-node1"},
-			Spec: storagev1.VolumeAttachmentSpec{
+			vaNode1 := &storagev1.VolumeAttachment{
+				ObjectMeta: metav1.ObjectMeta{Name: "va-node1"},
+				Spec: storagev1.VolumeAttachmentSpec{
+					NodeName: "node1",
+					Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: vaStrPtr("pv1")},
+				},
+			}
+			vaNode2 := &storagev1.VolumeAttachment{
+				ObjectMeta: metav1.ObjectMeta{Name: "va-node2"},
+				Spec: storagev1.VolumeAttachmentSpec{
+					NodeName: "node2",
+					Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: vaStrPtr("pv2")},
+				},
+			}
+
+			vaIndexer, clientset := newTestWaiterVAInformer(t, []*storagev1.VolumeAttachment{vaNode1, vaNode2})
+			waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
+
+			// Delete VA for node1 only
+			go func() {
+				time.Sleep(100 * time.Millisecond)
+				err := clientset.StorageV1().VolumeAttachments().Delete(context.Background(), vaNode1.Name, metav1.DeleteOptions{})
+				r.NoError(err)
+			}()
+
+			// Should complete when node1's VA is deleted (node2's VA still exists)
+			err := waiter.Wait(context.Background(), log, VolumeDetachmentWaitOptions{
 				NodeName: "node1",
-				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: vaStrPtr("pv1")},
-			},
-		}
-		vaNode2 := &storagev1.VolumeAttachment{
-			ObjectMeta: metav1.ObjectMeta{Name: "va-node2"},
-			Spec: storagev1.VolumeAttachmentSpec{
-				NodeName: "node2",
-				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: vaStrPtr("pv2")},
-			},
-		}
-
-		vaIndexer, clientset := newTestWaiterVAInformer(t, vaNode1, vaNode2)
-		waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
-
-		// Delete VA for node1 only
-		go func() {
-			time.Sleep(100 * time.Millisecond)
-			err := clientset.StorageV1().VolumeAttachments().Delete(context.Background(), vaNode1.Name, metav1.DeleteOptions{})
+				Timeout:  2 * time.Second,
+			})
 			r.NoError(err)
-		}()
-
-		// Should complete when node1's VA is deleted (node2's VA still exists)
-		err := waiter.Wait(context.Background(), log, "node1", 2*time.Second, nil)
-		r.NoError(err)
+		})
 	})
 
 	t.Run("should exclude VAs from excluded pods", func(t *testing.T) {
-		t.Parallel()
-		r := require.New(t)
-		log := logrus.New()
+		synctest.Test(t, func(t *testing.T) {
+			r := require.New(t)
+			log := logrus.New()
 
-		pvc := &v1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{Name: "pvc-ds", Namespace: "default"},
-			Spec:       v1.PersistentVolumeClaimSpec{VolumeName: "pv-ds"},
-		}
-		vaFromDS := &storagev1.VolumeAttachment{
-			ObjectMeta: metav1.ObjectMeta{Name: "va-ds"},
-			Spec: storagev1.VolumeAttachmentSpec{
-				NodeName: "node1",
-				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: vaStrPtr("pv-ds")},
-			},
-		}
-		vaFromRegular := &storagev1.VolumeAttachment{
-			ObjectMeta: metav1.ObjectMeta{Name: "va-regular"},
-			Spec: storagev1.VolumeAttachmentSpec{
-				NodeName: "node1",
-				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: vaStrPtr("pv-regular")},
-			},
-		}
-
-		controller := true
-		dsPod := v1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "ds-pod",
-				Namespace: "default",
-				OwnerReferences: []metav1.OwnerReference{
-					{Kind: "DaemonSet", Controller: &controller},
+			pvc := &v1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{Name: "pvc-ds", Namespace: "default"},
+				Spec:       v1.PersistentVolumeClaimSpec{VolumeName: "pv-ds"},
+			}
+			vaFromDS := &storagev1.VolumeAttachment{
+				ObjectMeta: metav1.ObjectMeta{Name: "va-ds"},
+				Spec: storagev1.VolumeAttachmentSpec{
+					NodeName: "node1",
+					Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: vaStrPtr("pv-ds")},
 				},
-			},
-			Spec: v1.PodSpec{
-				NodeName: "node1",
-				Volumes: []v1.Volume{
-					{
-						Name: "data",
-						VolumeSource: v1.VolumeSource{
-							PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: "pvc-ds"},
+			}
+			vaFromRegular := &storagev1.VolumeAttachment{
+				ObjectMeta: metav1.ObjectMeta{Name: "va-regular"},
+				Spec: storagev1.VolumeAttachmentSpec{
+					NodeName: "node1",
+					Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: vaStrPtr("pv-regular")},
+				},
+			}
+
+			controller := true
+			dsPod := v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "ds-pod",
+					Namespace: "default",
+					OwnerReferences: []metav1.OwnerReference{
+						{Kind: "DaemonSet", Controller: &controller},
+					},
+				},
+				Spec: v1.PodSpec{
+					NodeName: "node1",
+					Volumes: []v1.Volume{
+						{
+							Name: "data",
+							VolumeSource: v1.VolumeSource{
+								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: "pvc-ds"},
+							},
 						},
 					},
 				},
-			},
-		}
+			}
 
-		vaIndexer, _ := newTestWaiterVAInformer(t, vaFromDS, vaFromRegular)
-		// Create clientset with both PVC and VAs
-		clientset := fake.NewClientset(pvc, vaFromDS, vaFromRegular)
+			vaIndexer, clientset := newTestWaiterVAInformer(t, []*storagev1.VolumeAttachment{vaFromDS, vaFromRegular}, pvc)
+			waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
 
-		waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
+			// Delete only the regular VA
+			go func() {
+				time.Sleep(100 * time.Millisecond)
+				err := clientset.StorageV1().VolumeAttachments().Delete(context.Background(), "va-regular", metav1.DeleteOptions{})
+				r.NoError(err)
+			}()
 
-		// Delete only the regular VA
-		go func() {
-			time.Sleep(100 * time.Millisecond)
-			err := clientset.StorageV1().VolumeAttachments().Delete(context.Background(), "va-regular", metav1.DeleteOptions{})
+			// Should complete when va-regular is deleted, ignoring va-ds (excluded via dsPod)
+			err := waiter.Wait(context.Background(), log, VolumeDetachmentWaitOptions{
+				NodeName:      "node1",
+				Timeout:       2 * time.Second,
+				PodsToExclude: []v1.Pod{dsPod},
+			})
 			r.NoError(err)
-		}()
-
-		// Should complete when va-regular is deleted, ignoring va-ds (excluded via dsPod)
-		err := waiter.Wait(context.Background(), log, "node1", 2*time.Second, []v1.Pod{dsPod})
-		r.NoError(err)
+		})
 	})
 
 	t.Run("should exclude VAs from static pods", func(t *testing.T) {
-		t.Parallel()
-		r := require.New(t)
-		log := logrus.New()
+		synctest.Test(t, func(t *testing.T) {
+			r := require.New(t)
+			log := logrus.New()
 
-		pvc := &v1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{Name: "pvc-static", Namespace: "default"},
-			Spec:       v1.PersistentVolumeClaimSpec{VolumeName: "pv-static"},
-		}
-		vaFromStatic := &storagev1.VolumeAttachment{
-			ObjectMeta: metav1.ObjectMeta{Name: "va-static"},
-			Spec: storagev1.VolumeAttachmentSpec{
-				NodeName: "node1",
-				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: vaStrPtr("pv-static")},
-			},
-		}
-		vaFromRegular := &storagev1.VolumeAttachment{
-			ObjectMeta: metav1.ObjectMeta{Name: "va-regular"},
-			Spec: storagev1.VolumeAttachmentSpec{
-				NodeName: "node1",
-				Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: vaStrPtr("pv-regular")},
-			},
-		}
-
-		controller := true
-		staticPod := v1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "static-pod",
-				Namespace: "default",
-				OwnerReferences: []metav1.OwnerReference{
-					{Kind: "Node", Controller: &controller},
+			pvc := &v1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{Name: "pvc-static", Namespace: "default"},
+				Spec:       v1.PersistentVolumeClaimSpec{VolumeName: "pv-static"},
+			}
+			vaFromStatic := &storagev1.VolumeAttachment{
+				ObjectMeta: metav1.ObjectMeta{Name: "va-static"},
+				Spec: storagev1.VolumeAttachmentSpec{
+					NodeName: "node1",
+					Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: vaStrPtr("pv-static")},
 				},
-			},
-			Spec: v1.PodSpec{
-				NodeName: "node1",
-				Volumes: []v1.Volume{
-					{
-						Name: "data",
-						VolumeSource: v1.VolumeSource{
-							PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: "pvc-static"},
+			}
+			vaFromRegular := &storagev1.VolumeAttachment{
+				ObjectMeta: metav1.ObjectMeta{Name: "va-regular"},
+				Spec: storagev1.VolumeAttachmentSpec{
+					NodeName: "node1",
+					Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: vaStrPtr("pv-regular")},
+				},
+			}
+
+			controller := true
+			staticPod := v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "static-pod",
+					Namespace: "default",
+					OwnerReferences: []metav1.OwnerReference{
+						{Kind: "Node", Controller: &controller},
+					},
+				},
+				Spec: v1.PodSpec{
+					NodeName: "node1",
+					Volumes: []v1.Volume{
+						{
+							Name: "data",
+							VolumeSource: v1.VolumeSource{
+								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: "pvc-static"},
+							},
 						},
 					},
 				},
-			},
-		}
+			}
 
-		vaIndexer, _ := newTestWaiterVAInformer(t, vaFromStatic, vaFromRegular)
-		// Create clientset with both PVC and VAs
-		clientset := fake.NewClientset(pvc, vaFromStatic, vaFromRegular)
+			vaIndexer, clientset := newTestWaiterVAInformer(t, []*storagev1.VolumeAttachment{vaFromStatic, vaFromRegular}, pvc)
+			waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
 
-		waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
+			// Delete only the regular VA
+			go func() {
+				time.Sleep(100 * time.Millisecond)
+				err := clientset.StorageV1().VolumeAttachments().Delete(context.Background(), "va-regular", metav1.DeleteOptions{})
+				r.NoError(err)
+			}()
 
-		// Delete only the regular VA
-		go func() {
-			time.Sleep(100 * time.Millisecond)
-			err := clientset.StorageV1().VolumeAttachments().Delete(context.Background(), "va-regular", metav1.DeleteOptions{})
+			// Should complete when va-regular is deleted, ignoring va-static (excluded via staticPod)
+			err := waiter.Wait(context.Background(), log, VolumeDetachmentWaitOptions{
+				NodeName:      "node1",
+				Timeout:       2 * time.Second,
+				PodsToExclude: []v1.Pod{staticPod},
+			})
 			r.NoError(err)
-		}()
-
-		// Should complete when va-regular is deleted, ignoring va-static (excluded via staticPod)
-		err := waiter.Wait(context.Background(), log, "node1", 2*time.Second, []v1.Pod{staticPod})
-		r.NoError(err)
+		})
 	})
 }

@@ -19,14 +19,32 @@ import (
 // vaNodeNameIndexer is the index key for looking up VolumeAttachments by node name.
 const vaNodeNameIndexer = "spec.nodeName"
 
+// DefaultVolumeDetachTimeout is the default timeout for waiting for volumes to detach
+// when no timeout is specified in VolumeDetachmentWaitOptions.
+const DefaultVolumeDetachTimeout = 1 * time.Minute
+
+// VolumeDetachmentWaitOptions configures the behavior of VolumeDetachmentWaiter.Wait().
+type VolumeDetachmentWaitOptions struct {
+	// NodeName is the name of the node to wait for volume detachments on. Required.
+	NodeName string
+
+	// Timeout is the maximum time to wait for volumes to detach.
+	// If zero, defaults to DefaultVolumeDetachTimeout (1 minute).
+	Timeout time.Duration
+
+	// PodsToExclude are pods whose VolumeAttachments should not be waited for
+	// (e.g., DaemonSet pods, static pods that won't be evicted).
+	PodsToExclude []v1.Pod
+}
+
 // VolumeDetachmentWaiter waits for VolumeAttachments to be detached from a node.
 type VolumeDetachmentWaiter interface {
 	// Wait waits for all VolumeAttachments on the specified node to be deleted.
-	// VolumeAttachments belonging to podsToExclude are not waited for (e.g., DaemonSet pods
-	// that won't be evicted).
+	// VolumeAttachments belonging to opts.PodsToExclude are not waited for.
+	// If opts.Timeout is zero, defaults to DefaultVolumeDetachTimeout.
 	// Returns nil on success or timeout (timeout is logged but not treated as error).
-	// Returns error only for unexpected failures.
-	Wait(ctx context.Context, log logrus.FieldLogger, nodeName string, timeout time.Duration, podsToExclude []v1.Pod) error
+	// Returns error only for unexpected failures or context cancellation.
+	Wait(ctx context.Context, log logrus.FieldLogger, opts VolumeDetachmentWaitOptions) error
 }
 
 type volumeDetachmentWaiter struct {
@@ -56,11 +74,14 @@ func NewVolumeDetachmentWaiter(
 func (w *volumeDetachmentWaiter) Wait(
 	ctx context.Context,
 	log logrus.FieldLogger,
-	nodeName string,
-	timeout time.Duration,
-	podsToExclude []v1.Pod,
+	opts VolumeDetachmentWaitOptions,
 ) error {
-	vaNames, err := w.getVolumeAttachmentsForNode(ctx, log, nodeName, podsToExclude)
+	timeout := opts.Timeout
+	if timeout == 0 {
+		timeout = DefaultVolumeDetachTimeout
+	}
+
+	vaNames, err := w.getVolumeAttachmentsForNode(ctx, log, opts.NodeName, opts.PodsToExclude)
 	if err != nil {
 		log.Warnf("failed to get VolumeAttachments for node: %v", err)
 		return nil
@@ -75,7 +96,7 @@ func (w *volumeDetachmentWaiter) Wait(
 	defer vaCancel()
 
 	log.Infof("waiting for %d VolumeAttachments to detach with timeout %v", len(vaNames), timeout)
-	return w.waitForVolumeDetach(vaCtx, log, nodeName, vaNames)
+	return w.waitForVolumeDetach(vaCtx, log, opts.NodeName, vaNames)
 }
 
 // getVolumeAttachmentsForNode returns VolumeAttachment names that should be waited for.

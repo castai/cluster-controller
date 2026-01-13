@@ -237,8 +237,11 @@ func (h *DrainNodeHandler) waitForVolumeDetachIfEnabled(ctx context.Context, log
 		return
 	}
 
-	timeout := h.getVolumeDetachTimeout(req)
-	if err := h.vaWaiter.Wait(ctx, log, nodeName, timeout, nonEvictablePods); err != nil {
+	if err := h.vaWaiter.Wait(ctx, log, VolumeDetachmentWaitOptions{
+		NodeName:      nodeName,
+		Timeout:       h.getVolumeDetachTimeout(req),
+		PodsToExclude: nonEvictablePods,
+	}); err != nil {
 		log.Warnf("error waiting for volume detachment: %v", err)
 	}
 }
