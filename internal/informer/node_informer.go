@@ -49,6 +49,24 @@ type nodeInformer struct {
 	mu      sync.Mutex
 }
 
+func NewNodeInformer(
+	logger logrus.FieldLogger,
+	informer cache.SharedIndexInformer,
+	lister listerv1.NodeLister,
+	opts ...NodeInformerOption,
+) NodeInformer {
+	n := &nodeInformer{
+		informer: informer,
+		lister:   lister,
+		logger:   logger,
+		tracked:  make(map[string]observable),
+	}
+	for _, opt := range opts {
+		opt(n)
+	}
+	return n
+}
+
 func (n *nodeInformer) Start(ctx context.Context) error {
 	n.events = make(chan any, 100)
 	err := n.register(n.events)
@@ -64,7 +82,7 @@ func (n *nodeInformer) register(events chan any) error {
 		AddFunc: func(obj any) {
 			events <- obj
 		},
-		UpdateFunc: func(oldObj any, newObj any) {
+		UpdateFunc: func(oldObj, newObj any) {
 			events <- newObj
 		},
 	})
@@ -142,10 +160,10 @@ func (n *nodeInformer) Wait(ctx context.Context, name string, condition Predicat
 
 	node, err := n.lister.Get(name)
 	if err == nil {
-		ok, err := condition(node)
-		if ok {
+		ok, condErr := condition(node)
+		if ok || condErr != nil {
 			n.mu.Unlock()
-			done <- err
+			done <- condErr
 			close(done)
 			return done
 		}

@@ -61,10 +61,11 @@ func NewManager(
 ) *Manager {
 	factory := informers.NewSharedInformerFactory(clientset, resyncPeriod)
 
-	nodes := &nodeInformer{
-		informer: factory.Core().V1().Nodes().Informer(),
-		lister:   factory.Core().V1().Nodes().Lister(),
-	}
+	nodes := NewNodeInformer(
+		log,
+		factory.Core().V1().Nodes().Informer(),
+		factory.Core().V1().Nodes().Lister(),
+	)
 
 	pods := &podInformer{
 		informer: factory.Core().V1().Pods().Informer(),
@@ -104,6 +105,11 @@ func (m *Manager) Start(ctx context.Context) error {
 
 	m.log.Info("starting shared informer factory...")
 	m.factory.Start(ctx.Done())
+
+	if err := m.nodes.Start(ctx); err != nil {
+		cancel()
+		return fmt.Errorf("starting node informer: %w", err)
+	}
 
 	syncCtx, syncCancel := context.WithTimeout(ctx, m.cacheSyncTimeout)
 	defer syncCancel()
