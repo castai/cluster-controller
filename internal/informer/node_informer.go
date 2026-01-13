@@ -68,7 +68,7 @@ func NewNodeInformer(
 }
 
 func (n *nodeInformer) Start(ctx context.Context) error {
-	n.events = make(chan any, 100)
+	n.events = make(chan any)
 	err := n.register(n.events)
 	if err != nil {
 		return err
