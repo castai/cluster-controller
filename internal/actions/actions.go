@@ -14,8 +14,6 @@ import (
 
 // DrainConfig holds configuration for node drain operations.
 type DrainConfig struct {
-	// VolumeDetachTimeout is the default timeout for waiting for VolumeAttachments to be deleted.
-	// Can be overridden per-action via ActionDrainNode.VolumeDetachTimeoutSeconds.
 	VolumeDetachTimeout time.Duration
 	// VAWaiter handles waiting for VolumeAttachments to be detached.
 	// May be nil if informer sync failed.

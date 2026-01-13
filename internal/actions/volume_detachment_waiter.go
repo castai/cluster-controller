@@ -21,11 +21,8 @@ const (
 	DefaultVolumeDetachTimeout = 1 * time.Minute
 )
 
-// VolumeDetachmentWaitOptions configures the behavior of VolumeDetachmentWaiter.Wait().
 type VolumeDetachmentWaitOptions struct {
-	// NodeName is the name of the node to wait for volume detachments on. Required.
 	NodeName string
-
 	// Timeout is the maximum time to wait for volumes to detach.
 	// If zero, defaults to DefaultVolumeDetachTimeout (1 minute).
 	Timeout time.Duration
