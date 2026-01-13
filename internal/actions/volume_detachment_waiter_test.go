@@ -16,6 +16,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/cache"
+
+	"github.com/castai/cluster-controller/internal/informer"
 )
 
 func newTestWaiterVAInformer(t *testing.T, vas []*storagev1.VolumeAttachment, additionalObjs ...runtime.Object) (cache.Indexer, kubernetes.Interface) {
@@ -34,7 +36,7 @@ func newTestWaiterVAInformer(t *testing.T, vas []*storagev1.VolumeAttachment, ad
 
 	// Add the node name indexer
 	err := vaInformer.Informer().AddIndexers(cache.Indexers{
-		vaNodeNameIndexer: func(obj any) ([]string, error) {
+		informer.VANodeNameIndexer: func(obj any) ([]string, error) {
 			va, ok := obj.(*storagev1.VolumeAttachment)
 			if !ok {
 				return nil, nil

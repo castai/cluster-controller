@@ -13,15 +13,13 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 
+	"github.com/castai/cluster-controller/internal/informer"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
 
-// vaNodeNameIndexer is the index key for looking up VolumeAttachments by node name.
-const vaNodeNameIndexer = "spec.nodeName"
-
-// DefaultVolumeDetachTimeout is the default timeout for waiting for volumes to detach
-// when no timeout is specified in VolumeDetachmentWaitOptions.
-const DefaultVolumeDetachTimeout = 1 * time.Minute
+const (
+	DefaultVolumeDetachTimeout = 1 * time.Minute
+)
 
 // VolumeDetachmentWaitOptions configures the behavior of VolumeDetachmentWaiter.Wait().
 type VolumeDetachmentWaitOptions struct {
@@ -110,7 +108,7 @@ func (w *volumeDetachmentWaiter) getVolumeAttachmentsForNode(
 	podsToExclude []v1.Pod,
 ) ([]string, error) {
 	// Step 1: List all VolumeAttachments for this node using indexer
-	vaObjects, err := w.vaIndexer.ByIndex(vaNodeNameIndexer, nodeName)
+	vaObjects, err := w.vaIndexer.ByIndex(informer.VANodeNameIndexer, nodeName)
 	if err != nil {
 		return nil, fmt.Errorf("listing VolumeAttachments by index: %w", err)
 	}
@@ -190,7 +188,7 @@ func (w *volumeDetachmentWaiter) waitForVolumeDetach(
 		waitext.Forever,
 		func(ctx context.Context) (bool, error) {
 			// List VolumeAttachments for this node using indexer
-			vaObjects, err := w.vaIndexer.ByIndex(vaNodeNameIndexer, nodeName)
+			vaObjects, err := w.vaIndexer.ByIndex(informer.VANodeNameIndexer, nodeName)
 			if err != nil {
 				return true, fmt.Errorf("listing VolumeAttachments: %w", err)
 			}

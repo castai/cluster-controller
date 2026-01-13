@@ -251,7 +251,7 @@ func (h *DrainNodeHandler) waitForVolumeDetachIfEnabled(ctx context.Context, log
 // A timeout should be used to avoid infinite waits.
 // Errors in calling EVICT for individual pods are accumulated. If at least one pod failed this but termination was successful, an instance of podFailedActionError is returned.
 // The method will still wait for termination of other evicted pods first.
-// Returns non-evictable pods (DaemonSet, static) for use in VolumeAttachment wait logic.
+// Returns non-evictable pods (DaemonSet, static).
 // A return value of (pods, nil) means all evictable pods on the node should be evicted and terminated.
 func (h *DrainNodeHandler) evictNodePods(ctx context.Context, log logrus.FieldLogger, node *v1.Node) ([]v1.Pod, error) {
 	nodePods, err := h.listNodePods(ctx, log, node)
@@ -304,7 +304,7 @@ func (h *DrainNodeHandler) evictNodePods(ctx context.Context, log logrus.FieldLo
 // A timeout should be used to avoid infinite waits.
 // Errors in calling DELETE for individual pods are accumulated. If at least one pod failed this but termination was successful, an instance of podFailedActionError is returned.
 // The method will still wait for termination of other deleted pods first.
-// Returns non-evictable pods (DaemonSet, static) for use in VolumeAttachment wait logic.
+// Returns non-evictable pods (DaemonSet, static).
 // A return value of (pods, nil) means all evictable pods on the node should be deleted and terminated.
 func (h *DrainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldLogger, node *v1.Node, options metav1.DeleteOptions) ([]v1.Pod, error) {
 	nodePods, err := h.listNodePods(ctx, log, node)

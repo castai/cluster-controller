@@ -86,8 +86,8 @@ type Drain struct {
 	// This is used when the API requests VA wait but doesn't specify a custom timeout.
 	// Can be overridden per-action via ActionDrainNode.VolumeDetachTimeoutSeconds.
 	VolumeDetachTimeout time.Duration `mapstructure:"volumedetachtimeout"`
-	// CacheSyncTimeout is the maximum time to wait for the VolumeAttachment informer cache to sync.
-	// If the cache fails to sync, the VolumeAttachment wait feature will be disabled.
+
+	// CacheSyncTimeout is the timeout for waiting for informer caches to sync at startup.
 	CacheSyncTimeout time.Duration `mapstructure:"cachesynctimeout"`
 }
 

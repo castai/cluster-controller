@@ -322,7 +322,7 @@ func (m *Manager) reportCacheSize(ctx context.Context) {
 				metrics.SetInformerCacheSize("pod", size)
 			}
 
-			if m.volumeAttachments != nil {
+			if m.vaAvailable {
 				vas := m.volumeAttachments.Informer().GetStore().ListKeys()
 				size := len(vas)
 				m.log.WithField("cache_size", size).Debug("volumeattachment informer cache size")
