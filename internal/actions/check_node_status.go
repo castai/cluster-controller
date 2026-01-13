@@ -146,7 +146,7 @@ func (h *CheckNodeStatusHandler) checkNodeReady(ctx context.Context, _ *logrus.E
 				return fmt.Errorf("node %s request timeout: %v %w", req.NodeName, timeout, errNodeWatcherClosed)
 			}
 			if node, ok := r.Object.(*corev1.Node); ok {
-				if h.isNodeReady(node, req.NodeID, req.ProviderId) {
+				if isNodeReady(h.log, node, req.NodeID, req.ProviderId) {
 					return nil
 				}
 			}
@@ -154,11 +154,11 @@ func (h *CheckNodeStatusHandler) checkNodeReady(ctx context.Context, _ *logrus.E
 	}
 }
 
-func (h *CheckNodeStatusHandler) isNodeReady(node *corev1.Node, castNodeID, providerID string) bool {
+func isNodeReady(log logrus.FieldLogger, node *corev1.Node, castNodeID, providerID string) bool {
 	// if node has castai node id label, check if it matches the one we are waiting for
 	// if it doesn't match, we can skip this node.
-	if err := isNodeIDProviderIDValid(node, castNodeID, providerID, h.log); err != nil {
-		h.log.WithFields(logrus.Fields{
+	if err := isNodeIDProviderIDValid(node, castNodeID, providerID, log); err != nil {
+		log.WithFields(logrus.Fields{
 			"node":        node.Name,
 			"node_id":     castNodeID,
 			"provider_id": providerID,
