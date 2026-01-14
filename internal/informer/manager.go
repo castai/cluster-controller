@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	listerv1 "k8s.io/client-go/listers/core/v1"
+	listerstoragev1 "k8s.io/client-go/listers/storage/v1"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/castai/cluster-controller/internal/metrics"
@@ -27,12 +29,14 @@ type Manager struct {
 	factory          informers.SharedInformerFactory
 	cacheSyncTimeout time.Duration
 
-	nodes *nodeInformer
-	pods  *podInformer
+	nodes             *nodeInformer
+	pods              *podInformer
+	volumeAttachments *vaInformer
 
-	started    bool
-	cancelFunc context.CancelFunc
-	mu         sync.RWMutex
+	started     bool
+	vaAvailable bool
+	cancelFunc  context.CancelFunc
+	mu          sync.RWMutex
 }
 
 // Option is a functional option for configuring the Manager.
@@ -42,6 +46,24 @@ type Option func(*Manager)
 func WithCacheSyncTimeout(timeout time.Duration) Option {
 	return func(m *Manager) {
 		m.cacheSyncTimeout = timeout
+	}
+}
+
+func EnablePodInformer() Option {
+	return func(m *Manager) {
+		m.pods = &podInformer{
+			informer: m.factory.Core().V1().Pods().Informer(),
+			lister:   m.factory.Core().V1().Pods().Lister(),
+		}
+	}
+}
+
+func EnableNodeInformer() Option {
+	return func(m *Manager) {
+		m.nodes = &nodeInformer{
+			informer: m.factory.Core().V1().Nodes().Informer(),
+			lister:   m.factory.Core().V1().Nodes().Lister(),
+		}
 	}
 }
 
@@ -59,6 +81,27 @@ func WithPodIndexers(indexers cache.Indexers) Option {
 	}
 }
 
+// WithVAIndexers sets custom indexers for the VolumeAttachment informer.
+func WithVAIndexers(indexers cache.Indexers) Option {
+	return func(m *Manager) {
+		m.volumeAttachments.indexers = indexers
+	}
+}
+
+// WithDefaultVANodeNameIndexer adds the default spec.nodeName indexer for VolumeAttachments.
+// This is commonly used to look up VolumeAttachments by node name.
+func WithDefaultVANodeNameIndexer() Option {
+	return WithVAIndexers(cache.Indexers{
+		VANodeNameIndexer: func(obj any) ([]string, error) {
+			va, ok := obj.(*storagev1.VolumeAttachment)
+			if !ok {
+				return nil, nil
+			}
+			return []string{va.Spec.NodeName}, nil
+		},
+	})
+}
+
 // NewManager creates a new Manager with the given clientset and resync period.
 func NewManager(
 	log logrus.FieldLogger,
@@ -68,22 +111,18 @@ func NewManager(
 ) *Manager {
 	factory := informers.NewSharedInformerFactory(clientset, resyncPeriod)
 
-	nodes := &nodeInformer{
-		informer: factory.Core().V1().Nodes().Informer(),
-		lister:   factory.Core().V1().Nodes().Lister(),
-	}
-
-	pods := &podInformer{
-		informer: factory.Core().V1().Pods().Informer(),
-		lister:   factory.Core().V1().Pods().Lister(),
+	volumeAttachments := &vaInformer{
+		informer: factory.Storage().V1().VolumeAttachments().Informer(),
+		lister:   factory.Storage().V1().VolumeAttachments().Lister(),
 	}
 
 	m := &Manager{
-		log:              log,
-		factory:          factory,
-		cacheSyncTimeout: defaultCacheSyncTimeout,
-		nodes:            nodes,
-		pods:             pods,
+		log:               log,
+		factory:           factory,
+		cacheSyncTimeout:  defaultCacheSyncTimeout,
+		nodes:             nil,
+		pods:              nil,
+		volumeAttachments: volumeAttachments,
 	}
 
 	for _, opt := range opts {
@@ -115,18 +154,41 @@ func (m *Manager) Start(ctx context.Context) error {
 	syncCtx, syncCancel := context.WithTimeout(ctx, m.cacheSyncTimeout)
 	defer syncCancel()
 
-	m.log.Info("waiting for informer caches to sync...")
-	if !cache.WaitForCacheSync(syncCtx.Done(), m.nodes.HasSynced, m.pods.HasSynced) {
-		cancel()
-		return fmt.Errorf("failed to sync informer caches within %v", m.cacheSyncTimeout)
+	// Sync optional node/pod informers - fail if enabled but don't sync
+	if m.nodes != nil {
+		m.log.Info("waiting for node informer cache to sync...")
+		if !cache.WaitForCacheSync(syncCtx.Done(), m.nodes.HasSynced) {
+			cancel()
+			return fmt.Errorf("failed to sync node informer cache within %v", m.cacheSyncTimeout)
+		}
+		metrics.IncrementInformerCacheSyncs("node", "success")
+		m.log.Info("node informer cache synced successfully")
 	}
 
-	metrics.IncrementInformerCacheSyncs("node", "success")
-	metrics.IncrementInformerCacheSyncs("pod", "success")
+	if m.pods != nil {
+		m.log.Info("waiting for pod informer cache to sync...")
+		if !cache.WaitForCacheSync(syncCtx.Done(), m.pods.HasSynced) {
+			cancel()
+			return fmt.Errorf("failed to sync pod informer cache within %v", m.cacheSyncTimeout)
+		}
+		metrics.IncrementInformerCacheSyncs("pod", "success")
+		m.log.Info("pod informer cache synced successfully")
+	}
+
+	// Sync optional VA informer - log warning if it fails (e.g., missing RBAC permissions)
+	m.log.Info("waiting for VolumeAttachment informer cache to sync...")
+	if !cache.WaitForCacheSync(syncCtx.Done(), m.volumeAttachments.HasSynced) {
+		m.log.Warn("VolumeAttachment informer failed to sync (missing RBAC permissions?). " +
+			"VA wait feature will be disabled. Restart controller after granting permissions.")
+		metrics.IncrementInformerCacheSyncs("volumeattachment", "failed")
+		m.vaAvailable = false
+	} else {
+		metrics.IncrementInformerCacheSyncs("volumeattachment", "success")
+		m.log.Info("VolumeAttachment informer cache synced successfully")
+		m.vaAvailable = true
+	}
 
 	m.started = true
-
-	m.log.Info("informer caches synced successfully")
 
 	go m.reportCacheSize(ctx)
 
@@ -150,22 +212,67 @@ func (m *Manager) Stop() {
 
 // GetNodeLister returns the node lister for querying the node cache.
 func (m *Manager) GetNodeLister() listerv1.NodeLister {
+	if m.nodes == nil {
+		return nil
+	}
 	return m.nodes.Lister()
 }
 
 // GetNodeInformer returns the node informer for watching node events.
 func (m *Manager) GetNodeInformer() cache.SharedIndexInformer {
+	if m.nodes == nil {
+		return nil
+	}
 	return m.nodes.Informer()
 }
 
 // GetPodLister returns the pod lister for querying the pod cache.
 func (m *Manager) GetPodLister() listerv1.PodLister {
+	if m.pods == nil {
+		return nil
+	}
 	return m.pods.Lister()
 }
 
 // GetPodInformer returns the pod informer for watching pod events.
 func (m *Manager) GetPodInformer() cache.SharedIndexInformer {
+	if m.pods == nil {
+		return nil
+	}
 	return m.pods.Informer()
+}
+
+// IsVAAvailable indicates whether the VolumeAttachment informer is available.
+func (m *Manager) IsVAAvailable() bool {
+	return m.vaAvailable
+}
+
+// GetVALister returns the VolumeAttachment lister for querying the VA cache.
+// Returns nil if the VA informer is not available or not synced.
+func (m *Manager) GetVALister() listerstoragev1.VolumeAttachmentLister {
+	if !m.vaAvailable {
+		return nil
+	}
+	return m.volumeAttachments.Lister()
+}
+
+// GetVAInformer returns the VolumeAttachment informer for watching VA events.
+// Returns nil if the VA informer is not available or not synced.
+func (m *Manager) GetVAInformer() cache.SharedIndexInformer {
+	if !m.vaAvailable {
+		return nil
+	}
+	return m.volumeAttachments.Informer()
+}
+
+// GetVAIndexer returns the VolumeAttachment indexer for indexed lookups.
+// Use with VANodeNameIndexer to look up VolumeAttachments by node name.
+// Returns nil if the VA informer is not available or not synced.
+func (m *Manager) GetVAIndexer() cache.Indexer {
+	if !m.vaAvailable {
+		return nil
+	}
+	return m.volumeAttachments.Informer().GetIndexer()
 }
 
 // GetFactory returns the underlying SharedInformerFactory for advanced use cases.
@@ -174,14 +281,19 @@ func (m *Manager) GetFactory() informers.SharedInformerFactory {
 }
 
 func (m *Manager) addIndexers() error {
-	if m.nodes.indexers != nil {
+	if m.nodes != nil && m.nodes.indexers != nil {
 		if err := m.nodes.informer.AddIndexers(m.nodes.indexers); err != nil {
 			return fmt.Errorf("adding node indexers: %w", err)
 		}
 	}
-	if m.pods.indexers != nil {
+	if m.pods != nil && m.pods.indexers != nil {
 		if err := m.pods.informer.AddIndexers(m.pods.indexers); err != nil {
 			return fmt.Errorf("adding pod indexers: %w", err)
+		}
+	}
+	if m.volumeAttachments.indexers != nil {
+		if err := m.volumeAttachments.informer.AddIndexers(m.volumeAttachments.indexers); err != nil {
+			return fmt.Errorf("adding volumeattachment indexers: %w", err)
 		}
 	}
 	return nil
@@ -196,15 +308,26 @@ func (m *Manager) reportCacheSize(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			nodes := m.nodes.Informer().GetStore().ListKeys()
-			size := len(nodes)
-			m.log.WithField("cache_size", size).Debug("node informer cache size")
-			metrics.SetInformerCacheSize("node", size)
+			if m.nodes != nil {
+				nodes := m.nodes.Informer().GetStore().ListKeys()
+				size := len(nodes)
+				m.log.WithField("cache_size", size).Debug("node informer cache size")
+				metrics.SetInformerCacheSize("node", size)
+			}
 
-			pods := m.pods.Informer().GetStore().ListKeys()
-			size = len(pods)
-			m.log.WithField("cache_size", size).Debug("pod informer cache size")
-			metrics.SetInformerCacheSize("pod", size)
+			if m.pods != nil {
+				pods := m.pods.Informer().GetStore().ListKeys()
+				size := len(pods)
+				m.log.WithField("cache_size", size).Debug("pod informer cache size")
+				metrics.SetInformerCacheSize("pod", size)
+			}
+
+			if m.volumeAttachments != nil {
+				vas := m.volumeAttachments.Informer().GetStore().ListKeys()
+				size := len(vas)
+				m.log.WithField("cache_size", size).Debug("volumeattachment informer cache size")
+				metrics.SetInformerCacheSize("volumeattachment", size)
+			}
 		}
 	}
 }
