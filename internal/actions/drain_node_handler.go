@@ -21,6 +21,7 @@ import (
 	"k8s.io/kubectl/pkg/drain"
 
 	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/volume"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
 
@@ -46,7 +47,7 @@ func NewDrainNodeHandler(
 	clientset kubernetes.Interface,
 	castNamespace string,
 	volumeDetachTimeout time.Duration,
-	vaWaiter VolumeDetachmentWaiter,
+	vaWaiter volume.DetachmentWaiter,
 ) *DrainNodeHandler {
 	return &DrainNodeHandler{
 		log:       log,
@@ -79,7 +80,7 @@ func (h *DrainNodeHandler) getDrainTimeout(action *castai.ClusterAction) time.Du
 type DrainNodeHandler struct {
 	log       logrus.FieldLogger
 	clientset kubernetes.Interface
-	vaWaiter  VolumeDetachmentWaiter
+	vaWaiter  volume.DetachmentWaiter
 	cfg       drainNodeConfig
 }
 
@@ -234,7 +235,7 @@ func (h *DrainNodeHandler) waitForVolumeDetachIfEnabled(ctx context.Context, log
 		return
 	}
 
-	if err := h.vaWaiter.Wait(ctx, log, VolumeDetachmentWaitOptions{
+	if err := h.vaWaiter.Wait(ctx, log, volume.DetachmentWaitOptions{
 		NodeName:      nodeName,
 		Timeout:       h.getVolumeDetachTimeout(req),
 		PodsToExclude: nonEvictablePods,
@@ -388,6 +389,7 @@ func (h *DrainNodeHandler) listNodePods(ctx context.Context, log logrus.FieldLog
 		toEvict:      make([]v1.Pod, 0),
 		nonEvictable: make([]v1.Pod, 0),
 	}
+	// Evict CAST PODs as last ones.
 	castPods := make([]v1.Pod, 0)
 
 	for _, p := range pods.Items {

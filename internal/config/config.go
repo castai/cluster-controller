@@ -82,8 +82,12 @@ type KubeClient struct {
 }
 
 type Drain struct {
-	DisableVolumeDetachWait bool          `mapstructure:"disablevolumedetachwait"`
-	VolumeDetachTimeout     time.Duration `mapstructure:"volumedetachtimeout"`
+	// DisableVolumeDetachWait disables waiting for volume detach during node drain, ignoring
+	// per action settings.
+	DisableVolumeDetachWait bool `mapstructure:"disablevolumedetachwait"`
+	// VolumeDetachDefaultTimeout is the default timeout for volume detach wait during node drain.
+	// Used if not specified in the action.
+	VolumeDetachDefaultTimeout time.Duration `mapstructure:"volumedetachdefaulttimeout"`
 }
 
 type Informer struct {
@@ -123,7 +127,7 @@ func Get() Config {
 	_ = viper.BindEnv("metrics.exportenabled", "METRICS_EXPORT_ENABLED")
 	_ = viper.BindEnv("metrics.exportinterval", "METRICS_EXPORT_INTERVAL")
 	_ = viper.BindEnv("drain.disablevolumedetachwait", "DRAIN_DISABLE_VOLUME_DETACH_WAIT")
-	_ = viper.BindEnv("drain.volumedetachtimeout", "DRAIN_VOLUME_DETACH_TIMEOUT")
+	_ = viper.BindEnv("drain.volumedetachdefaulttimeout", "DRAIN_VOLUME_DETACH_DEFAULT_TIMEOUT")
 	_ = viper.BindEnv("informer.enablepod", "INFORMER_ENABLE_POD")
 	_ = viper.BindEnv("informer.enablenode", "INFORMER_ENABLE_NODE")
 	_ = viper.BindEnv("informer.cachesynctimeout", "INFORMER_CACHE_SYNC_TIMEOUT")
@@ -191,8 +195,8 @@ func Get() Config {
 		cfg.Metrics.ExportInterval = 30 * time.Second
 	}
 
-	if cfg.Drain.VolumeDetachTimeout == 0 {
-		cfg.Drain.VolumeDetachTimeout = 60 * time.Second
+	if cfg.Drain.VolumeDetachDefaultTimeout == 0 {
+		cfg.Drain.VolumeDetachDefaultTimeout = 60 * time.Second
 	}
 
 	if cfg.Informer.CacheSyncTimeout == 0 {

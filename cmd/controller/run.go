@@ -37,6 +37,7 @@ import (
 	"github.com/castai/cluster-controller/internal/k8sversion"
 	"github.com/castai/cluster-controller/internal/metrics"
 	"github.com/castai/cluster-controller/internal/monitor"
+	"github.com/castai/cluster-controller/internal/volume"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
 
@@ -147,7 +148,7 @@ func runController(
 	informerManager := informer.NewManager(
 		log,
 		clientset,
-		12*time.Hour,
+		12*time.Hour, // resync period, every which the whole informer cache is refreshed
 		informerOpts...,
 	)
 	if err := informerManager.Start(ctx); err != nil {
@@ -166,7 +167,7 @@ func runController(
 		helmClient,
 		vaWaiter,
 		actions.DrainConfig{
-			VolumeDetachTimeout: cfg.Drain.VolumeDetachTimeout,
+			VolumeDetachTimeout: cfg.Drain.VolumeDetachDefaultTimeout,
 		},
 	)
 
@@ -394,13 +395,13 @@ func runningOnGKE(clientset *kubernetes.Clientset, cfg config.Config) (bool, err
 	return isGKE, err
 }
 
-func getVADetachWaiter(log *logrus.Entry, cfg config.Config, clientset kubernetes.Interface, informerManager *informer.Manager) actions.VolumeDetachmentWaiter {
+func getVADetachWaiter(log *logrus.Entry, cfg config.Config, clientset kubernetes.Interface, informerManager *informer.Manager) volume.DetachmentWaiter {
 	if cfg.Drain.DisableVolumeDetachWait {
 		log.Info("VA wait feature disabled by configuration")
 		return nil
 	}
 
-	vaWaiter := actions.NewVolumeDetachmentWaiter(clientset, informerManager.GetVAIndexer(), 5*time.Second)
+	vaWaiter := volume.NewDetachmentWaiter(clientset, informerManager.GetVAIndexer(), 5*time.Second)
 	if vaWaiter == nil {
 		log.Warn("VA waiter not available, VA wait feature will be disabled even if requested by API")
 	} else {

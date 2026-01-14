@@ -1,4 +1,4 @@
-package actions
+package volume
 
 import (
 	"context"
@@ -60,14 +60,14 @@ func vaStrPtr(s string) *string {
 	return &s
 }
 
-func TestNewVolumeDetachmentWaiter(t *testing.T) {
+func TestNewDetachmentWaiter(t *testing.T) {
 	t.Parallel()
 
 	t.Run("returns nil when vaIndexer is nil", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			r := require.New(t)
 
-			waiter := NewVolumeDetachmentWaiter(fake.NewClientset(), nil, 5*time.Second)
+			waiter := NewDetachmentWaiter(fake.NewClientset(), nil, 5*time.Second)
 			r.Nil(waiter)
 		})
 	})
@@ -77,13 +77,13 @@ func TestNewVolumeDetachmentWaiter(t *testing.T) {
 			r := require.New(t)
 
 			vaIndexer, clientset := newTestWaiterVAInformer(t, nil)
-			waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 5*time.Second)
+			waiter := NewDetachmentWaiter(clientset, vaIndexer, 5*time.Second)
 			r.NotNil(waiter)
 		})
 	})
 }
 
-func TestVolumeDetachmentWaiter_Wait(t *testing.T) {
+func TestDetachmentWaiter_Wait(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return immediately when no VAs on node", func(t *testing.T) {
@@ -92,9 +92,9 @@ func TestVolumeDetachmentWaiter_Wait(t *testing.T) {
 			log := logrus.New()
 
 			vaIndexer, clientset := newTestWaiterVAInformer(t, nil)
-			waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
+			waiter := NewDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
 
-			err := waiter.Wait(context.Background(), log, VolumeDetachmentWaitOptions{
+			err := waiter.Wait(context.Background(), log, DetachmentWaitOptions{
 				NodeName: "node1",
 				Timeout:  1 * time.Second,
 			})
@@ -115,14 +115,14 @@ func TestVolumeDetachmentWaiter_Wait(t *testing.T) {
 				},
 			}
 			vaIndexer, clientset := newTestWaiterVAInformer(t, []*storagev1.VolumeAttachment{va})
-			waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
+			waiter := NewDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
 
 			go func() {
 				time.Sleep(100 * time.Millisecond)
 				_ = clientset.StorageV1().VolumeAttachments().Delete(context.Background(), va.Name, metav1.DeleteOptions{})
 			}()
 
-			err := waiter.Wait(context.Background(), log, VolumeDetachmentWaitOptions{
+			err := waiter.Wait(context.Background(), log, DetachmentWaitOptions{
 				NodeName: "node1",
 				Timeout:  2 * time.Second,
 			})
@@ -143,13 +143,16 @@ func TestVolumeDetachmentWaiter_Wait(t *testing.T) {
 				},
 			}
 			vaIndexer, clientset := newTestWaiterVAInformer(t, []*storagev1.VolumeAttachment{va})
-			waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
+			waiter := NewDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
 
-			err := waiter.Wait(context.Background(), log, VolumeDetachmentWaitOptions{
+			err := waiter.Wait(context.Background(), log, DetachmentWaitOptions{
 				NodeName: "node1",
 				Timeout:  150 * time.Millisecond,
 			})
-			r.NoError(err)
+
+			var vaErr *DetachmentError
+			r.ErrorAs(err, &vaErr)
+			r.Equal([]string{"va1"}, vaErr.RemainingVAs)
 		})
 	})
 
@@ -166,7 +169,7 @@ func TestVolumeDetachmentWaiter_Wait(t *testing.T) {
 				},
 			}
 			vaIndexer, clientset := newTestWaiterVAInformer(t, []*storagev1.VolumeAttachment{va})
-			waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
+			waiter := NewDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
 
 			ctx, cancel := context.WithCancel(context.Background())
 
@@ -175,7 +178,7 @@ func TestVolumeDetachmentWaiter_Wait(t *testing.T) {
 				cancel()
 			}()
 
-			err := waiter.Wait(ctx, log, VolumeDetachmentWaitOptions{
+			err := waiter.Wait(ctx, log, DetachmentWaitOptions{
 				NodeName: "node1",
 				Timeout:  5 * time.Second,
 			})
@@ -204,14 +207,14 @@ func TestVolumeDetachmentWaiter_Wait(t *testing.T) {
 			}
 
 			vaIndexer, clientset := newTestWaiterVAInformer(t, []*storagev1.VolumeAttachment{vaNode1, vaNode2})
-			waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
+			waiter := NewDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
 
 			go func() {
 				time.Sleep(100 * time.Millisecond)
 				_ = clientset.StorageV1().VolumeAttachments().Delete(context.Background(), vaNode1.Name, metav1.DeleteOptions{})
 			}()
 
-			err := waiter.Wait(context.Background(), log, VolumeDetachmentWaitOptions{
+			err := waiter.Wait(context.Background(), log, DetachmentWaitOptions{
 				NodeName: "node1",
 				Timeout:  2 * time.Second,
 			})
@@ -266,14 +269,14 @@ func TestVolumeDetachmentWaiter_Wait(t *testing.T) {
 			}
 
 			vaIndexer, clientset := newTestWaiterVAInformer(t, []*storagev1.VolumeAttachment{vaFromDS, vaFromRegular}, pvc)
-			waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
+			waiter := NewDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
 
 			go func() {
 				time.Sleep(100 * time.Millisecond)
 				_ = clientset.StorageV1().VolumeAttachments().Delete(context.Background(), "va-regular", metav1.DeleteOptions{})
 			}()
 
-			err := waiter.Wait(context.Background(), log, VolumeDetachmentWaitOptions{
+			err := waiter.Wait(context.Background(), log, DetachmentWaitOptions{
 				NodeName:      "node1",
 				Timeout:       2 * time.Second,
 				PodsToExclude: []v1.Pod{dsPod},
@@ -329,14 +332,14 @@ func TestVolumeDetachmentWaiter_Wait(t *testing.T) {
 			}
 
 			vaIndexer, clientset := newTestWaiterVAInformer(t, []*storagev1.VolumeAttachment{vaFromStatic, vaFromRegular}, pvc)
-			waiter := NewVolumeDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
+			waiter := NewDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
 
 			go func() {
 				time.Sleep(100 * time.Millisecond)
 				_ = clientset.StorageV1().VolumeAttachments().Delete(context.Background(), "va-regular", metav1.DeleteOptions{})
 			}()
 
-			err := waiter.Wait(context.Background(), log, VolumeDetachmentWaitOptions{
+			err := waiter.Wait(context.Background(), log, DetachmentWaitOptions{
 				NodeName:      "node1",
 				Timeout:       2 * time.Second,
 				PodsToExclude: []v1.Pod{staticPod},

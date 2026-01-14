@@ -10,6 +10,7 @@ import (
 
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/helm"
+	"github.com/castai/cluster-controller/internal/volume"
 )
 
 // DrainConfig holds configuration for node drain operations.
@@ -26,7 +27,7 @@ func NewDefaultActionHandlers(
 	clientset *kubernetes.Clientset,
 	dynamicClient dynamic.Interface,
 	helmClient helm.Client,
-	vaWaiter VolumeDetachmentWaiter,
+	vaWaiter volume.DetachmentWaiter,
 	drainCfg DrainConfig,
 ) ActionHandlers {
 	return ActionHandlers{
