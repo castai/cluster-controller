@@ -20,14 +20,17 @@ var _ ActionHandler = &CheckNodeStatusHandler{}
 
 func NewCheckNodeStatusHandler(log logrus.FieldLogger, clientset kubernetes.Interface) *CheckNodeStatusHandler {
 	return &CheckNodeStatusHandler{
-		log:       log,
-		clientset: clientset,
+		log:                     log,
+		clientset:               clientset,
+		checkNodeDeletedHandler: NewCheckNodeDeletedHandler(log, clientset),
 	}
 }
 
 type CheckNodeStatusHandler struct {
 	log       logrus.FieldLogger
 	clientset kubernetes.Interface
+
+	checkNodeDeletedHandler *CheckNodeDeletedHandler
 }
 
 func (h *CheckNodeStatusHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
@@ -60,8 +63,7 @@ func (h *CheckNodeStatusHandler) Handle(ctx context.Context, action *castai.Clus
 		return h.checkNodeReady(ctx, log, req)
 	case castai.ActionCheckNodeStatus_DELETED:
 		log.Info("checking node deleted")
-		a := NewCheckNodeDeletedHandler(h.log, h.clientset)
-		return a.Handle(ctx, &castai.ClusterAction{
+		return h.checkNodeDeletedHandler.Handle(ctx, &castai.ClusterAction{
 			ActionCheckNodeDeleted: &castai.ActionCheckNodeDeleted{
 				NodeName:   req.NodeName,
 				ProviderId: req.ProviderId,
