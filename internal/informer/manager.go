@@ -179,38 +179,46 @@ func (m *Manager) Start(ctx context.Context) error {
 		m.log.Info("pod informer cache synced successfully")
 	}
 
-	// Check VA permissions before attempting to sync
-	m.log.Info("checking VolumeAttachment RBAC permissions...")
-	hasPermissions, err := m.checkVAPermissions(ctx)
-	if err != nil {
-		m.log.Warnf("failed to verify VolumeAttachment permissions: %v. "+
-			"VA wait feature will be disabled.", err)
-		metrics.IncrementInformerCacheSyncs("volumeattachment", "rbac_check_failed")
-		m.vaAvailable = false
-	} else if !hasPermissions {
-		m.log.Warn("VolumeAttachment permissions not granted. " +
-			"VA wait feature will be disabled. Grant get/list/watch permissions on " +
-			"volumeattachments.storage.k8s.io and restart controller.")
-		metrics.IncrementInformerCacheSyncs("volumeattachment", "rbac_denied")
-		m.vaAvailable = false
-	} else {
-		m.log.Info("waiting for VolumeAttachment informer cache to sync...")
-		if !cache.WaitForCacheSync(syncCtx.Done(), m.volumeAttachments.HasSynced) {
-			m.log.Warn("VolumeAttachment informer failed to sync. VA wait feature will be disabled.")
-			metrics.IncrementInformerCacheSyncs("volumeattachment", "sync_failed")
-			m.vaAvailable = false
-		} else {
-			metrics.IncrementInformerCacheSyncs("volumeattachment", "success")
-			m.vaAvailable = true
-			m.log.Info("VolumeAttachment informer cache synced successfully")
-		}
-	}
+	// Check VA permissions and sync informer
+	m.vaAvailable = m.syncVAInformer(ctx, syncCtx)
 
 	m.started = true
 
 	go m.reportCacheSize(ctx)
 
 	return nil
+}
+
+// syncVAInformer checks RBAC permissions and syncs the VolumeAttachment informer.
+// Returns true if the VA informer is available and synced successfully, false otherwise.
+func (m *Manager) syncVAInformer(ctx, syncCtx context.Context) bool {
+	m.log.Info("checking VolumeAttachment RBAC permissions...")
+	hasPermissions, err := m.checkVAPermissions(ctx)
+	if err != nil {
+		m.log.Warnf("failed to verify VolumeAttachment permissions: %v. "+
+			"VA wait feature will be disabled.", err)
+		metrics.IncrementInformerCacheSyncs("volumeattachment", "rbac_check_failed")
+		return false
+	}
+
+	if !hasPermissions {
+		m.log.Warn("VolumeAttachment permissions not granted. " +
+			"VA wait feature will be disabled. Grant get/list/watch permissions on " +
+			"volumeattachments.storage.k8s.io and restart controller.")
+		metrics.IncrementInformerCacheSyncs("volumeattachment", "rbac_denied")
+		return false
+	}
+
+	m.log.Info("waiting for VolumeAttachment informer cache to sync...")
+	if !cache.WaitForCacheSync(syncCtx.Done(), m.volumeAttachments.HasSynced) {
+		m.log.Warn("VolumeAttachment informer failed to sync. VA wait feature will be disabled.")
+		metrics.IncrementInformerCacheSyncs("volumeattachment", "sync_failed")
+		return false
+	}
+
+	metrics.IncrementInformerCacheSyncs("volumeattachment", "success")
+	m.log.Info("VolumeAttachment informer cache synced successfully")
+	return true
 }
 
 // Stop gracefully stops the informer factory.
