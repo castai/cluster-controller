@@ -145,17 +145,7 @@ func runController(
 	}
 	defer informerManager.Stop()
 
-	var vaWaiter actions.VolumeDetachmentWaiter
-	if !cfg.Drain.DisableVolumeDetachWait {
-		vaWaiter := actions.NewVolumeDetachmentWaiter(clientset, informerManager.GetVAIndexer(), 5*time.Second)
-		if vaWaiter == nil {
-			log.Warn("VA waiter not available, VA wait feature will be disabled even if requested by API")
-		} else {
-			log.Info("VolumeAttachment informer synced, VA wait feature enabled")
-		}
-	} else {
-		log.Info("VA wait feature disabled by configuration")
-	}
+	vaWaiter := getVADetachWaiter(log, cfg, clientset, informerManager)
 
 	actionHandlers := actions.NewDefaultActionHandlers(
 		k8sVer.Full(),
@@ -392,6 +382,22 @@ func runningOnGKE(clientset *kubernetes.Clientset, cfg config.Config) (bool, err
 	})
 
 	return isGKE, err
+}
+
+func getVADetachWaiter(log *logrus.Entry, cfg config.Config, clientset kubernetes.Interface, informerManager *informer.Manager) actions.VolumeDetachmentWaiter {
+	if cfg.Drain.DisableVolumeDetachWait {
+		log.Info("VA wait feature disabled by configuration")
+		return nil
+	}
+
+	vaWaiter := actions.NewVolumeDetachmentWaiter(clientset, informerManager.GetVAIndexer(), 5*time.Second)
+	if vaWaiter == nil {
+		log.Warn("VA waiter not available, VA wait feature will be disabled even if requested by API")
+	} else {
+		log.Info("VolumeAttachment informer synced, VA wait feature enabled")
+	}
+
+	return vaWaiter
 }
 
 func saveMetadata(clusterID string, cfg config.Config, log *logrus.Entry) error {
