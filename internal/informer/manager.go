@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	authorizationv1 "k8s.io/api/authorization/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	listerv1 "k8s.io/client-go/listers/core/v1"
@@ -26,6 +28,7 @@ const (
 // access to specific informers and listers.
 type Manager struct {
 	log              logrus.FieldLogger
+	clientset        kubernetes.Interface
 	factory          informers.SharedInformerFactory
 	cacheSyncTimeout time.Duration
 
@@ -118,6 +121,7 @@ func NewManager(
 
 	m := &Manager{
 		log:               log,
+		clientset:         clientset,
 		factory:           factory,
 		cacheSyncTimeout:  defaultCacheSyncTimeout,
 		nodes:             nil,
@@ -175,17 +179,31 @@ func (m *Manager) Start(ctx context.Context) error {
 		m.log.Info("pod informer cache synced successfully")
 	}
 
-	// Sync optional VA informer - log warning if it fails (e.g., missing RBAC permissions)
-	m.log.Info("waiting for VolumeAttachment informer cache to sync...")
-	if !cache.WaitForCacheSync(syncCtx.Done(), m.volumeAttachments.HasSynced) {
-		m.log.Warn("VolumeAttachment informer failed to sync (missing RBAC permissions?). " +
-			"VA wait feature will be disabled. Restart controller after granting permissions.")
-		metrics.IncrementInformerCacheSyncs("volumeattachment", "failed")
+	// Check VA permissions before attempting to sync
+	m.log.Info("checking VolumeAttachment RBAC permissions...")
+	hasPermissions, err := m.checkVAPermissions(ctx)
+	if err != nil {
+		m.log.Warnf("failed to verify VolumeAttachment permissions: %v. "+
+			"VA wait feature will be disabled.", err)
+		metrics.IncrementInformerCacheSyncs("volumeattachment", "rbac_check_failed")
+		m.vaAvailable = false
+	} else if !hasPermissions {
+		m.log.Warn("VolumeAttachment permissions not granted. " +
+			"VA wait feature will be disabled. Grant get/list/watch permissions on " +
+			"volumeattachments.storage.k8s.io and restart controller.")
+		metrics.IncrementInformerCacheSyncs("volumeattachment", "rbac_denied")
 		m.vaAvailable = false
 	} else {
-		metrics.IncrementInformerCacheSyncs("volumeattachment", "success")
-		m.log.Info("VolumeAttachment informer cache synced successfully")
-		m.vaAvailable = true
+		m.log.Info("waiting for VolumeAttachment informer cache to sync...")
+		if !cache.WaitForCacheSync(syncCtx.Done(), m.volumeAttachments.HasSynced) {
+			m.log.Warn("VolumeAttachment informer failed to sync. VA wait feature will be disabled.")
+			metrics.IncrementInformerCacheSyncs("volumeattachment", "sync_failed")
+			m.vaAvailable = false
+		} else {
+			metrics.IncrementInformerCacheSyncs("volumeattachment", "success")
+			m.vaAvailable = true
+			m.log.Info("VolumeAttachment informer cache synced successfully")
+		}
 	}
 
 	m.started = true
@@ -278,6 +296,40 @@ func (m *Manager) GetVAIndexer() cache.Indexer {
 // GetFactory returns the underlying SharedInformerFactory for advanced use cases.
 func (m *Manager) GetFactory() informers.SharedInformerFactory {
 	return m.factory
+}
+
+// checkVAPermissions verifies the service account has required permissions for VolumeAttachments.
+// Returns (true, nil) if all permissions are available.
+// Returns (false, nil) if any permission is missing (logs which ones).
+// Returns (false, error) if the permission check itself fails.
+func (m *Manager) checkVAPermissions(ctx context.Context) (bool, error) {
+	requiredVerbs := []string{"get", "list", "watch"}
+
+	for _, verb := range requiredVerbs {
+		sar := &authorizationv1.SelfSubjectAccessReview{
+			Spec: authorizationv1.SelfSubjectAccessReviewSpec{
+				ResourceAttributes: &authorizationv1.ResourceAttributes{
+					Group:    "storage.k8s.io",
+					Resource: "volumeattachments",
+					Verb:     verb,
+				},
+			},
+		}
+
+		result, err := m.clientset.AuthorizationV1().SelfSubjectAccessReviews().Create(
+			ctx, sar, metav1.CreateOptions{})
+		if err != nil {
+			return false, fmt.Errorf("checking '%s' permission for volumeattachments: %w", verb, err)
+		}
+
+		if !result.Status.Allowed {
+			m.log.Warnf("missing '%s' permission for volumeattachments.storage.k8s.io", verb)
+			return false, nil
+		}
+	}
+
+	m.log.Debug("all VolumeAttachment permissions verified: get, list, watch")
+	return true, nil
 }
 
 func (m *Manager) addIndexers() error {
