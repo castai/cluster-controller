@@ -82,7 +82,8 @@ type KubeClient struct {
 }
 
 type Drain struct {
-	VolumeDetachTimeout time.Duration `mapstructure:"volumedetachtimeout"`
+	DisableVolumeDetachWait bool          `mapstructure:"disablevolumedetachwait"`
+	VolumeDetachTimeout     time.Duration `mapstructure:"volumedetachtimeout"`
 }
 
 type Informer struct {
@@ -119,6 +120,7 @@ func Get() Config {
 	_ = viper.BindEnv("metrics.port", "METRICS_PORT")
 	_ = viper.BindEnv("metrics.exportenabled", "METRICS_EXPORT_ENABLED")
 	_ = viper.BindEnv("metrics.exportinterval", "METRICS_EXPORT_INTERVAL")
+	_ = viper.BindEnv("drain.disablevolumedetachwait", "DRAIN_DISABLE_VOLUME_DETACH_WAIT")
 	_ = viper.BindEnv("drain.volumedetachtimeout", "DRAIN_VOLUME_DETACH_TIMEOUT")
 	_ = viper.BindEnv("informer.cachesynctimeout", "INFORMER_CACHE_SYNC_TIMEOUT")
 

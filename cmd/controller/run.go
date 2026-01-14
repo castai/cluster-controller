@@ -145,11 +145,16 @@ func runController(
 	}
 	defer informerManager.Stop()
 
-	vaWaiter := actions.NewVolumeDetachmentWaiter(clientset, informerManager.GetVAIndexer(), 5*time.Second)
-	if vaWaiter == nil {
-		log.Warn("VA waiter not available, VA wait feature will be disabled even if requested by API")
+	var vaWaiter actions.VolumeDetachmentWaiter
+	if !cfg.Drain.DisableVolumeDetachWait {
+		vaWaiter := actions.NewVolumeDetachmentWaiter(clientset, informerManager.GetVAIndexer(), 5*time.Second)
+		if vaWaiter == nil {
+			log.Warn("VA waiter not available, VA wait feature will be disabled even if requested by API")
+		} else {
+			log.Info("VolumeAttachment informer synced, VA wait feature enabled")
+		}
 	} else {
-		log.Info("VolumeAttachment informer synced, VA wait feature enabled")
+		log.Info("VA wait feature disabled by configuration")
 	}
 
 	actionHandlers := actions.NewDefaultActionHandlers(
