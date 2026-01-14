@@ -60,6 +60,7 @@ func NewNodeInformer(
 		lister:   lister,
 		logger:   logger,
 		tracked:  make(map[string]observable),
+		events:   make(chan any),
 	}
 	for _, opt := range opts {
 		opt(n)
@@ -68,7 +69,6 @@ func NewNodeInformer(
 }
 
 func (n *nodeInformer) Start(ctx context.Context) error {
-	n.events = make(chan any)
 	err := n.register(n.events)
 	if err != nil {
 		return err
@@ -98,7 +98,6 @@ func (n *nodeInformer) run(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			n.stop()
-			close(n.events)
 			return
 		case object, ok := <-n.events:
 			if !ok {
@@ -118,8 +117,7 @@ func (n *nodeInformer) stop() {
 	}
 	n.registration = nil
 
-	for name, o := range n.tracked {
-		close(o.done)
+	for name := range n.tracked {
 		delete(n.tracked, name)
 	}
 }
@@ -140,8 +138,10 @@ func (n *nodeInformer) onEvent(_ context.Context, object any) {
 
 	ok, err := observable.condition(node)
 	if ok || err != nil {
-		observable.done <- err
-		close(observable.done)
+		select {
+		case observable.done <- err:
+		default:
+		}
 		delete(n.tracked, node.Name)
 	}
 }
@@ -150,11 +150,10 @@ func (n *nodeInformer) Wait(ctx context.Context, name string, condition Predicat
 	done := make(chan error, 1)
 
 	n.mu.Lock()
+	defer n.mu.Unlock()
 
 	if _, exists := n.tracked[name]; exists {
-		n.mu.Unlock()
 		done <- fmt.Errorf("node %s is already being tracked", name)
-		close(done)
 		return done
 	}
 
@@ -162,9 +161,7 @@ func (n *nodeInformer) Wait(ctx context.Context, name string, condition Predicat
 	if err == nil {
 		ok, condErr := condition(node)
 		if ok || condErr != nil {
-			n.mu.Unlock()
 			done <- condErr
-			close(done)
 			return done
 		}
 	}
@@ -173,32 +170,27 @@ func (n *nodeInformer) Wait(ctx context.Context, name string, condition Predicat
 		done:      done,
 		condition: condition,
 	}
-	n.mu.Unlock()
 
 	go func() {
 		select {
 		case <-ctx.Done():
 			n.mu.Lock()
+			defer n.mu.Unlock()
 			observable, exists := n.tracked[name]
 			if !exists {
-				n.mu.Unlock()
 				return
 			}
 			delete(n.tracked, name)
-			n.mu.Unlock()
 
 			node, err := n.lister.Get(name)
 			if err == nil {
-				ok, err := condition(node)
+				ok, err := observable.condition(node)
 				if ok {
 					observable.done <- err
-					close(observable.done)
 					return
 				}
 			}
 			observable.done <- ctx.Err()
-			close(observable.done)
-
 		case <-done:
 			return
 		}
