@@ -15,9 +15,6 @@ import (
 // DrainConfig holds configuration for node drain operations.
 type DrainConfig struct {
 	VolumeDetachTimeout time.Duration
-	// VAWaiter handles waiting for VolumeAttachments to be detached.
-	// May be nil if informer sync failed.
-	VAWaiter VolumeDetachmentWaiter
 }
 
 type ActionHandlers map[reflect.Type]ActionHandler
@@ -29,11 +26,12 @@ func NewDefaultActionHandlers(
 	clientset *kubernetes.Clientset,
 	dynamicClient dynamic.Interface,
 	helmClient helm.Client,
+	vaWaiter VolumeDetachmentWaiter,
 	drainCfg DrainConfig,
 ) ActionHandlers {
 	return ActionHandlers{
 		reflect.TypeFor[*castai.ActionDeleteNode]():        NewDeleteNodeHandler(log, clientset),
-		reflect.TypeFor[*castai.ActionDrainNode]():         NewDrainNodeHandler(log, clientset, castNamespace, drainCfg.VolumeDetachTimeout, drainCfg.VAWaiter),
+		reflect.TypeFor[*castai.ActionDrainNode]():         NewDrainNodeHandler(log, clientset, castNamespace, drainCfg.VolumeDetachTimeout, vaWaiter),
 		reflect.TypeFor[*castai.ActionPatchNode]():         NewPatchNodeHandler(log, clientset),
 		reflect.TypeFor[*castai.ActionCreateEvent]():       NewCreateEventHandler(log, clientset),
 		reflect.TypeFor[*castai.ActionChartUpsert]():       NewChartUpsertHandler(log, helmClient),

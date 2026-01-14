@@ -133,12 +133,22 @@ func runController(
 
 	log.Infof("running castai-cluster-controller version %v, log-level: %v", binVersion, logger.Level)
 
+	informerOpts := []informer.Option{
+		informer.WithCacheSyncTimeout(cfg.Informer.CacheSyncTimeout),
+		informer.WithDefaultVANodeNameIndexer(),
+	}
+	if cfg.Informer.EnableNode {
+		informerOpts = append(informerOpts, informer.EnableNodeInformer())
+	}
+	if cfg.Informer.EnablePod {
+		informerOpts = append(informerOpts, informer.EnablePodInformer())
+	}
+
 	informerManager := informer.NewManager(
 		log,
 		clientset,
 		12*time.Hour,
-		informer.WithCacheSyncTimeout(cfg.Informer.CacheSyncTimeout),
-		informer.WithDefaultVANodeNameIndexer(),
+		informerOpts...,
 	)
 	if err := informerManager.Start(ctx); err != nil {
 		return fmt.Errorf("starting informer manager: %w", err)
@@ -154,9 +164,9 @@ func runController(
 		clientset,
 		dynamicClient,
 		helmClient,
+		vaWaiter,
 		actions.DrainConfig{
 			VolumeDetachTimeout: cfg.Drain.VolumeDetachTimeout,
-			VAWaiter:            vaWaiter,
 		},
 	)
 

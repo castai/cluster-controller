@@ -87,6 +87,8 @@ type Drain struct {
 }
 
 type Informer struct {
+	EnablePod        bool          `mapstructure:"enablepod"`
+	EnableNode       bool          `mapstructure:"enablenode"`
 	CacheSyncTimeout time.Duration `mapstructure:"cachesynctimeout"`
 }
 
@@ -122,6 +124,8 @@ func Get() Config {
 	_ = viper.BindEnv("metrics.exportinterval", "METRICS_EXPORT_INTERVAL")
 	_ = viper.BindEnv("drain.disablevolumedetachwait", "DRAIN_DISABLE_VOLUME_DETACH_WAIT")
 	_ = viper.BindEnv("drain.volumedetachtimeout", "DRAIN_VOLUME_DETACH_TIMEOUT")
+	_ = viper.BindEnv("informer.enablepod", "INFORMER_ENABLE_POD")
+	_ = viper.BindEnv("informer.enablenode", "INFORMER_ENABLE_NODE")
 	_ = viper.BindEnv("informer.cachesynctimeout", "INFORMER_CACHE_SYNC_TIMEOUT")
 
 	cfg = &Config{}

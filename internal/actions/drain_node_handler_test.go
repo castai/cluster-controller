@@ -845,7 +845,3 @@ func TestGetVolumeDetachTimeout(t *testing.T) {
 		r.Equal(120*time.Second, h.getVolumeDetachTimeout(req))
 	})
 }
-
-func strPtr(s string) *string {
-	return &s
-}
