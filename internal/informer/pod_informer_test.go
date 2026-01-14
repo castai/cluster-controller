@@ -14,7 +14,7 @@ func TestPodInformer_Informer(t *testing.T) {
 
 	log := logrus.New()
 	clientset := fake.NewClientset()
-	manager := NewManager(log, clientset, time.Hour)
+	manager := NewManager(log, clientset, time.Hour, EnablePodInformer())
 
 	informer := manager.pods.Informer()
 	lister := manager.pods.Lister()
