@@ -52,6 +52,13 @@ func WithPodIndexers(indexers cache.Indexers) Option {
 	}
 }
 
+// WithNodeIndexers sets custom indexers for the node informer.
+func WithNodeIndexers(indexers cache.Indexers) Option {
+	return func(n *Manager) {
+		n.nodes.SetIndexers(indexers)
+	}
+}
+
 // NewManager creates a new Manager with the given clientset and resync period.
 func NewManager(
 	log logrus.FieldLogger,

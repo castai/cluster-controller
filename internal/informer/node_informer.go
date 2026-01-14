@@ -19,16 +19,8 @@ type NodeInformer interface {
 	Informer() cache.SharedIndexInformer
 	Lister() listerv1.NodeLister
 	Indexers() cache.Indexers
+	SetIndexers(indexers cache.Indexers)
 	HasSynced() bool
-}
-
-type NodeInformerOption func(*nodeInformer)
-
-// WithNodeIndexers sets custom indexers for the node informer.
-func WithNodeIndexers(indexers cache.Indexers) NodeInformerOption {
-	return func(n *nodeInformer) {
-		n.indexers = indexers
-	}
 }
 
 type observable struct {
@@ -53,7 +45,6 @@ func NewNodeInformer(
 	logger logrus.FieldLogger,
 	informer cache.SharedIndexInformer,
 	lister listerv1.NodeLister,
-	opts ...NodeInformerOption,
 ) NodeInformer {
 	n := &nodeInformer{
 		informer: informer,
@@ -61,9 +52,6 @@ func NewNodeInformer(
 		logger:   logger,
 		tracked:  make(map[string]observable),
 		events:   make(chan any),
-	}
-	for _, opt := range opts {
-		opt(n)
 	}
 	return n
 }
@@ -209,6 +197,10 @@ func (n *nodeInformer) Lister() listerv1.NodeLister {
 
 func (n *nodeInformer) Indexers() cache.Indexers {
 	return n.indexers
+}
+
+func (n *nodeInformer) SetIndexers(indexers cache.Indexers) {
+	n.indexers = indexers
 }
 
 func (n *nodeInformer) HasSynced() bool {
