@@ -3,6 +3,7 @@ package informer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -23,6 +24,16 @@ import (
 const (
 	defaultCacheSyncTimeout = 30 * time.Second
 )
+
+// VAPermissionError indicates that required RBAC permissions for VolumeAttachments are missing.
+type VAPermissionError struct {
+	// MissingVerb is the verb that was denied (e.g., "get", "list", "watch").
+	MissingVerb string
+}
+
+func (e *VAPermissionError) Error() string {
+	return fmt.Sprintf("missing '%s' permission for volumeattachments.storage.k8s.io", e.MissingVerb)
+}
 
 // Manager manages the global SharedInformerFactory and provides
 // access to specific informers and listers.
@@ -193,19 +204,18 @@ func (m *Manager) Start(ctx context.Context) error {
 // Returns true if the VA informer is available and synced successfully, false otherwise.
 func (m *Manager) syncVAInformer(ctx, syncCtx context.Context) bool {
 	m.log.Info("checking VolumeAttachment RBAC permissions...")
-	hasPermissions, err := m.checkVAPermissions(ctx)
-	if err != nil {
-		m.log.Warnf("failed to verify VolumeAttachment permissions: %v. "+
-			"VA wait feature will be disabled.", err)
-		metrics.IncrementInformerCacheSyncs("volumeattachment", "rbac_check_failed")
-		return false
-	}
-
-	if !hasPermissions {
-		m.log.Warn("VolumeAttachment permissions not granted. " +
-			"VA wait feature will be disabled. Grant get/list/watch permissions on " +
-			"volumeattachments.storage.k8s.io and restart controller.")
-		metrics.IncrementInformerCacheSyncs("volumeattachment", "rbac_denied")
+	if err := m.checkVAPermissions(ctx); err != nil {
+		var permErr *VAPermissionError
+		if errors.As(err, &permErr) {
+			m.log.Warnf("%v. VA wait feature will be disabled. "+
+				"Grant get/list/watch permissions on volumeattachments.storage.k8s.io "+
+				"and restart controller.", permErr)
+			metrics.IncrementInformerCacheSyncs("volumeattachment", "rbac_denied")
+		} else {
+			m.log.Warnf("failed to verify VolumeAttachment permissions: %v. "+
+				"VA wait feature will be disabled.", err)
+			metrics.IncrementInformerCacheSyncs("volumeattachment", "rbac_check_failed")
+		}
 		return false
 	}
 
@@ -307,10 +317,10 @@ func (m *Manager) GetFactory() informers.SharedInformerFactory {
 }
 
 // checkVAPermissions verifies the service account has required permissions for VolumeAttachments.
-// Returns (true, nil) if all permissions are available.
-// Returns (false, nil) if any permission is missing (logs which ones).
-// Returns (false, error) if the permission check itself fails.
-func (m *Manager) checkVAPermissions(ctx context.Context) (bool, error) {
+// Returns nil if all permissions are available.
+// Returns *VAPermissionError if any permission is missing (fails fast on first missing).
+// Returns wrapped error if the permission check itself fails.
+func (m *Manager) checkVAPermissions(ctx context.Context) error {
 	requiredVerbs := []string{"get", "list", "watch"}
 
 	for _, verb := range requiredVerbs {
@@ -327,17 +337,16 @@ func (m *Manager) checkVAPermissions(ctx context.Context) (bool, error) {
 		result, err := m.clientset.AuthorizationV1().SelfSubjectAccessReviews().Create(
 			ctx, sar, metav1.CreateOptions{})
 		if err != nil {
-			return false, fmt.Errorf("checking '%s' permission for volumeattachments: %w", verb, err)
+			return fmt.Errorf("checking '%s' permission for volumeattachments: %w", verb, err)
 		}
 
 		if !result.Status.Allowed {
-			m.log.Warnf("missing '%s' permission for volumeattachments.storage.k8s.io", verb)
-			return false, nil
+			return &VAPermissionError{MissingVerb: verb}
 		}
 	}
 
 	m.log.Debug("all VolumeAttachment permissions verified: get, list, watch")
-	return true, nil
+	return nil
 }
 
 func (m *Manager) addIndexers() error {

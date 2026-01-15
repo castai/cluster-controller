@@ -398,12 +398,14 @@ func getVADetachWaiter(log *logrus.Entry, cfg config.Config, clientset kubernete
 		return nil
 	}
 
-	vaWaiter := volume.NewDetachmentWaiter(clientset, informerManager.GetVAIndexer(), 5*time.Second, cfg.Drain.VolumeDetachDefaultTimeout)
-	if vaWaiter == nil {
-		log.Warn("VA waiter not available, VA wait feature will be disabled even if requested by API")
-	} else {
-		log.Info("VolumeAttachment informer synced, VA wait feature enabled")
+	vaIndexer := informerManager.GetVAIndexer()
+	if informerManager.GetVAIndexer() == nil {
+		log.Info("VolumeAttachment informer not enabled, VA wait feature will be disabled even if requested by API")
+		return nil
 	}
+
+	vaWaiter := volume.NewDetachmentWaiter(clientset, vaIndexer, 5*time.Second, cfg.Drain.VolumeDetachDefaultTimeout)
+	log.Info("VolumeAttachment informer synced, VA wait feature enabled")
 
 	return vaWaiter
 }

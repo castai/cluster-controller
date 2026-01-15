@@ -60,29 +60,6 @@ func vaStrPtr(s string) *string {
 	return &s
 }
 
-func TestNewDetachmentWaiter(t *testing.T) {
-	t.Parallel()
-
-	t.Run("returns nil when vaIndexer is nil", func(t *testing.T) {
-		synctest.Test(t, func(t *testing.T) {
-			r := require.New(t)
-
-			waiter := NewDetachmentWaiter(fake.NewClientset(), nil, 5*time.Second, 0)
-			r.Nil(waiter)
-		})
-	})
-
-	t.Run("returns waiter when vaIndexer is provided", func(t *testing.T) {
-		synctest.Test(t, func(t *testing.T) {
-			r := require.New(t)
-
-			vaIndexer, clientset := newTestWaiterVAInformer(t, nil)
-			waiter := NewDetachmentWaiter(clientset, vaIndexer, 5*time.Second, 0)
-			r.NotNil(waiter)
-		})
-	})
-}
-
 func TestDetachmentWaiter_Wait(t *testing.T) {
 	t.Parallel()
 

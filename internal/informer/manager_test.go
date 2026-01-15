@@ -371,8 +371,9 @@ func TestManager_checkVAPermissions(t *testing.T) {
 		name            string
 		allowedVerbs    map[string]bool // verb -> allowed
 		apiError        error           // error to return from API
-		wantAllowed     bool
 		wantErr         bool
+		wantPermErr     bool   // expect *VAPermissionError
+		wantMissingVerb string // expected missing verb in VAPermissionError
 		wantErrContains string
 	}{
 		{
@@ -382,8 +383,7 @@ func TestManager_checkVAPermissions(t *testing.T) {
 				"list":  true,
 				"watch": true,
 			},
-			wantAllowed: true,
-			wantErr:     false,
+			wantErr: false,
 		},
 		{
 			name: "missing get permission",
@@ -392,8 +392,9 @@ func TestManager_checkVAPermissions(t *testing.T) {
 				"list":  true,
 				"watch": true,
 			},
-			wantAllowed: false,
-			wantErr:     false,
+			wantErr:         true,
+			wantPermErr:     true,
+			wantMissingVerb: "get",
 		},
 		{
 			name: "missing list permission",
@@ -402,8 +403,9 @@ func TestManager_checkVAPermissions(t *testing.T) {
 				"list":  false,
 				"watch": true,
 			},
-			wantAllowed: false,
-			wantErr:     false,
+			wantErr:         true,
+			wantPermErr:     true,
+			wantMissingVerb: "list",
 		},
 		{
 			name: "missing watch permission",
@@ -412,25 +414,27 @@ func TestManager_checkVAPermissions(t *testing.T) {
 				"list":  true,
 				"watch": false,
 			},
-			wantAllowed: false,
-			wantErr:     false,
+			wantErr:         true,
+			wantPermErr:     true,
+			wantMissingVerb: "watch",
 		},
 		{
-			name: "no permissions granted",
+			name: "no permissions granted - fails fast on get",
 			allowedVerbs: map[string]bool{
 				"get":   false,
 				"list":  false,
 				"watch": false,
 			},
-			wantAllowed: false,
-			wantErr:     false,
+			wantErr:         true,
+			wantPermErr:     true,
+			wantMissingVerb: "get",
 		},
 		{
 			name:            "API error",
 			allowedVerbs:    map[string]bool{},
 			apiError:        errors.New("connection refused"),
-			wantAllowed:     false,
 			wantErr:         true,
+			wantPermErr:     false,
 			wantErrContains: "connection refused",
 		},
 	}
@@ -470,19 +474,26 @@ func TestManager_checkVAPermissions(t *testing.T) {
 			manager := NewManager(log, clientset, 0)
 
 			ctx := t.Context()
-			allowed, err := manager.checkVAPermissions(ctx)
+			err := manager.checkVAPermissions(ctx)
 
-			if tt.wantErr {
-				require.Error(t, err)
-				if tt.wantErrContains != "" {
-					require.Contains(t, err.Error(), tt.wantErrContains)
-				}
-				require.False(t, allowed)
+			if !tt.wantErr {
+				require.NoError(t, err)
 				return
 			}
 
-			require.NoError(t, err)
-			require.Equal(t, tt.wantAllowed, allowed)
+			require.Error(t, err)
+
+			if tt.wantPermErr {
+				var permErr *VAPermissionError
+				require.ErrorAs(t, err, &permErr)
+				require.Equal(t, tt.wantMissingVerb, permErr.MissingVerb)
+			} else {
+				var permErr *VAPermissionError
+				require.False(t, errors.As(err, &permErr), "expected non-permission error")
+				if tt.wantErrContains != "" {
+					require.Contains(t, err.Error(), tt.wantErrContains)
+				}
+			}
 		})
 	}
 }

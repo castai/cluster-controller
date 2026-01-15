@@ -67,9 +67,6 @@ func NewDetachmentWaiter(
 	pollInterval time.Duration,
 	defaultTimeout time.Duration,
 ) DetachmentWaiter {
-	if vaIndexer == nil {
-		return nil
-	}
 	if defaultTimeout == 0 {
 		defaultTimeout = DefaultVolumeDetachTimeout
 	}
