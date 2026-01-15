@@ -9,6 +9,7 @@ import (
 
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/helm"
+	"github.com/castai/cluster-controller/internal/informer"
 )
 
 type ActionHandlers map[reflect.Type]ActionHandler
@@ -20,6 +21,7 @@ func NewDefaultActionHandlers(
 	clientset *kubernetes.Clientset,
 	dynamicClient dynamic.Interface,
 	helmClient helm.Client,
+	nodeInformer informer.NodeInformer,
 ) ActionHandlers {
 	return ActionHandlers{
 		reflect.TypeFor[*castai.ActionDeleteNode]():        NewDeleteNodeHandler(log, clientset),
@@ -31,7 +33,7 @@ func NewDefaultActionHandlers(
 		reflect.TypeFor[*castai.ActionChartRollback]():     NewChartRollbackHandler(log, helmClient, k8sVersion),
 		reflect.TypeFor[*castai.ActionDisconnectCluster](): NewDisconnectClusterHandler(log, clientset),
 		reflect.TypeFor[*castai.ActionCheckNodeDeleted]():  NewCheckNodeDeletedHandler(log, clientset),
-		reflect.TypeFor[*castai.ActionCheckNodeStatus]():   NewCheckNodeStatusHandler(log, clientset),
+		reflect.TypeFor[*castai.ActionCheckNodeStatus]():   NewCheckNodeStatusHandler(log, clientset, nodeInformer),
 		reflect.TypeFor[*castai.ActionEvictPod]():          NewEvictPodHandler(log, clientset),
 		reflect.TypeFor[*castai.ActionPatch]():             NewPatchHandler(log, dynamicClient),
 		reflect.TypeFor[*castai.ActionCreate]():            NewCreateHandler(log, dynamicClient),

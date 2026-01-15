@@ -14,18 +14,21 @@ import (
 	"github.com/castai/cluster-controller/internal/informer"
 )
 
-func NewCheckNodeStatusInformerHandler(log logrus.FieldLogger, clientset kubernetes.Interface, informerManager *informer.Manager) ActionHandler {
+func NewCheckNodeStatusInformerHandler(log logrus.FieldLogger, clientset kubernetes.Interface, nodeInformer informer.NodeInformer) ActionHandler {
 	return &checkNodeStatusInformerHandler{
-		log:             log,
-		clientset:       clientset,
-		informerManager: informerManager,
+		log:                     log,
+		clientset:               clientset,
+		informer:                nodeInformer,
+		checkNodeDeletedHandler: NewCheckNodeDeletedHandler(log, clientset),
 	}
 }
 
 type checkNodeStatusInformerHandler struct {
-	log             logrus.FieldLogger
-	clientset       kubernetes.Interface
-	informerManager *informer.Manager
+	log       logrus.FieldLogger
+	clientset kubernetes.Interface
+	informer  informer.NodeInformer
+
+	checkNodeDeletedHandler *CheckNodeDeletedHandler
 }
 
 func (h *checkNodeStatusInformerHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
@@ -57,8 +60,7 @@ func (h *checkNodeStatusInformerHandler) Handle(ctx context.Context, action *cas
 		return h.checkNodeReady(ctx, log, req)
 	case castai.ActionCheckNodeStatus_DELETED:
 		log.Info("checking node deleted")
-		a := NewCheckNodeDeletedHandler(h.log, h.clientset)
-		return a.Handle(ctx, &castai.ClusterAction{
+		return h.checkNodeDeletedHandler.Handle(ctx, &castai.ClusterAction{
 			ActionCheckNodeDeleted: &castai.ActionCheckNodeDeleted{
 				NodeName:   req.NodeName,
 				ProviderId: req.ProviderId,
@@ -79,7 +81,7 @@ func (h *checkNodeStatusInformerHandler) checkNodeReady(ctx context.Context, log
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	ready := h.informerManager.GetNodeInformer().Wait(ctx, req.NodeName, func(node *corev1.Node) (bool, error) {
+	ready := h.informer.Wait(ctx, req.NodeName, func(node *corev1.Node) (bool, error) {
 		return isNodeReady(log, node, req.NodeID, req.ProviderId), nil
 	})
 

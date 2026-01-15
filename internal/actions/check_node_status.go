@@ -14,11 +14,15 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/informer"
 )
 
 var _ ActionHandler = &CheckNodeStatusHandler{}
 
-func NewCheckNodeStatusHandler(log logrus.FieldLogger, clientset kubernetes.Interface) *CheckNodeStatusHandler {
+func NewCheckNodeStatusHandler(log logrus.FieldLogger, clientset kubernetes.Interface, nodeInformer informer.NodeInformer) ActionHandler {
+	if nodeInformer != nil {
+		return NewCheckNodeStatusInformerHandler(log, clientset, nodeInformer)
+	}
 	return &CheckNodeStatusHandler{
 		log:                     log,
 		clientset:               clientset,

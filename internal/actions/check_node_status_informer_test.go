@@ -79,7 +79,7 @@ func TestCheckNodeStatusInformerHandler_Handle_Validation(t *testing.T) {
 				}()
 				synctest.Wait()
 
-				h := NewCheckNodeStatusInformerHandler(log, clientSet, infMgr)
+				h := NewCheckNodeStatusInformerHandler(log, clientSet, infMgr.GetNodeInformer())
 				err := h.Handle(t.Context(), tt.action)
 
 				switch {
@@ -311,7 +311,7 @@ func TestCheckNodeStatusInformerHandler_Handle_Ready(t *testing.T) {
 				}()
 				synctest.Wait()
 
-				h := NewCheckNodeStatusInformerHandler(log, clientSet, infMgr)
+				h := NewCheckNodeStatusInformerHandler(log, clientSet, infMgr.GetNodeInformer())
 
 				var handleErr error
 				go func() {

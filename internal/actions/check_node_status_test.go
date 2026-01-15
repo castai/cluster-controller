@@ -191,7 +191,7 @@ func TestCheckNodeStatusHandler_Handle_Deleted(t *testing.T) {
 			log := logrus.New()
 			log.SetLevel(logrus.DebugLevel)
 			h := NewCheckNodeStatusHandler(
-				log, clientSet)
+				log, clientSet, nil)
 			err := h.Handle(context.Background(), tt.args.action)
 			require.ErrorIs(t, err, tt.wantErr, "unexpected error: %v", err)
 		})
@@ -453,7 +453,7 @@ func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
 
 			log := logrus.New()
 			log.SetLevel(logrus.DebugLevel)
-			h := NewCheckNodeStatusHandler(log, clientSet)
+			h := NewCheckNodeStatusHandler(log, clientSet, nil)
 
 			err := h.Handle(context.Background(), tt.args.action)
 			require.ErrorIs(t, err, tt.wantErr, "unexpected error: %v", err)
