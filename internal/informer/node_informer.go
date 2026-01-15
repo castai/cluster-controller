@@ -42,14 +42,12 @@ type nodeInformer struct {
 }
 
 func NewNodeInformer(
-	logger logrus.FieldLogger,
 	informer cache.SharedIndexInformer,
 	lister listerv1.NodeLister,
 ) NodeInformer {
 	n := &nodeInformer{
 		informer: informer,
 		lister:   lister,
-		logger:   logger,
 		tracked:  make(map[string]observable),
 		events:   make(chan any),
 	}

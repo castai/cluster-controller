@@ -22,7 +22,7 @@ func TestNodeInformer_Informer(t *testing.T) {
 
 	log := logrus.New()
 	clientset := fake.NewClientset()
-	manager := NewManager(log, clientset, time.Hour)
+	manager := NewManager(log, clientset, time.Hour, EnableNodeInformer())
 
 	informer := manager.nodes.Informer()
 	lister := manager.nodes.Lister()

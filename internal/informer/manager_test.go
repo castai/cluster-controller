@@ -8,6 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -20,13 +21,19 @@ func TestNewManager(t *testing.T) {
 	log := logrus.New()
 	clientset := fake.NewClientset()
 
-	manager := NewManager(log, clientset, time.Hour)
+	manager := NewManager(log, clientset, time.Hour, EnableNodeInformer(), EnablePodInformer())
 
 	require.NotNil(t, manager)
 	require.NotNil(t, manager.GetFactory())
 	require.NotNil(t, manager.GetNodeInformer())
 	require.NotNil(t, manager.GetPodLister())
 	require.NotNil(t, manager.GetPodInformer())
+
+	// VA getters return nil before Start() because vaAvailable is false by default
+	require.False(t, manager.IsVAAvailable())
+	require.Nil(t, manager.GetVALister())
+	require.Nil(t, manager.GetVAInformer())
+	require.Nil(t, manager.GetVAIndexer())
 }
 
 func TestManager_Start(t *testing.T) {
@@ -72,7 +79,7 @@ func TestManager_Start(t *testing.T) {
 				return ctx, func() {}
 			},
 			wantErr:     true,
-			errContains: "failed to sync informer caches",
+			errContains: "failed to sync node informer cache",
 		},
 	}
 
@@ -84,7 +91,7 @@ func TestManager_Start(t *testing.T) {
 			log.SetLevel(logrus.ErrorLevel)
 
 			clientset := fake.NewClientset(tt.objects...)
-			manager := NewManager(log, clientset, 0)
+			manager := NewManager(log, clientset, 0, EnableNodeInformer(), EnablePodInformer())
 
 			ctx, cancel := tt.setupCtx(t)
 			defer cancel()
@@ -102,7 +109,7 @@ func TestManager_Start(t *testing.T) {
 			require.NoError(t, err)
 			defer manager.Stop()
 
-			nodes, err := manager.GetNodeInformer().Lister().List(labels.Everything())
+			nodes, err := manager.GetPodLister().List(labels.Everything())
 			require.NoError(t, err)
 			require.Len(t, nodes, tt.expectedNodes)
 
@@ -120,7 +127,7 @@ func TestManager_Start_AlreadyStarted(t *testing.T) {
 	log.SetLevel(logrus.ErrorLevel)
 
 	clientset := fake.NewClientset()
-	manager := NewManager(log, clientset, 0)
+	manager := NewManager(log, clientset, 0, EnableNodeInformer(), EnablePodInformer())
 
 	ctx := t.Context()
 
@@ -172,7 +179,7 @@ func TestManager_Stop(t *testing.T) {
 			log.SetLevel(logrus.ErrorLevel)
 
 			clientset := fake.NewClientset()
-			manager := NewManager(log, clientset, 0)
+			manager := NewManager(log, clientset, 0, EnableNodeInformer(), EnablePodInformer())
 
 			tt.setup(t, manager)
 			manager.Stop()
@@ -191,7 +198,7 @@ func TestManager_CacheUpdates(t *testing.T) {
 	}
 
 	clientset := fake.NewClientset(node)
-	manager := NewManager(log, clientset, 0)
+	manager := NewManager(log, clientset, 0, EnableNodeInformer(), EnablePodInformer())
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
@@ -200,7 +207,7 @@ func TestManager_CacheUpdates(t *testing.T) {
 	require.NoError(t, err)
 	defer manager.Stop()
 
-	nodes, err := manager.GetNodeInformer().Lister().List(labels.Everything())
+	nodes, err := manager.GetPodLister().List(labels.Everything())
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
 
@@ -212,7 +219,128 @@ func TestManager_CacheUpdates(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
-	nodes, err = manager.GetNodeInformer().Lister().List(labels.Everything())
+	nodes, err = manager.GetPodLister().List(labels.Everything())
 	require.NoError(t, err)
 	require.Len(t, nodes, 2)
+}
+
+func TestManager_VAInformer(t *testing.T) {
+	t.Parallel()
+
+	log := logrus.New()
+	log.SetLevel(logrus.ErrorLevel)
+
+	// Create a VolumeAttachment
+	va := &storagev1.VolumeAttachment{
+		ObjectMeta: metav1.ObjectMeta{Name: "va-1"},
+		Spec: storagev1.VolumeAttachmentSpec{
+			Attacher: "test-attacher",
+			Source: storagev1.VolumeAttachmentSource{
+				PersistentVolumeName: strPtr("pv-1"),
+			},
+			NodeName: "node-1",
+		},
+	}
+
+	clientset := fake.NewClientset(va)
+	manager := NewManager(log, clientset, 0, WithDefaultVANodeNameIndexer())
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	err := manager.Start(ctx)
+	require.NoError(t, err)
+	defer manager.Stop()
+
+	// VA should be available after successful sync
+	require.True(t, manager.IsVAAvailable())
+
+	// Test lister
+	vas, err := manager.GetVALister().List(labels.Everything())
+	require.NoError(t, err)
+	require.Len(t, vas, 1)
+	require.Equal(t, "va-1", vas[0].Name)
+
+	// Test indexer with node name lookup
+	indexed, err := manager.GetVAIndexer().ByIndex(VANodeNameIndexer, "node-1")
+	require.NoError(t, err)
+	require.Len(t, indexed, 1)
+
+	// Verify no VAs on non-existent node
+	indexed, err = manager.GetVAIndexer().ByIndex(VANodeNameIndexer, "node-2")
+	require.NoError(t, err)
+	require.Len(t, indexed, 0)
+}
+
+func TestManager_VAGetters_WhenUnavailable(t *testing.T) {
+	t.Parallel()
+
+	log := logrus.New()
+	log.SetLevel(logrus.ErrorLevel)
+
+	clientset := fake.NewClientset()
+	manager := NewManager(log, clientset, 0, WithDefaultVANodeNameIndexer())
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	err := manager.Start(ctx)
+	require.NoError(t, err)
+	defer manager.Stop()
+
+	// Normally VA is available after start
+	require.True(t, manager.IsVAAvailable())
+	require.NotNil(t, manager.GetVALister())
+	require.NotNil(t, manager.GetVAInformer())
+	require.NotNil(t, manager.GetVAIndexer())
+
+	// Simulate VA becoming unavailable (e.g., would happen if sync failed)
+	manager.vaAvailable = false
+
+	// All VA getters should return nil when unavailable
+	require.False(t, manager.IsVAAvailable())
+	require.Nil(t, manager.GetVALister())
+	require.Nil(t, manager.GetVAInformer())
+	require.Nil(t, manager.GetVAIndexer())
+}
+
+func TestManager_DisabledInformers(t *testing.T) {
+	t.Parallel()
+
+	log := logrus.New()
+	log.SetLevel(logrus.ErrorLevel)
+
+	clientset := fake.NewClientset()
+	// Create manager WITHOUT enabling node/pod informers
+	manager := NewManager(log, clientset, 0, WithDefaultVANodeNameIndexer())
+
+	// Before start - getters should return nil
+	require.Nil(t, manager.GetNodeLister())
+	require.Nil(t, manager.GetNodeInformer())
+	require.Nil(t, manager.GetPodLister())
+	require.Nil(t, manager.GetPodInformer())
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	// Start should succeed even with disabled informers
+	err := manager.Start(ctx)
+	require.NoError(t, err)
+	defer manager.Stop()
+
+	// After start - getters should still return nil
+	require.Nil(t, manager.GetNodeLister())
+	require.Nil(t, manager.GetNodeInformer())
+	require.Nil(t, manager.GetPodLister())
+	require.Nil(t, manager.GetPodInformer())
+
+	// VA should still work (always enabled)
+	require.True(t, manager.IsVAAvailable())
+	require.NotNil(t, manager.GetVALister())
+	require.NotNil(t, manager.GetVAInformer())
+	require.NotNil(t, manager.GetVAIndexer())
+}
+
+func strPtr(s string) *string {
+	return &s
 }
