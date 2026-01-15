@@ -2,17 +2,20 @@ package informer
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
+	authorizationv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 )
 
 func TestNewManager(t *testing.T) {
@@ -243,6 +246,7 @@ func TestManager_VAInformer(t *testing.T) {
 	}
 
 	clientset := fake.NewClientset(va)
+	mockVAPermissionsAllowed(clientset)
 	manager := NewManager(log, clientset, 0, WithDefaultVANodeNameIndexer())
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
@@ -279,6 +283,7 @@ func TestManager_VAGetters_WhenUnavailable(t *testing.T) {
 	log.SetLevel(logrus.ErrorLevel)
 
 	clientset := fake.NewClientset()
+	mockVAPermissionsAllowed(clientset)
 	manager := NewManager(log, clientset, 0, WithDefaultVANodeNameIndexer())
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
@@ -311,6 +316,7 @@ func TestManager_DisabledInformers(t *testing.T) {
 	log.SetLevel(logrus.ErrorLevel)
 
 	clientset := fake.NewClientset()
+	mockVAPermissionsAllowed(clientset)
 	// Create manager WITHOUT enabling node/pod informers
 	manager := NewManager(log, clientset, 0, WithDefaultVANodeNameIndexer())
 
@@ -343,4 +349,223 @@ func TestManager_DisabledInformers(t *testing.T) {
 
 func strPtr(s string) *string {
 	return &s
+}
+
+// mockVAPermissionsAllowed sets up a reactor to allow all VA permissions (get, list, watch).
+func mockVAPermissionsAllowed(clientset *fake.Clientset) {
+	clientset.PrependReactor("create", "selfsubjectaccessreviews",
+		func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
+			return true, &authorizationv1.SelfSubjectAccessReview{
+				Status: authorizationv1.SubjectAccessReviewStatus{
+					Allowed: true,
+				},
+			}, nil
+		})
+}
+
+func TestManager_checkVAPermissions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		allowedVerbs    map[string]bool // verb -> allowed
+		apiError        error           // error to return from API
+		wantErr         bool
+		wantPermErr     bool   // expect *VAPermissionError
+		wantMissingVerb string // expected missing verb in VAPermissionError
+		wantErrContains string
+	}{
+		{
+			name: "all permissions granted",
+			allowedVerbs: map[string]bool{
+				"get":   true,
+				"list":  true,
+				"watch": true,
+			},
+			wantErr: false,
+		},
+		{
+			name: "missing get permission",
+			allowedVerbs: map[string]bool{
+				"get":   false,
+				"list":  true,
+				"watch": true,
+			},
+			wantErr:         true,
+			wantPermErr:     true,
+			wantMissingVerb: "get",
+		},
+		{
+			name: "missing list permission",
+			allowedVerbs: map[string]bool{
+				"get":   true,
+				"list":  false,
+				"watch": true,
+			},
+			wantErr:         true,
+			wantPermErr:     true,
+			wantMissingVerb: "list",
+		},
+		{
+			name: "missing watch permission",
+			allowedVerbs: map[string]bool{
+				"get":   true,
+				"list":  true,
+				"watch": false,
+			},
+			wantErr:         true,
+			wantPermErr:     true,
+			wantMissingVerb: "watch",
+		},
+		{
+			name: "no permissions granted - fails fast on get",
+			allowedVerbs: map[string]bool{
+				"get":   false,
+				"list":  false,
+				"watch": false,
+			},
+			wantErr:         true,
+			wantPermErr:     true,
+			wantMissingVerb: "get",
+		},
+		{
+			name:            "API error",
+			allowedVerbs:    map[string]bool{},
+			apiError:        errors.New("connection refused"),
+			wantErr:         true,
+			wantPermErr:     false,
+			wantErrContains: "connection refused",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			log := logrus.New()
+			log.SetLevel(logrus.ErrorLevel)
+
+			clientset := fake.NewClientset()
+
+			// Mock SelfSubjectAccessReview responses
+			clientset.PrependReactor("create", "selfsubjectaccessreviews",
+				func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
+					if tt.apiError != nil {
+						return true, nil, tt.apiError
+					}
+
+					createAction := action.(k8stesting.CreateAction)
+					sar := createAction.GetObject().(*authorizationv1.SelfSubjectAccessReview)
+					verb := sar.Spec.ResourceAttributes.Verb
+
+					allowed, exists := tt.allowedVerbs[verb]
+					if !exists {
+						allowed = false
+					}
+
+					return true, &authorizationv1.SelfSubjectAccessReview{
+						Status: authorizationv1.SubjectAccessReviewStatus{
+							Allowed: allowed,
+						},
+					}, nil
+				})
+
+			manager := NewManager(log, clientset, 0)
+
+			ctx := t.Context()
+			err := manager.checkVAPermissions(ctx)
+
+			if !tt.wantErr {
+				require.NoError(t, err)
+				return
+			}
+
+			require.Error(t, err)
+
+			if tt.wantPermErr {
+				var permErr *VAPermissionError
+				require.ErrorAs(t, err, &permErr)
+				require.Equal(t, tt.wantMissingVerb, permErr.MissingVerb)
+			} else {
+				var permErr *VAPermissionError
+				require.False(t, errors.As(err, &permErr), "expected non-permission error")
+				if tt.wantErrContains != "" {
+					require.Contains(t, err.Error(), tt.wantErrContains)
+				}
+			}
+		})
+	}
+}
+
+func TestManager_Start_VAPermissionsDenied(t *testing.T) {
+	t.Parallel()
+
+	log := logrus.New()
+	log.SetLevel(logrus.ErrorLevel)
+
+	clientset := fake.NewClientset()
+
+	// Mock SelfSubjectAccessReview to deny watch permission
+	clientset.PrependReactor("create", "selfsubjectaccessreviews",
+		func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
+			createAction := action.(k8stesting.CreateAction)
+			sar := createAction.GetObject().(*authorizationv1.SelfSubjectAccessReview)
+			verb := sar.Spec.ResourceAttributes.Verb
+
+			// Allow get and list, but deny watch
+			allowed := verb == "get" || verb == "list"
+
+			return true, &authorizationv1.SelfSubjectAccessReview{
+				Status: authorizationv1.SubjectAccessReviewStatus{
+					Allowed: allowed,
+				},
+			}, nil
+		})
+
+	manager := NewManager(log, clientset, 0)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	// Start should succeed (VA failure is graceful)
+	err := manager.Start(ctx)
+	require.NoError(t, err)
+	defer manager.Stop()
+
+	// VA should NOT be available due to missing permissions
+	require.False(t, manager.IsVAAvailable())
+	require.Nil(t, manager.GetVALister())
+	require.Nil(t, manager.GetVAInformer())
+	require.Nil(t, manager.GetVAIndexer())
+}
+
+func TestManager_Start_VAPermissionsCheckFailed(t *testing.T) {
+	t.Parallel()
+
+	log := logrus.New()
+	log.SetLevel(logrus.ErrorLevel)
+
+	clientset := fake.NewClientset()
+
+	// Mock SelfSubjectAccessReview to return an error
+	clientset.PrependReactor("create", "selfsubjectaccessreviews",
+		func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
+			return true, nil, errors.New("API server unavailable")
+		})
+
+	manager := NewManager(log, clientset, 0)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	// Start should succeed (VA failure is graceful)
+	err := manager.Start(ctx)
+	require.NoError(t, err)
+	defer manager.Stop()
+
+	// VA should NOT be available due to API error
+	require.False(t, manager.IsVAAvailable())
+	require.Nil(t, manager.GetVALister())
+	require.Nil(t, manager.GetVAInformer())
+	require.Nil(t, manager.GetVAIndexer())
 }
