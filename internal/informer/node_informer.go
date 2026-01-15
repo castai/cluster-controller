@@ -103,8 +103,9 @@ func (n *nodeInformer) stop() {
 	}
 	n.registration = nil
 
-	for name := range n.tracked {
+	for name, observable := range n.tracked {
 		delete(n.tracked, name)
+		close(observable.done)
 	}
 }
 
@@ -161,11 +162,13 @@ func (n *nodeInformer) Wait(ctx context.Context, name string, condition Predicat
 		<-ctx.Done()
 		n.mu.Lock()
 		defer n.mu.Unlock()
-		_, exists := n.tracked[name]
+		o, exists := n.tracked[name]
 		if !exists {
 			return
 		}
 		delete(n.tracked, name)
+		o.done <- ctx.Err()
+		close(o.done)
 	}(name)
 
 	return done

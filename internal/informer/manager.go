@@ -159,16 +159,16 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.log.Info("starting shared informer factory...")
 	m.factory.Start(ctx.Done())
 
-	if err := m.nodes.Start(ctx); err != nil {
-		cancel()
-		return fmt.Errorf("starting node informer: %w", err)
-	}
-
 	syncCtx, syncCancel := context.WithTimeout(ctx, m.cacheSyncTimeout)
 	defer syncCancel()
 
 	// Sync optional node/pod informers - fail if enabled but don't sync
 	if m.nodes != nil {
+		if err := m.nodes.Start(ctx); err != nil {
+			cancel()
+			return fmt.Errorf("starting node informer: %w", err)
+		}
+
 		m.log.Info("waiting for node informer cache to sync...")
 		if !cache.WaitForCacheSync(syncCtx.Done(), m.nodes.HasSynced) {
 			cancel()
@@ -348,7 +348,7 @@ func (m *Manager) checkVAPermissions(ctx context.Context) error {
 }
 
 func (m *Manager) addIndexers() error {
-	if m.nodes.Indexers() != nil {
+	if m.nodes != nil && m.nodes.Indexers() != nil {
 		if err := m.nodes.Informer().AddIndexers(m.nodes.Indexers()); err != nil {
 			return fmt.Errorf("adding node indexers: %w", err)
 		}

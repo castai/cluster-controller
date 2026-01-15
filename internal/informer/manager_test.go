@@ -210,7 +210,7 @@ func TestManager_CacheUpdates(t *testing.T) {
 	require.NoError(t, err)
 	defer manager.Stop()
 
-	nodes, err := manager.GetPodLister().List(labels.Everything())
+	nodes, err := manager.GetNodeLister().List(labels.Everything())
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
 
@@ -222,7 +222,7 @@ func TestManager_CacheUpdates(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
-	nodes, err = manager.GetPodLister().List(labels.Everything())
+	nodes, err = manager.GetNodeLister().List(labels.Everything())
 	require.NoError(t, err)
 	require.Len(t, nodes, 2)
 }

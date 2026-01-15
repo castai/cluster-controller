@@ -69,7 +69,7 @@ func TestCheckNodeStatusInformerHandler_Handle_Validation(t *testing.T) {
 				log := logrus.New()
 				log.SetLevel(logrus.DebugLevel)
 
-				infMgr := informer.NewManager(log, clientSet, 10*time.Minute)
+				infMgr := informer.NewManager(log, clientSet, 10*time.Minute, informer.EnableNodeInformer())
 
 				ctx, cancel := context.WithCancel(t.Context())
 				t.Cleanup(cancel)
@@ -298,7 +298,7 @@ func TestCheckNodeStatusInformerHandler_Handle_Ready(t *testing.T) {
 				log := logrus.New()
 				log.SetLevel(logrus.DebugLevel)
 
-				infMgr := informer.NewManager(log, clientSet, 10*time.Minute)
+				infMgr := informer.NewManager(log, clientSet, 10*time.Minute, informer.EnableNodeInformer())
 
 				ctx, cancel := context.WithCancel(t.Context())
 				t.Cleanup(func() {

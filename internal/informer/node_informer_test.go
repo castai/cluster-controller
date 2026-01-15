@@ -32,6 +32,7 @@ func TestNodeInformer_Informer(t *testing.T) {
 	require.NotNil(t, lister)
 }
 
+//nolint:gocognit
 func TestNodeInformer_Wait(t *testing.T) {
 	t.Parallel()
 
@@ -152,14 +153,14 @@ func TestNodeInformer_Wait(t *testing.T) {
 			wantErr:      conditionError,
 		},
 		{
-			name:              "context cancelled with node ready in cache returns success",
+			name:              "context canceled with node ready in cache returns success",
 			initialNodes:      []*corev1.Node{nodeReady},
 			condition:         conditionReady,
 			cancelWaitContext: true,
 			wantErr:           nil,
 		},
 		{
-			name:              "context cancelled without node returns cancelled error",
+			name:              "context canceled without node returns canceled error",
 			initialNodes:      nil,
 			condition:         conditionReady,
 			cancelWaitContext: true,
@@ -201,7 +202,7 @@ func TestNodeInformer_Wait(t *testing.T) {
 				log := logrus.New()
 				log.SetLevel(logrus.DebugLevel)
 
-				infMgr := NewManager(log, clientSet, 10*time.Minute)
+				infMgr := NewManager(log, clientSet, 10*time.Minute, EnableNodeInformer())
 
 				ctx, cancel := context.WithCancel(t.Context())
 				t.Cleanup(func() {
@@ -224,7 +225,7 @@ func TestNodeInformer_Wait(t *testing.T) {
 				}
 
 				var waitErr error
-				var channelOpen bool = true
+				channelOpen := true
 				waitDone := infMgr.GetNodeInformer().Wait(waitCtx, "test-node", tt.condition)
 
 				go func() {
@@ -302,7 +303,7 @@ func TestNodeInformer_Wait_DuplicateTracking(t *testing.T) {
 		log := logrus.New()
 		log.SetLevel(logrus.DebugLevel)
 
-		infMgr := NewManager(log, clientSet, 10*time.Minute)
+		infMgr := NewManager(log, clientSet, 10*time.Minute, EnableNodeInformer())
 
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(func() {
@@ -352,7 +353,7 @@ func TestNodeInformer_Wait_ContextCancelledCleanup(t *testing.T) {
 		log := logrus.New()
 		log.SetLevel(logrus.DebugLevel)
 
-		infMgr := NewManager(log, clientSet, 10*time.Minute)
+		infMgr := NewManager(log, clientSet, 10*time.Minute, EnableNodeInformer())
 
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(func() {
@@ -408,7 +409,7 @@ func TestNodeInformer_OnEvent_MultipleNodes(t *testing.T) {
 		log := logrus.New()
 		log.SetLevel(logrus.DebugLevel)
 
-		infMgr := NewManager(log, clientSet, 10*time.Minute)
+		infMgr := NewManager(log, clientSet, 10*time.Minute, EnableNodeInformer())
 
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(func() {
