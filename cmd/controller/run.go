@@ -404,7 +404,7 @@ func getVADetachWaiter(log *logrus.Entry, cfg config.Config, clientset kubernete
 		return nil
 	}
 
-	vaWaiter := volume.NewDetachmentWaiter(clientset, vaIndexer, 5*time.Second, cfg.Drain.VolumeDetachDefaultTimeout)
+	vaWaiter := volume.NewDetachmentWaiter(clientset, vaIndexer, 5*time.Second, cfg.VolumeAttachment.DefaultTimeout)
 	log.Info("VolumeAttachment informer synced, VA wait feature enabled")
 
 	return vaWaiter

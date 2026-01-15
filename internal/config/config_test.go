@@ -20,7 +20,7 @@ func TestConfig(t *testing.T) {
 	t.Setenv("LEADER_ELECTION_LOCK_NAME", "castai-cluster-controller")
 	t.Setenv("LEADER_ELECTION_LEASE_DURATION", "25s")
 	t.Setenv("LEADER_ELECTION_LEASE_RENEW_DEADLINE", "20s")
-	t.Setenv("DRAIN_VOLUME_DETACH_DEFAULT_TIMEOUT", "2m")
+	t.Setenv("VOLUME_ATTACHMENT_DEFAULT_TIMEOUT", "2m")
 	t.Setenv("METRICS_PORT", "16000")
 
 	cfg := Get()
@@ -55,8 +55,9 @@ func TestConfig(t *testing.T) {
 			ExportEnabled:  false,
 			ExportInterval: 30 * time.Second,
 		},
-		Drain: Drain{
-			VolumeDetachDefaultTimeout: 2 * time.Minute,
+		Drain: Drain{},
+		VolumeAttachment: VolumeAttachment{
+			DefaultTimeout: 2 * time.Minute,
 		},
 		Informer: Informer{
 			CacheSyncTimeout: 1 * time.Minute,
