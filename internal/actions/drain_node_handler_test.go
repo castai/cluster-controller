@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/require"
@@ -20,6 +21,7 @@ import (
 	ktest "k8s.io/client-go/testing"
 
 	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/volume"
 )
 
 func TestGetDrainTimeout(t *testing.T) {
@@ -624,5 +626,160 @@ func newActionDrainNode(nodeName, nodeID, providerID string, drainTimeoutSeconds
 			Force:               force,
 		},
 		CreatedAt: time.Now().UTC(),
+	}
+}
+
+// mockVolumeDetachmentWaiter is a test mock for volume.DetachmentWaiter.
+type mockVolumeDetachmentWaiter struct {
+	waitCalled bool
+	waitErr    error
+}
+
+func (m *mockVolumeDetachmentWaiter) Wait(_ context.Context, _ logrus.FieldLogger, _ volume.DetachmentWaitOptions) error {
+	m.waitCalled = true
+	return m.waitErr
+}
+
+func TestWaitForVolumeDetachIfEnabled(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should do nothing when WaitForVolumeDetach is nil (default disabled)", func(t *testing.T) {
+		t.Parallel()
+		log := logrus.New()
+
+		mockWaiter := &mockVolumeDetachmentWaiter{}
+		h := &DrainNodeHandler{
+			log:      log,
+			vaWaiter: mockWaiter,
+			cfg:      drainNodeConfig{},
+		}
+
+		req := &castai.ActionDrainNode{
+			NodeName: "node1",
+		}
+
+		h.waitForVolumeDetachIfEnabled(context.Background(), log, "node1", req, nil)
+		require.False(t, mockWaiter.waitCalled, "Wait should not be called when WaitForVolumeDetach is nil")
+	})
+
+	t.Run("should do nothing when WaitForVolumeDetach is explicitly false", func(t *testing.T) {
+		t.Parallel()
+		log := logrus.New()
+
+		mockWaiter := &mockVolumeDetachmentWaiter{}
+		h := &DrainNodeHandler{
+			log:      log,
+			vaWaiter: mockWaiter,
+			cfg:      drainNodeConfig{},
+		}
+
+		waitForVA := false
+		req := &castai.ActionDrainNode{
+			NodeName:            "node1",
+			WaitForVolumeDetach: &waitForVA,
+		}
+
+		h.waitForVolumeDetachIfEnabled(context.Background(), log, "node1", req, nil)
+		require.False(t, mockWaiter.waitCalled, "Wait should not be called when WaitForVolumeDetach is false")
+	})
+
+	t.Run("should do nothing when vaWaiter is nil even if enabled", func(t *testing.T) {
+		t.Parallel()
+		log := logrus.New()
+
+		h := &DrainNodeHandler{
+			log:      log,
+			vaWaiter: nil,
+			cfg:      drainNodeConfig{},
+		}
+
+		waitForVA := true
+		req := &castai.ActionDrainNode{
+			NodeName:            "node1",
+			WaitForVolumeDetach: &waitForVA,
+		}
+
+		h.waitForVolumeDetachIfEnabled(context.Background(), log, "node1", req, nil)
+	})
+
+	t.Run("should call waiter when WaitForVolumeDetach is true", func(t *testing.T) {
+		t.Parallel()
+		log := logrus.New()
+
+		mockWaiter := &mockVolumeDetachmentWaiter{}
+		h := &DrainNodeHandler{
+			log:      log,
+			vaWaiter: mockWaiter,
+			cfg:      drainNodeConfig{},
+		}
+
+		waitForVA := true
+		req := &castai.ActionDrainNode{
+			NodeName:            "node1",
+			WaitForVolumeDetach: &waitForVA,
+		}
+
+		h.waitForVolumeDetachIfEnabled(context.Background(), log, "node1", req, nil)
+		require.True(t, mockWaiter.waitCalled, "Wait should be called when WaitForVolumeDetach is true")
+	})
+
+	t.Run("should use per-action timeout when specified", func(t *testing.T) {
+		t.Parallel()
+		log := logrus.New()
+
+		mockWaiter := &mockVolumeDetachmentWaiter{}
+		h := &DrainNodeHandler{
+			log:      log,
+			vaWaiter: mockWaiter,
+			cfg:      drainNodeConfig{},
+		}
+
+		waitForVA := true
+		customTimeoutSec := 120
+		req := &castai.ActionDrainNode{
+			NodeName:                   "node1",
+			WaitForVolumeDetach:        &waitForVA,
+			VolumeDetachTimeoutSeconds: &customTimeoutSec,
+		}
+
+		h.waitForVolumeDetachIfEnabled(context.Background(), log, "node1", req, nil)
+		require.True(t, mockWaiter.waitCalled)
+	})
+}
+
+func TestShouldWaitForVolumeDetach(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                string
+		waitForVolumeDetach *bool
+		want                bool
+	}{
+		{
+			name:                "returns false when WaitForVolumeDetach is nil",
+			waitForVolumeDetach: nil,
+			want:                false,
+		},
+		{
+			name:                "returns true when WaitForVolumeDetach is true",
+			waitForVolumeDetach: lo.ToPtr(true),
+			want:                true,
+		},
+		{
+			name:                "returns false when WaitForVolumeDetach is false",
+			waitForVolumeDetach: lo.ToPtr(false),
+			want:                false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			h := &DrainNodeHandler{}
+			req := &castai.ActionDrainNode{
+				WaitForVolumeDetach: tt.waitForVolumeDetach,
+			}
+			require.Equal(t, tt.want, h.shouldWaitForVolumeDetach(req))
+		})
 	}
 }

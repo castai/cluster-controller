@@ -33,9 +33,11 @@ import (
 	"github.com/castai/cluster-controller/internal/controller/logexporter"
 	"github.com/castai/cluster-controller/internal/controller/metricexporter"
 	"github.com/castai/cluster-controller/internal/helm"
+	"github.com/castai/cluster-controller/internal/informer"
 	"github.com/castai/cluster-controller/internal/k8sversion"
 	"github.com/castai/cluster-controller/internal/metrics"
 	"github.com/castai/cluster-controller/internal/monitor"
+	"github.com/castai/cluster-controller/internal/volume"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
 
@@ -132,6 +134,30 @@ func runController(
 
 	log.Infof("running castai-cluster-controller version %v, log-level: %v", binVersion, logger.Level)
 
+	informerOpts := []informer.Option{
+		informer.WithCacheSyncTimeout(cfg.Informer.CacheSyncTimeout),
+		informer.WithDefaultVANodeNameIndexer(),
+	}
+	if cfg.Informer.EnableNode {
+		informerOpts = append(informerOpts, informer.EnableNodeInformer())
+	}
+	if cfg.Informer.EnablePod {
+		informerOpts = append(informerOpts, informer.EnablePodInformer())
+	}
+
+	informerManager := informer.NewManager(
+		log,
+		clientset,
+		12*time.Hour, // resync period, every which the whole informer cache is refreshed
+		informerOpts...,
+	)
+	if err := informerManager.Start(ctx); err != nil {
+		return fmt.Errorf("starting informer manager: %w", err)
+	}
+	defer informerManager.Stop()
+
+	vaWaiter := getVADetachWaiter(log, cfg, clientset, informerManager)
+
 	actionHandlers := actions.NewDefaultActionHandlers(
 		k8sVer.Full(),
 		cfg.SelfPod.Namespace,
@@ -139,6 +165,7 @@ func runController(
 		clientset,
 		dynamicClient,
 		helmClient,
+		vaWaiter,
 	)
 
 	actionsConfig := controller.Config{
@@ -363,6 +390,24 @@ func runningOnGKE(clientset *kubernetes.Clientset, cfg config.Config) (bool, err
 	})
 
 	return isGKE, err
+}
+
+func getVADetachWaiter(log *logrus.Entry, cfg config.Config, clientset kubernetes.Interface, informerManager *informer.Manager) volume.DetachmentWaiter {
+	if cfg.Drain.DisableVolumeDetachWait {
+		log.Info("VA wait feature disabled by configuration")
+		return nil
+	}
+
+	vaIndexer := informerManager.GetVAIndexer()
+	if informerManager.GetVAIndexer() == nil {
+		log.Info("VolumeAttachment informer not enabled, VA wait feature will be disabled even if requested by API")
+		return nil
+	}
+
+	vaWaiter := volume.NewDetachmentWaiter(clientset, vaIndexer, 5*time.Second, cfg.VolumeAttachment.DefaultTimeout)
+	log.Info("VolumeAttachment informer synced, VA wait feature enabled")
+
+	return vaWaiter
 }
 
 func saveMetadata(clusterID string, cfg config.Config, log *logrus.Entry) error {

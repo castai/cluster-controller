@@ -18,15 +18,18 @@ import (
 )
 
 type Config struct {
-	Log            Log
-	API            API
-	TLS            TLS
-	Kubeconfig     string
-	KubeClient     KubeClient
-	ClusterID      string
-	PprofPort      int
-	Metrics        Metrics
-	LeaderElection LeaderElection
+	Log              Log
+	API              API
+	TLS              TLS
+	Kubeconfig       string
+	KubeClient       KubeClient
+	ClusterID        string
+	PprofPort        int
+	Metrics          Metrics
+	LeaderElection   LeaderElection
+	Drain            Drain
+	VolumeAttachment VolumeAttachment
+	Informer         Informer
 	// AutoscalingDisabled is a flag to disable approving csr.
 	AutoscalingDisabled bool `mapstructure:"autoscaling_disabled"`
 	// MaxActionsInProgress serves as a safeguard to limit the number of Goroutines in progress.
@@ -79,6 +82,24 @@ type KubeClient struct {
 	Burst int
 }
 
+type Drain struct {
+	// DisableVolumeDetachWait disables waiting for volume detach during node drain, ignoring
+	// per action settings.
+	DisableVolumeDetachWait bool `mapstructure:"disablevolumedetachwait"`
+}
+
+type VolumeAttachment struct {
+	// DefaultTimeout is the default timeout for waiting for VolumeAttachments to detach.
+	// Used if not specified in the drain action.
+	DefaultTimeout time.Duration `mapstructure:"defaulttimeout"`
+}
+
+type Informer struct {
+	EnablePod        bool          `mapstructure:"enablepod"`
+	EnableNode       bool          `mapstructure:"enablenode"`
+	CacheSyncTimeout time.Duration `mapstructure:"cachesynctimeout"`
+}
+
 var cfg *Config
 
 // Get configuration bound to environment variables.
@@ -109,6 +130,11 @@ func Get() Config {
 	_ = viper.BindEnv("metrics.port", "METRICS_PORT")
 	_ = viper.BindEnv("metrics.exportenabled", "METRICS_EXPORT_ENABLED")
 	_ = viper.BindEnv("metrics.exportinterval", "METRICS_EXPORT_INTERVAL")
+	_ = viper.BindEnv("drain.disablevolumedetachwait", "DRAIN_DISABLE_VOLUME_DETACH_WAIT")
+	_ = viper.BindEnv("volumeattachment.defaulttimeout", "VOLUME_ATTACHMENT_DEFAULT_TIMEOUT")
+	_ = viper.BindEnv("informer.enablepod", "INFORMER_ENABLE_POD")
+	_ = viper.BindEnv("informer.enablenode", "INFORMER_ENABLE_NODE")
+	_ = viper.BindEnv("informer.cachesynctimeout", "INFORMER_CACHE_SYNC_TIMEOUT")
 
 	cfg = &Config{}
 	if err := viper.Unmarshal(&cfg); err != nil {
@@ -171,6 +197,14 @@ func Get() Config {
 		// We do not want to export metrics too often
 		// and also protect against accidental misconfiguration.
 		cfg.Metrics.ExportInterval = 30 * time.Second
+	}
+
+	if cfg.VolumeAttachment.DefaultTimeout == 0 {
+		cfg.VolumeAttachment.DefaultTimeout = 60 * time.Second
+	}
+
+	if cfg.Informer.CacheSyncTimeout == 0 {
+		cfg.Informer.CacheSyncTimeout = 1 * time.Minute
 	}
 
 	return *cfg

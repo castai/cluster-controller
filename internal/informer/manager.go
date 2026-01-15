@@ -3,12 +3,15 @@ package informer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
+	authorizationv1 "k8s.io/api/authorization/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	listerv1 "k8s.io/client-go/listers/core/v1"
@@ -22,10 +25,21 @@ const (
 	defaultCacheSyncTimeout = 30 * time.Second
 )
 
+// VAPermissionError indicates that required RBAC permissions for VolumeAttachments are missing.
+type VAPermissionError struct {
+	// MissingVerb is the verb that was denied (e.g., "get", "list", "watch").
+	MissingVerb string
+}
+
+func (e *VAPermissionError) Error() string {
+	return fmt.Sprintf("missing '%s' permission for volumeattachments.storage.k8s.io", e.MissingVerb)
+}
+
 // Manager manages the global SharedInformerFactory and provides
 // access to specific informers and listers.
 type Manager struct {
 	log              logrus.FieldLogger
+	clientset        kubernetes.Interface
 	factory          informers.SharedInformerFactory
 	cacheSyncTimeout time.Duration
 
@@ -118,6 +132,7 @@ func NewManager(
 
 	m := &Manager{
 		log:               log,
+		clientset:         clientset,
 		factory:           factory,
 		cacheSyncTimeout:  defaultCacheSyncTimeout,
 		nodes:             nil,
@@ -175,24 +190,45 @@ func (m *Manager) Start(ctx context.Context) error {
 		m.log.Info("pod informer cache synced successfully")
 	}
 
-	// Sync optional VA informer - log warning if it fails (e.g., missing RBAC permissions)
-	m.log.Info("waiting for VolumeAttachment informer cache to sync...")
-	if !cache.WaitForCacheSync(syncCtx.Done(), m.volumeAttachments.HasSynced) {
-		m.log.Warn("VolumeAttachment informer failed to sync (missing RBAC permissions?). " +
-			"VA wait feature will be disabled. Restart controller after granting permissions.")
-		metrics.IncrementInformerCacheSyncs("volumeattachment", "failed")
-		m.vaAvailable = false
-	} else {
-		metrics.IncrementInformerCacheSyncs("volumeattachment", "success")
-		m.log.Info("VolumeAttachment informer cache synced successfully")
-		m.vaAvailable = true
-	}
+	// Check VA permissions and sync informer
+	m.vaAvailable = m.syncVAInformer(ctx, syncCtx)
 
 	m.started = true
 
 	go m.reportCacheSize(ctx)
 
 	return nil
+}
+
+// syncVAInformer checks RBAC permissions and syncs the VolumeAttachment informer.
+// Returns true if the VA informer is available and synced successfully, false otherwise.
+func (m *Manager) syncVAInformer(ctx, syncCtx context.Context) bool {
+	m.log.Info("checking VolumeAttachment RBAC permissions...")
+	if err := m.checkVAPermissions(ctx); err != nil {
+		var permErr *VAPermissionError
+		if errors.As(err, &permErr) {
+			m.log.Warnf("%v. VA wait feature will be disabled. "+
+				"Grant get/list/watch permissions on volumeattachments.storage.k8s.io "+
+				"and restart controller.", permErr)
+			metrics.IncrementInformerCacheSyncs("volumeattachment", "rbac_denied")
+		} else {
+			m.log.Warnf("failed to verify VolumeAttachment permissions: %v. "+
+				"VA wait feature will be disabled.", err)
+			metrics.IncrementInformerCacheSyncs("volumeattachment", "rbac_check_failed")
+		}
+		return false
+	}
+
+	m.log.Info("waiting for VolumeAttachment informer cache to sync...")
+	if !cache.WaitForCacheSync(syncCtx.Done(), m.volumeAttachments.HasSynced) {
+		m.log.Warn("VolumeAttachment informer failed to sync. VA wait feature will be disabled.")
+		metrics.IncrementInformerCacheSyncs("volumeattachment", "sync_failed")
+		return false
+	}
+
+	metrics.IncrementInformerCacheSyncs("volumeattachment", "success")
+	m.log.Info("VolumeAttachment informer cache synced successfully")
+	return true
 }
 
 // Stop gracefully stops the informer factory.
@@ -280,6 +316,39 @@ func (m *Manager) GetFactory() informers.SharedInformerFactory {
 	return m.factory
 }
 
+// checkVAPermissions verifies the service account has required permissions for VolumeAttachments.
+// Returns nil if all permissions are available.
+// Returns *VAPermissionError if any permission is missing (fails fast on first missing).
+// Returns wrapped error if the permission check itself fails.
+func (m *Manager) checkVAPermissions(ctx context.Context) error {
+	requiredVerbs := []string{"get", "list", "watch"}
+
+	for _, verb := range requiredVerbs {
+		sar := &authorizationv1.SelfSubjectAccessReview{
+			Spec: authorizationv1.SelfSubjectAccessReviewSpec{
+				ResourceAttributes: &authorizationv1.ResourceAttributes{
+					Group:    "storage.k8s.io",
+					Resource: "volumeattachments",
+					Verb:     verb,
+				},
+			},
+		}
+
+		result, err := m.clientset.AuthorizationV1().SelfSubjectAccessReviews().Create(
+			ctx, sar, metav1.CreateOptions{})
+		if err != nil {
+			return fmt.Errorf("checking '%s' permission for volumeattachments: %w", verb, err)
+		}
+
+		if !result.Status.Allowed {
+			return &VAPermissionError{MissingVerb: verb}
+		}
+	}
+
+	m.log.Debug("all VolumeAttachment permissions verified: get, list, watch")
+	return nil
+}
+
 func (m *Manager) addIndexers() error {
 	if m.nodes != nil && m.nodes.indexers != nil {
 		if err := m.nodes.informer.AddIndexers(m.nodes.indexers); err != nil {
@@ -322,7 +391,7 @@ func (m *Manager) reportCacheSize(ctx context.Context) {
 				metrics.SetInformerCacheSize("pod", size)
 			}
 
-			if m.volumeAttachments != nil {
+			if m.vaAvailable {
 				vas := m.volumeAttachments.Informer().GetStore().ListKeys()
 				size := len(vas)
 				m.log.WithField("cache_size", size).Debug("volumeattachment informer cache size")
