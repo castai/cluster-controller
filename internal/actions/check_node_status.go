@@ -2,7 +2,6 @@ package actions
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"reflect"
 	"slices"
@@ -13,24 +12,25 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	v1 "k8s.io/client-go/kubernetes/typed/core/v1"
 
 	"github.com/castai/cluster-controller/internal/castai"
-	"github.com/castai/cluster-controller/internal/waitext"
 )
 
 var _ ActionHandler = &CheckNodeStatusHandler{}
 
 func NewCheckNodeStatusHandler(log logrus.FieldLogger, clientset kubernetes.Interface) *CheckNodeStatusHandler {
 	return &CheckNodeStatusHandler{
-		log:       log,
-		clientset: clientset,
+		log:                     log,
+		clientset:               clientset,
+		checkNodeDeletedHandler: NewCheckNodeDeletedHandler(log, clientset),
 	}
 }
 
 type CheckNodeStatusHandler struct {
 	log       logrus.FieldLogger
 	clientset kubernetes.Interface
+
+	checkNodeDeletedHandler *CheckNodeDeletedHandler
 }
 
 func (h *CheckNodeStatusHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
@@ -63,58 +63,16 @@ func (h *CheckNodeStatusHandler) Handle(ctx context.Context, action *castai.Clus
 		return h.checkNodeReady(ctx, log, req)
 	case castai.ActionCheckNodeStatus_DELETED:
 		log.Info("checking node deleted")
-		return h.checkNodeDeleted(ctx, log, req)
+		return h.checkNodeDeletedHandler.Handle(ctx, &castai.ClusterAction{
+			ActionCheckNodeDeleted: &castai.ActionCheckNodeDeleted{
+				NodeName:   req.NodeName,
+				ProviderId: req.ProviderId,
+				NodeID:     req.NodeID,
+			},
+		})
 	}
 
 	return fmt.Errorf("unknown status to check provided node=%s status=%s", req.NodeName, req.NodeStatus)
-}
-
-func (h *CheckNodeStatusHandler) checkNodeDeleted(ctx context.Context, log *logrus.Entry, req *castai.ActionCheckNodeStatus) error {
-	timeout := 10
-	if req.WaitTimeoutSeconds != nil {
-		timeout = int(*req.WaitTimeoutSeconds)
-	}
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
-	defer cancel()
-
-	b := waitext.DefaultExponentialBackoff()
-	return waitext.Retry(
-		ctx,
-		b,
-		waitext.Forever,
-		func(ctx context.Context) (bool, error) {
-			return checkNodeDeleted(ctx, h.clientset.CoreV1().Nodes(), req.NodeName, req.NodeID, req.ProviderId, log)
-		},
-		func(err error) {
-			log.Warnf("check node %s status failed, will retry: %v", req.NodeName, err)
-		},
-	)
-}
-
-func checkNodeDeleted(ctx context.Context, clientSet v1.NodeInterface, nodeName, nodeID, providerID string, log logrus.FieldLogger) (bool, error) {
-	// If node is nil - deleted
-	// If providerID or label have mismatch, then it's reused and deleted
-	// If label is present and matches - node is not deleted
-	// All other use cases can be found in tests
-	n, err := getNodeByIDs(ctx, clientSet, nodeName, nodeID, providerID, log)
-	if errors.Is(err, errNodeDoesNotMatch) {
-		// it means that node with given name exists, but it does not match requested node ID or provider ID.
-		return false, nil
-	}
-
-	if errors.Is(err, errNodeNotFound) {
-		return false, nil
-	}
-
-	if err != nil {
-		return true, err
-	}
-
-	if n == nil {
-		return false, nil
-	}
-
-	return false, errNodeNotDeleted
 }
 
 func (h *CheckNodeStatusHandler) checkNodeReady(ctx context.Context, _ *logrus.Entry, req *castai.ActionCheckNodeStatus) error {
