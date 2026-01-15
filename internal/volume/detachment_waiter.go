@@ -24,7 +24,7 @@ const (
 type DetachmentWaitOptions struct {
 	NodeName string
 	// Timeout is the maximum time to wait for volumes to detach.
-	// If zero, defaults to DefaultVolumeDetachTimeout (1 minute).
+	// If zero, the waiter's default timeout is used.
 	Timeout time.Duration
 
 	// PodsToExclude are pods whose VolumeAttachments should not be waited for
@@ -36,7 +36,7 @@ type DetachmentWaitOptions struct {
 type DetachmentWaiter interface {
 	// Wait waits for all VolumeAttachments on the specified node to be deleted.
 	// VolumeAttachments belonging to opts.PodsToExclude are not waited for.
-	// If opts.Timeout is zero, defaults to DefaultVolumeDetachTimeout.
+	// If opts.Timeout is zero, the waiter's default timeout is used.
 	// Returns nil on success.
 	// Returns error on timeout, unexpected failures or context cancellation.
 	Wait(ctx context.Context, log logrus.FieldLogger, opts DetachmentWaitOptions) error
@@ -51,25 +51,33 @@ func (e *DetachmentError) Error() string {
 }
 
 type detachmentWaiter struct {
-	clientset    kubernetes.Interface
-	vaIndexer    cache.Indexer
-	pollInterval time.Duration
+	clientset      kubernetes.Interface
+	vaIndexer      cache.Indexer
+	pollInterval   time.Duration
+	defaultTimeout time.Duration
 }
 
 // NewDetachmentWaiter creates a new DetachmentWaiter.
 // Returns nil if vaIndexer is nil.
+// defaultTimeout is the timeout to use when DetachmentWaitOptions.Timeout is zero.
+// If defaultTimeout is zero, DefaultVolumeDetachTimeout is used.
 func NewDetachmentWaiter(
 	clientset kubernetes.Interface,
 	vaIndexer cache.Indexer,
 	pollInterval time.Duration,
+	defaultTimeout time.Duration,
 ) DetachmentWaiter {
 	if vaIndexer == nil {
 		return nil
 	}
+	if defaultTimeout == 0 {
+		defaultTimeout = DefaultVolumeDetachTimeout
+	}
 	return &detachmentWaiter{
-		clientset:    clientset,
-		vaIndexer:    vaIndexer,
-		pollInterval: pollInterval,
+		clientset:      clientset,
+		vaIndexer:      vaIndexer,
+		pollInterval:   pollInterval,
+		defaultTimeout: defaultTimeout,
 	}
 }
 
@@ -81,7 +89,7 @@ func (w *detachmentWaiter) Wait(
 ) error {
 	timeout := opts.Timeout
 	if timeout == 0 {
-		timeout = DefaultVolumeDetachTimeout
+		timeout = w.defaultTimeout
 	}
 
 	excludedPVs := w.getExcludedPVsForNode(ctx, log, opts.PodsToExclude)

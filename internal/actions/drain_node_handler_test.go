@@ -690,9 +690,7 @@ func TestWaitForVolumeDetachIfEnabled(t *testing.T) {
 		h := &DrainNodeHandler{
 			log:      log,
 			vaWaiter: nil,
-			cfg: drainNodeConfig{
-				volumeDetachTimeout: 1 * time.Second,
-			},
+			cfg:      drainNodeConfig{},
 		}
 
 		waitForVA := true
@@ -712,9 +710,7 @@ func TestWaitForVolumeDetachIfEnabled(t *testing.T) {
 		h := &DrainNodeHandler{
 			log:      log,
 			vaWaiter: mockWaiter,
-			cfg: drainNodeConfig{
-				volumeDetachTimeout: 2 * time.Second,
-			},
+			cfg:      drainNodeConfig{},
 		}
 
 		waitForVA := true
@@ -735,9 +731,7 @@ func TestWaitForVolumeDetachIfEnabled(t *testing.T) {
 		h := &DrainNodeHandler{
 			log:      log,
 			vaWaiter: mockWaiter,
-			cfg: drainNodeConfig{
-				volumeDetachTimeout: 60 * time.Second,
-			},
+			cfg:      drainNodeConfig{},
 		}
 
 		waitForVA := true
@@ -747,9 +741,6 @@ func TestWaitForVolumeDetachIfEnabled(t *testing.T) {
 			WaitForVolumeDetach:        &waitForVA,
 			VolumeDetachTimeoutSeconds: &customTimeoutSec,
 		}
-
-		timeout := h.getVolumeDetachTimeout(req)
-		require.Equal(t, 120*time.Second, timeout)
 
 		h.waitForVolumeDetachIfEnabled(context.Background(), log, "node1", req, nil)
 		require.True(t, mockWaiter.waitCalled)
@@ -789,51 +780,6 @@ func TestShouldWaitForVolumeDetach(t *testing.T) {
 				WaitForVolumeDetach: tt.waitForVolumeDetach,
 			}
 			require.Equal(t, tt.want, h.shouldWaitForVolumeDetach(req))
-		})
-	}
-}
-
-func TestGetVolumeDetachTimeout(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name           string
-		defaultTimeout time.Duration
-		actionTimeout  *int
-		want           time.Duration
-	}{
-		{
-			name:           "returns default when VolumeDetachTimeoutSeconds is nil",
-			defaultTimeout: 60 * time.Second,
-			actionTimeout:  nil,
-			want:           60 * time.Second,
-		},
-		{
-			name:           "returns default when VolumeDetachTimeoutSeconds is 0",
-			defaultTimeout: 60 * time.Second,
-			actionTimeout:  lo.ToPtr(0),
-			want:           60 * time.Second,
-		},
-		{
-			name:           "returns per-action timeout when set",
-			defaultTimeout: 60 * time.Second,
-			actionTimeout:  lo.ToPtr(120),
-			want:           120 * time.Second,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			h := &DrainNodeHandler{
-				cfg: drainNodeConfig{
-					volumeDetachTimeout: tt.defaultTimeout,
-				},
-			}
-			req := &castai.ActionDrainNode{
-				VolumeDetachTimeoutSeconds: tt.actionTimeout,
-			}
-			require.Equal(t, tt.want, h.getVolumeDetachTimeout(req))
 		})
 	}
 }

@@ -67,7 +67,7 @@ func TestNewDetachmentWaiter(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			r := require.New(t)
 
-			waiter := NewDetachmentWaiter(fake.NewClientset(), nil, 5*time.Second)
+			waiter := NewDetachmentWaiter(fake.NewClientset(), nil, 5*time.Second, 0)
 			r.Nil(waiter)
 		})
 	})
@@ -77,7 +77,7 @@ func TestNewDetachmentWaiter(t *testing.T) {
 			r := require.New(t)
 
 			vaIndexer, clientset := newTestWaiterVAInformer(t, nil)
-			waiter := NewDetachmentWaiter(clientset, vaIndexer, 5*time.Second)
+			waiter := NewDetachmentWaiter(clientset, vaIndexer, 5*time.Second, 0)
 			r.NotNil(waiter)
 		})
 	})
@@ -92,7 +92,7 @@ func TestDetachmentWaiter_Wait(t *testing.T) {
 			log := logrus.New()
 
 			vaIndexer, clientset := newTestWaiterVAInformer(t, nil)
-			waiter := NewDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
+			waiter := NewDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond, 0)
 
 			err := waiter.Wait(context.Background(), log, DetachmentWaitOptions{
 				NodeName: "node1",
@@ -115,7 +115,7 @@ func TestDetachmentWaiter_Wait(t *testing.T) {
 				},
 			}
 			vaIndexer, clientset := newTestWaiterVAInformer(t, []*storagev1.VolumeAttachment{va})
-			waiter := NewDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
+			waiter := NewDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond, 0)
 
 			go func() {
 				time.Sleep(100 * time.Millisecond)
@@ -143,7 +143,7 @@ func TestDetachmentWaiter_Wait(t *testing.T) {
 				},
 			}
 			vaIndexer, clientset := newTestWaiterVAInformer(t, []*storagev1.VolumeAttachment{va})
-			waiter := NewDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
+			waiter := NewDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond, 0)
 
 			err := waiter.Wait(context.Background(), log, DetachmentWaitOptions{
 				NodeName: "node1",
@@ -169,7 +169,7 @@ func TestDetachmentWaiter_Wait(t *testing.T) {
 				},
 			}
 			vaIndexer, clientset := newTestWaiterVAInformer(t, []*storagev1.VolumeAttachment{va})
-			waiter := NewDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
+			waiter := NewDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond, 0)
 
 			ctx, cancel := context.WithCancel(context.Background())
 
@@ -207,7 +207,7 @@ func TestDetachmentWaiter_Wait(t *testing.T) {
 			}
 
 			vaIndexer, clientset := newTestWaiterVAInformer(t, []*storagev1.VolumeAttachment{vaNode1, vaNode2})
-			waiter := NewDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
+			waiter := NewDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond, 0)
 
 			go func() {
 				time.Sleep(100 * time.Millisecond)
@@ -269,7 +269,7 @@ func TestDetachmentWaiter_Wait(t *testing.T) {
 			}
 
 			vaIndexer, clientset := newTestWaiterVAInformer(t, []*storagev1.VolumeAttachment{vaFromDS, vaFromRegular}, pvc)
-			waiter := NewDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
+			waiter := NewDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond, 0)
 
 			go func() {
 				time.Sleep(100 * time.Millisecond)
@@ -332,7 +332,7 @@ func TestDetachmentWaiter_Wait(t *testing.T) {
 			}
 
 			vaIndexer, clientset := newTestWaiterVAInformer(t, []*storagev1.VolumeAttachment{vaFromStatic, vaFromRegular}, pvc)
-			waiter := NewDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond)
+			waiter := NewDetachmentWaiter(clientset, vaIndexer, 50*time.Millisecond, 0)
 
 			go func() {
 				time.Sleep(100 * time.Millisecond)

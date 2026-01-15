@@ -39,14 +39,12 @@ type drainNodeConfig struct {
 	podsTerminationWaitRetryDelay time.Duration
 	castNamespace                 string
 	skipDeletedTimeoutSeconds     int
-	volumeDetachTimeout           time.Duration
 }
 
 func NewDrainNodeHandler(
 	log logrus.FieldLogger,
 	clientset kubernetes.Interface,
 	castNamespace string,
-	volumeDetachTimeout time.Duration,
 	vaWaiter volume.DetachmentWaiter,
 ) *DrainNodeHandler {
 	return &DrainNodeHandler{
@@ -61,7 +59,6 @@ func NewDrainNodeHandler(
 			podsTerminationWaitRetryDelay: 10 * time.Second,
 			castNamespace:                 castNamespace,
 			skipDeletedTimeoutSeconds:     60,
-			volumeDetachTimeout:           volumeDetachTimeout,
 		},
 	}
 }
@@ -218,15 +215,6 @@ func (h *DrainNodeHandler) shouldWaitForVolumeDetach(req *castai.ActionDrainNode
 	return false
 }
 
-// getVolumeDetachTimeout returns the timeout for waiting for VolumeAttachments.
-// Uses per-action value if set, otherwise falls back to env var default.
-func (h *DrainNodeHandler) getVolumeDetachTimeout(req *castai.ActionDrainNode) time.Duration {
-	if req.VolumeDetachTimeoutSeconds != nil && *req.VolumeDetachTimeoutSeconds > 0 {
-		return time.Duration(*req.VolumeDetachTimeoutSeconds) * time.Second
-	}
-	return h.cfg.volumeDetachTimeout
-}
-
 // waitForVolumeDetachIfEnabled waits for VolumeAttachments to be deleted if the feature is enabled.
 // This is called after successful drain to give CSI drivers time to clean up volumes.
 // nonEvictablePods are pods that won't be evicted (DaemonSet, static) - their VAs are excluded from waiting.
@@ -235,9 +223,15 @@ func (h *DrainNodeHandler) waitForVolumeDetachIfEnabled(ctx context.Context, log
 		return
 	}
 
+	// Use per-action timeout if set, otherwise waiter will use its default.
+	var timeout time.Duration
+	if req.VolumeDetachTimeoutSeconds != nil && *req.VolumeDetachTimeoutSeconds > 0 {
+		timeout = time.Duration(*req.VolumeDetachTimeoutSeconds) * time.Second
+	}
+
 	if err := h.vaWaiter.Wait(ctx, log, volume.DetachmentWaitOptions{
 		NodeName:      nodeName,
-		Timeout:       h.getVolumeDetachTimeout(req),
+		Timeout:       timeout,
 		PodsToExclude: nonEvictablePods,
 	}); err != nil {
 		log.Warnf("error waiting for volume detachment: %v", err)

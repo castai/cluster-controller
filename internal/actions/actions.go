@@ -2,7 +2,6 @@ package actions
 
 import (
 	"reflect"
-	"time"
 
 	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/dynamic"
@@ -12,11 +11,6 @@ import (
 	"github.com/castai/cluster-controller/internal/helm"
 	"github.com/castai/cluster-controller/internal/volume"
 )
-
-// DrainConfig holds configuration for node drain operations.
-type DrainConfig struct {
-	VolumeDetachTimeout time.Duration
-}
 
 type ActionHandlers map[reflect.Type]ActionHandler
 
@@ -28,11 +22,10 @@ func NewDefaultActionHandlers(
 	dynamicClient dynamic.Interface,
 	helmClient helm.Client,
 	vaWaiter volume.DetachmentWaiter,
-	drainCfg DrainConfig,
 ) ActionHandlers {
 	return ActionHandlers{
 		reflect.TypeFor[*castai.ActionDeleteNode]():        NewDeleteNodeHandler(log, clientset),
-		reflect.TypeFor[*castai.ActionDrainNode]():         NewDrainNodeHandler(log, clientset, castNamespace, drainCfg.VolumeDetachTimeout, vaWaiter),
+		reflect.TypeFor[*castai.ActionDrainNode]():         NewDrainNodeHandler(log, clientset, castNamespace, vaWaiter),
 		reflect.TypeFor[*castai.ActionPatchNode]():         NewPatchNodeHandler(log, clientset),
 		reflect.TypeFor[*castai.ActionCreateEvent]():       NewCreateEventHandler(log, clientset),
 		reflect.TypeFor[*castai.ActionChartUpsert]():       NewChartUpsertHandler(log, helmClient),

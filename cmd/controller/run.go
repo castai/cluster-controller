@@ -166,9 +166,6 @@ func runController(
 		dynamicClient,
 		helmClient,
 		vaWaiter,
-		actions.DrainConfig{
-			VolumeDetachTimeout: cfg.Drain.VolumeDetachDefaultTimeout,
-		},
 	)
 
 	actionsConfig := controller.Config{
@@ -401,7 +398,7 @@ func getVADetachWaiter(log *logrus.Entry, cfg config.Config, clientset kubernete
 		return nil
 	}
 
-	vaWaiter := volume.NewDetachmentWaiter(clientset, informerManager.GetVAIndexer(), 5*time.Second)
+	vaWaiter := volume.NewDetachmentWaiter(clientset, informerManager.GetVAIndexer(), 5*time.Second, cfg.Drain.VolumeDetachDefaultTimeout)
 	if vaWaiter == nil {
 		log.Warn("VA waiter not available, VA wait feature will be disabled even if requested by API")
 	} else {
