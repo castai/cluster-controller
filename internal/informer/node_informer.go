@@ -159,30 +159,16 @@ func (n *nodeInformer) Wait(ctx context.Context, name string, condition Predicat
 		condition: condition,
 	}
 
-	go func() {
-		select {
-		case <-ctx.Done():
-			n.mu.Lock()
-			defer n.mu.Unlock()
-			observable, exists := n.tracked[name]
-			if !exists {
-				return
-			}
-			delete(n.tracked, name)
-
-			node, err := n.lister.Get(name)
-			if err == nil {
-				ok, err := observable.condition(node)
-				if ok {
-					observable.done <- err
-					return
-				}
-			}
-			observable.done <- ctx.Err()
-		case <-done:
+	go func(name string) {
+		<-ctx.Done()
+		n.mu.Lock()
+		defer n.mu.Unlock()
+		_, exists := n.tracked[name]
+		if !exists {
 			return
 		}
-	}()
+		delete(n.tracked, name)
+	}(name)
 
 	return done
 }
