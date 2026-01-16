@@ -88,10 +88,10 @@ func (h *checkNodeStatusInformerHandler) checkNodeReady(ctx context.Context, log
 	select {
 	case err := <-ready:
 		if err != nil {
-			h.log.Errorf("checking node ready error: %v", err)
+			log.Errorf("checking node ready error: %v", err)
 			return err
 		}
-		h.log.Infof("node becamed ready from informer")
+		log.Infof("node becamed ready from informer")
 		return nil
 	case <-ctx.Done():
 		return fmt.Errorf("timeout waiting for node to be ready: %w", ctx.Err())
