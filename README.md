@@ -94,6 +94,22 @@ Option 1. Deploy controller in Kind cluster.
 
 See [docs](loadtest/README.md)
 
+## Releasing
+
+Releases are managed via GitHub Releases and trigger the CI pipeline to build and push Docker images.
+
+### Full Release
+Creating a regular GitHub release (not marked as pre-release) will:
+- Build and push the image with the release tag (e.g., `v1.2.3`)
+- Update the `latest` tag to point to this release
+
+### Pre-release
+Creating a GitHub pre-release allows testing a release candidate without affecting the `latest` tag:
+- Build and push the image with the release tag only (e.g., `v1.2.3-rc1`)
+- The `latest` tag remains unchanged
+
+Use pre-releases when you want to publish a tagged image for testing but keep `latest` pointing to the current stable release.
+
 ## Community
 
 * [Twitter](https://twitter.com/cast_ai)
