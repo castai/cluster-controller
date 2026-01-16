@@ -55,7 +55,7 @@ func NewNodeInformer(
 }
 
 func (n *nodeInformer) Start(ctx context.Context) error {
-	err := n.register(n.events)
+	err := n.register()
 	if err != nil {
 		return err
 	}
@@ -63,13 +63,13 @@ func (n *nodeInformer) Start(ctx context.Context) error {
 	return nil
 }
 
-func (n *nodeInformer) register(events chan any) error {
+func (n *nodeInformer) register() error {
 	r, err := n.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
-			events <- obj
+			n.onEvent(obj)
 		},
 		UpdateFunc: func(oldObj, newObj any) {
-			events <- newObj
+			n.onEvent(newObj)
 		},
 	})
 	if err != nil {
@@ -80,18 +80,8 @@ func (n *nodeInformer) register(events chan any) error {
 }
 
 func (n *nodeInformer) run(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			n.stop()
-			return
-		case object, ok := <-n.events:
-			if !ok {
-				return
-			}
-			n.onEvent(ctx, object)
-		}
-	}
+	<-ctx.Done()
+	n.stop()
 }
 
 func (n *nodeInformer) stop() {
@@ -109,7 +99,7 @@ func (n *nodeInformer) stop() {
 	}
 }
 
-func (n *nodeInformer) onEvent(_ context.Context, object any) {
+func (n *nodeInformer) onEvent(object any) {
 	node, ok := object.(*corev1.Node)
 	if !ok {
 		return
