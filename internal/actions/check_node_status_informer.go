@@ -87,22 +87,11 @@ func (h *checkNodeStatusInformerHandler) checkNodeReady(ctx context.Context, log
 
 	select {
 	case err := <-ready:
+		if err != nil {
+			h.log.WithField("node_id", req.NodeID).Infof("node becamed ready from informer")
+		}
 		return err
 	case <-ctx.Done():
 		return fmt.Errorf("timeout waiting for node to be ready: %w", ctx.Err())
-	}
-}
-
-func (h *checkNodeStatusInformerHandler) handleNodeReadyEvent(obj any, req *castai.ActionCheckNodeStatus, ready chan struct{}, log *logrus.Entry, eventType string) {
-	node, ok := obj.(*corev1.Node)
-	if !ok || node.Name != req.NodeName {
-		return
-	}
-	if isNodeReady(h.log, node, req.NodeID, req.ProviderId) {
-		log.Infof("node became ready (%s)", eventType)
-		select {
-		case ready <- struct{}{}:
-		default:
-		}
 	}
 }
