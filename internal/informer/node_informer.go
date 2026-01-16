@@ -59,7 +59,7 @@ func (n *nodeInformer) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	go n.run(ctx)
+	go n.waitStop(ctx)
 	return nil
 }
 
@@ -79,7 +79,7 @@ func (n *nodeInformer) register() error {
 	return nil
 }
 
-func (n *nodeInformer) run(ctx context.Context) {
+func (n *nodeInformer) waitStop(ctx context.Context) {
 	<-ctx.Done()
 	n.stop()
 }
