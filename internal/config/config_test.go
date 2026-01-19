@@ -62,6 +62,14 @@ func TestConfig(t *testing.T) {
 		Informer: Informer{
 			CacheSyncTimeout: 1 * time.Minute,
 		},
+		SchedulingGates: SchedulingGates{
+			Enabled: false,
+		},
+		PodMonitor: PodMonitor{
+			Enabled:  false,
+			Interval: 10 * time.Second,
+			Duration: 5 * time.Minute,
+		},
 	}
 
 	require.Equal(t, expected, cfg)

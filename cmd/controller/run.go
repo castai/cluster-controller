@@ -32,11 +32,13 @@ import (
 	"github.com/castai/cluster-controller/internal/controller"
 	"github.com/castai/cluster-controller/internal/controller/logexporter"
 	"github.com/castai/cluster-controller/internal/controller/metricexporter"
+	"github.com/castai/cluster-controller/internal/gates"
 	"github.com/castai/cluster-controller/internal/helm"
 	"github.com/castai/cluster-controller/internal/informer"
 	"github.com/castai/cluster-controller/internal/k8sversion"
 	"github.com/castai/cluster-controller/internal/metrics"
 	"github.com/castai/cluster-controller/internal/monitor"
+	"github.com/castai/cluster-controller/internal/podmonitor"
 	"github.com/castai/cluster-controller/internal/volume"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
@@ -198,6 +200,52 @@ func runController(
 	if cfg.Metrics.ExportEnabled {
 		metricExporter := metricexporter.New(log, client, cfg.Metrics.ExportInterval)
 		go metricExporter.Run(ctx)
+	}
+
+	// Start scheduling gate manager if enabled
+	if cfg.SchedulingGates.Enabled {
+		nodeInformer := informerManager.GetNodeInformer()
+		podLister := informerManager.GetPodLister()
+		if nodeInformer == nil || podLister == nil {
+			log.Warn("scheduling gates enabled but node/pod informers not available, skipping")
+		} else {
+			gateManager := gates.NewManager(
+				log,
+				clientset,
+				nodeInformer,
+				podLister,
+				gates.Config{Enabled: true},
+			)
+			if err := gateManager.Start(ctx); err != nil {
+				log.WithError(err).Error("failed to start scheduling gate manager")
+			}
+		}
+	}
+
+	// Start pod monitor if enabled
+	if cfg.PodMonitor.Enabled {
+		podLister := informerManager.GetPodLister()
+		nodeLister := informerManager.GetNodeLister()
+		if podLister == nil || nodeLister == nil {
+			log.Warn("pod monitor enabled but pod/node listers not available, skipping")
+		} else {
+			podMon := podmonitor.NewMonitor(
+				log,
+				clientset,
+				podLister,
+				nodeLister,
+				podmonitor.Config{
+					Enabled:  true,
+					Interval: cfg.PodMonitor.Interval,
+					Duration: cfg.PodMonitor.Duration,
+				},
+			)
+			go func() {
+				if err := podMon.Start(ctx); err != nil {
+					log.WithError(err).Error("pod monitor stopped with error")
+				}
+			}()
+		}
 	}
 
 	httpMux := http.NewServeMux()

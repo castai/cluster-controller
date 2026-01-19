@@ -30,6 +30,8 @@ type Config struct {
 	Drain            Drain
 	VolumeAttachment VolumeAttachment
 	Informer         Informer
+	SchedulingGates  SchedulingGates
+	PodMonitor       PodMonitor
 	// AutoscalingDisabled is a flag to disable approving csr.
 	AutoscalingDisabled bool `mapstructure:"autoscaling_disabled"`
 	// MaxActionsInProgress serves as a safeguard to limit the number of Goroutines in progress.
@@ -100,6 +102,16 @@ type Informer struct {
 	CacheSyncTimeout time.Duration `mapstructure:"cachesynctimeout"`
 }
 
+type SchedulingGates struct {
+	Enabled bool `mapstructure:"enabled"`
+}
+
+type PodMonitor struct {
+	Enabled  bool          `mapstructure:"enabled"`
+	Interval time.Duration `mapstructure:"interval"`
+	Duration time.Duration `mapstructure:"duration"`
+}
+
 var cfg *Config
 
 // Get configuration bound to environment variables.
@@ -135,6 +147,10 @@ func Get() Config {
 	_ = viper.BindEnv("informer.enablepod", "INFORMER_ENABLE_POD")
 	_ = viper.BindEnv("informer.enablenode", "INFORMER_ENABLE_NODE")
 	_ = viper.BindEnv("informer.cachesynctimeout", "INFORMER_CACHE_SYNC_TIMEOUT")
+	_ = viper.BindEnv("schedulinggates.enabled", "SCHEDULING_GATES_ENABLED")
+	_ = viper.BindEnv("podmonitor.enabled", "POD_MONITOR_ENABLED")
+	_ = viper.BindEnv("podmonitor.interval", "POD_MONITOR_INTERVAL")
+	_ = viper.BindEnv("podmonitor.duration", "POD_MONITOR_DURATION")
 
 	cfg = &Config{}
 	if err := viper.Unmarshal(&cfg); err != nil {
@@ -205,6 +221,14 @@ func Get() Config {
 
 	if cfg.Informer.CacheSyncTimeout == 0 {
 		cfg.Informer.CacheSyncTimeout = 1 * time.Minute
+	}
+
+	if cfg.PodMonitor.Interval == 0 {
+		cfg.PodMonitor.Interval = 10 * time.Second
+	}
+
+	if cfg.PodMonitor.Duration == 0 {
+		cfg.PodMonitor.Duration = 5 * time.Minute
 	}
 
 	return *cfg
