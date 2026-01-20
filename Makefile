@@ -49,4 +49,4 @@ generate-e2e-client:
 .PHONY: generate-e2e-client
 
 deploy-loadtest: release
-	IMAGE_REPOSITORY=$(DOCKER_REPOSITORY) IMAGE_TAG=$(VERSION) ./hack/loadtest/deploy.sh
+	IMAGE_REPOSITORY=$(DOCKER_REPOSITORY) IMAGE_TAG=$(VERSION) ./hack/loadtest/deploy.sh $(LOADTEST_VALUES_FILE)
