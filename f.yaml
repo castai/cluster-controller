@@ -1,0 +1,2 @@
+additionalEnv:
+  INFORMER_ENABLE_NODE: "true"

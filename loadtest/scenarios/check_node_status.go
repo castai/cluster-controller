@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math"
 	"sync"
 	"time"
 
@@ -43,7 +42,7 @@ func (s *checkNodeStatusScenario) Preparation(ctx context.Context, namespace str
 	var lock sync.Mutex
 	errGroup, ctx := errgroup.WithContext(ctx)
 
-	nodeCount := int(math.Ceil(float64(s.actionCount) / nodeTestsCountOptimizeFactor))
+	nodeCount := s.actionCount
 
 	for i := range nodeCount {
 		errGroup.Go(func() error {
@@ -113,6 +112,8 @@ func (s *checkNodeStatusScenario) Run(ctx context.Context, _ string, _ kubernete
 			ActionCheckNodeStatus: &castai.ActionCheckNodeStatus{
 				NodeName:   node.Name,
 				NodeStatus: castai.ActionCheckNodeStatus_READY,
+				ProviderId: node.Name,
+				NodeID:     node.Name,
 			},
 		})
 	}

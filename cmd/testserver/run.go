@@ -51,36 +51,55 @@ func run(ctx context.Context) error {
 	// Choose scenarios below by adding/removing/etc. instances of scenarios.XXX()
 	// All scenarios in the list run in parallel (but not necessarily at the same time if preparation takes different time).
 	testScenarios := []scenarios.TestScenario{
-		scenarios.CheckNodeDeletedStuck(300, logger),
+		scenarios.CheckNodeStatus(5000, logger),
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(len(testScenarios))
-	errs := make(chan error, len(testScenarios))
+	logger.Info("Starting continuous test scenario execution")
 
-	for i, test := range testScenarios {
-		go func() {
-			defer wg.Done()
-			logger.Info(fmt.Sprintf("Starting test scenario %d", i))
+	iteration := 0
+	for {
+		iteration++
+		logger.Info(fmt.Sprintf("Starting iteration %d", iteration))
 
-			err := scenarios.RunScenario(ctx, test, testServer, logger, clientSet)
-			errs <- err
-		}()
-	}
+		var wg sync.WaitGroup
+		wg.Add(len(testScenarios))
+		errs := make(chan error, len(testScenarios))
 
-	logger.Info("Waiting for test scenarios to finish")
-	wg.Wait()
+		for i, test := range testScenarios {
+			go func(scenarioIndex int, scenario scenarios.TestScenario) {
+				defer wg.Done()
+				logger.Info(fmt.Sprintf("Starting test scenario %d in iteration %d", scenarioIndex, iteration))
 
-	close(errs)
-	receivedErrors := make([]error, 0)
-	for err := range errs {
-		if err != nil {
-			receivedErrors = append(receivedErrors, err)
+				err := scenarios.RunScenario(ctx, scenario, testServer, logger, clientSet)
+				errs <- err
+			}(i, test)
+		}
+
+		logger.Info(fmt.Sprintf("Waiting for test scenarios to finish in iteration %d", iteration))
+		wg.Wait()
+
+		close(errs)
+		receivedErrors := make([]error, 0)
+		for err := range errs {
+			if err != nil {
+				receivedErrors = append(receivedErrors, err)
+			}
+		}
+
+		if len(receivedErrors) > 0 {
+			logger.Error(fmt.Sprintf("Iteration %d completed with (%d) errors: %v", iteration, len(receivedErrors), errors.Join(receivedErrors...)))
+		} else {
+			logger.Info(fmt.Sprintf("Iteration %d completed successfully", iteration))
+		}
+
+		logger.Info("Waiting 1 minute before next iteration")
+		select {
+		case <-time.After(5 * time.Minute):
+		case <-ctx.Done():
+			logger.Info("Context canceled, stopping test scenarios")
+			return ctx.Err()
 		}
 	}
-	logger.Info(fmt.Sprintf("All test scenarios are done, received (%d) errors, exiting", len(receivedErrors)))
-
-	return errors.Join(receivedErrors...)
 }
 
 func createK8SClients(cfg loadtest.Config, logger *slog.Logger) (*kubernetes.Clientset, *dynamic.DynamicClient, *apiextensionsclientset.Clientset, helm.Client, error) {
