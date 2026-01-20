@@ -14,13 +14,13 @@ echo "Deploying kwok"
 helm repo add kwok https://kwok.sigs.k8s.io/charts/
 helm repo update kwok
 
-helm upgrade --namespace castai-agent --create-namespace  --install kwok kwok/kwok --set replicas="$KWOK_REPLICAS"
-helm upgrade --namespace castai-agent --create-namespace  --install kwok-stages kwok/stage-fast
-helm upgrade --namespace castai-agent --create-namespace  --install kwok-metrics kwok/metrics-usage
+helm upgrade --namespace castai-agent --create-namespace --install kwok kwok/kwok --set replicas="$KWOK_REPLICAS"
+helm upgrade --namespace castai-agent --create-namespace --install kwok-stages kwok/stage-fast
+helm upgrade --namespace castai-agent --create-namespace --install kwok-metrics kwok/metrics-usage
 
 if [ "$DEPLOY_CLUSTER_CONTROLLER" = "true" ]; then
   echo "Deploying cluster controller"
-  helm upgrade --namespace castai-agent --create-namespace --install  cluster-controller castai-helm/castai-cluster-controller \
+  helm upgrade --namespace castai-agent --create-namespace --install -f f.yaml cluster-controller castai-helm/castai-cluster-controller \
     --set castai.apiKey="dummy" \
     --set castai.apiURL="http://castai-loadtest-agent-service.castai-agent.svc.cluster.local.:8080" \
     --set castai.clusterID="00000000-0000-0000-0000-000000000000" \
@@ -31,6 +31,6 @@ if [ "$DEPLOY_CLUSTER_CONTROLLER" = "true" ]; then
 fi
 
 echo "Deploying load testing components"
-kubectl kustomize "$SCRIPT_DIR" | \
-  LOADTEST_REPOSITORY="$LOAD_TEST_IMAGE_REPOSITORY" LOADTEST_TAG="$LOAD_TEST_IMAGE_TAG" envsubst \$LOADTEST_REPOSITORY,\$LOADTEST_TAG | \
+kubectl kustomize "$SCRIPT_DIR" |
+  LOADTEST_REPOSITORY="$LOAD_TEST_IMAGE_REPOSITORY" LOADTEST_TAG="$LOAD_TEST_IMAGE_TAG" envsubst \$LOADTEST_REPOSITORY,\$LOADTEST_TAG |
   kubectl apply -f -

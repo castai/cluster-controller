@@ -76,6 +76,7 @@ func NewKwokNode(cfg KwokConfig, nodeName string) *corev1.Node {
 					Effect: corev1.TaintEffectNoSchedule,
 				},
 			},
+			ProviderID: nodeName,
 		},
 		Status: corev1.NodeStatus{
 			Allocatable: corev1.ResourceList{
