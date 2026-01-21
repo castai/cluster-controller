@@ -69,10 +69,10 @@ func TestConfig(t *testing.T) {
 
 func TestConfig_CastNamespacePrecedence(t *testing.T) {
 	tests := []struct {
-		name                       string
-		castNamespace              string
-		leaderElectionNamespace    string
-		expectedNamespace          string
+		name                    string
+		castNamespace           string
+		leaderElectionNamespace string
+		expectedNamespace       string
 	}{
 		{
 			name:                    "CAST_NAMESPACE takes precedence when both are set",
