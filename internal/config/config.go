@@ -124,7 +124,7 @@ func Get() Config {
 	_ = viper.BindEnv("monitor_metadata", "MONITOR_METADATA")
 	_ = viper.BindEnv("self_pod.node", "KUBERNETES_NODE_NAME")
 	_ = viper.BindEnv("self_pod.name", "KUBERNETES_POD")
-	_ = viper.BindEnv("self_pod.namespace", "LEADER_ELECTION_NAMESPACE")
+	_ = viper.BindEnv("self_pod.namespace", "CAST_NAMESPACE", "LEADER_ELECTION_NAMESPACE")
 	_ = viper.BindEnv("max_action_in_progress", "MAX_ACTIONS_IN_PROGRESS")
 	_ = viper.BindEnv("autoscaling_disabled", "AUTOSCALING_DISABLED")
 	_ = viper.BindEnv("metrics.port", "METRICS_PORT")
@@ -162,9 +162,9 @@ func Get() Config {
 	}
 
 	if cfg.SelfPod.Namespace == "" {
-		// LEADER_ELECTION_NAMESPACE exists for backwards compatibility.
-		// But we use the namespace even without leader election so it's required.
-		required("self_pod.namespace or LEADER_ELECTION_NAMESPACE")
+		// LEADER_ELECTION_NAMESPACE fallback exists for backwards compatibility.
+		// The namespace is used even without leader election so it's required.
+		required("CAST_NAMESPACE")
 	}
 
 	if cfg.LeaderElection.Enabled {
