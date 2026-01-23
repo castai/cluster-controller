@@ -43,7 +43,7 @@ type Manager struct {
 	factory          informers.SharedInformerFactory
 	cacheSyncTimeout time.Duration
 
-	nodes             *nodeInformer
+	nodes             NodeInformer
 	pods              *podInformer
 	volumeAttachments *vaInformer
 
@@ -74,24 +74,17 @@ func EnablePodInformer() Option {
 
 func EnableNodeInformer() Option {
 	return func(m *Manager) {
-		m.nodes = &nodeInformer{
-			informer: m.factory.Core().V1().Nodes().Informer(),
-			lister:   m.factory.Core().V1().Nodes().Lister(),
-		}
+		m.nodes = NewNodeInformer(
+			m.factory.Core().V1().Nodes().Informer(),
+			m.factory.Core().V1().Nodes().Lister(),
+		)
 	}
 }
 
 // WithNodeIndexers sets custom indexers for the node informer.
 func WithNodeIndexers(indexers cache.Indexers) Option {
-	return func(m *Manager) {
-		m.nodes.indexers = indexers
-	}
-}
-
-// WithPodIndexers sets custom indexers for the pod informer.
-func WithPodIndexers(indexers cache.Indexers) Option {
-	return func(m *Manager) {
-		m.pods.indexers = indexers
+	return func(n *Manager) {
+		n.nodes.SetIndexers(indexers)
 	}
 }
 
@@ -171,6 +164,11 @@ func (m *Manager) Start(ctx context.Context) error {
 
 	// Sync optional node/pod informers - fail if enabled but don't sync
 	if m.nodes != nil {
+		if err := m.nodes.Start(ctx); err != nil {
+			cancel()
+			return fmt.Errorf("starting node informer: %w", err)
+		}
+
 		m.log.Info("waiting for node informer cache to sync...")
 		if !cache.WaitForCacheSync(syncCtx.Done(), m.nodes.HasSynced) {
 			cancel()
@@ -255,11 +253,11 @@ func (m *Manager) GetNodeLister() listerv1.NodeLister {
 }
 
 // GetNodeInformer returns the node informer for watching node events.
-func (m *Manager) GetNodeInformer() cache.SharedIndexInformer {
+func (m *Manager) GetNodeInformer() NodeInformer {
 	if m.nodes == nil {
 		return nil
 	}
-	return m.nodes.Informer()
+	return m.nodes
 }
 
 // GetPodLister returns the pod lister for querying the pod cache.
@@ -350,8 +348,8 @@ func (m *Manager) checkVAPermissions(ctx context.Context) error {
 }
 
 func (m *Manager) addIndexers() error {
-	if m.nodes != nil && m.nodes.indexers != nil {
-		if err := m.nodes.informer.AddIndexers(m.nodes.indexers); err != nil {
+	if m.nodes != nil && m.nodes.Indexers() != nil {
+		if err := m.nodes.Informer().AddIndexers(m.nodes.Indexers()); err != nil {
 			return fmt.Errorf("adding node indexers: %w", err)
 		}
 	}

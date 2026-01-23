@@ -165,6 +165,7 @@ func runController(
 		clientset,
 		dynamicClient,
 		helmClient,
+		informerManager.GetNodeInformer(),
 		vaWaiter,
 	)
 

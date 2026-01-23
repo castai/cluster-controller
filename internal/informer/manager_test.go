@@ -28,7 +28,6 @@ func TestNewManager(t *testing.T) {
 
 	require.NotNil(t, manager)
 	require.NotNil(t, manager.GetFactory())
-	require.NotNil(t, manager.GetNodeLister())
 	require.NotNil(t, manager.GetNodeInformer())
 	require.NotNil(t, manager.GetPodLister())
 	require.NotNil(t, manager.GetPodInformer())
@@ -113,7 +112,7 @@ func TestManager_Start(t *testing.T) {
 			require.NoError(t, err)
 			defer manager.Stop()
 
-			nodes, err := manager.GetNodeLister().List(labels.Everything())
+			nodes, err := manager.GetPodLister().List(labels.Everything())
 			require.NoError(t, err)
 			require.Len(t, nodes, tt.expectedNodes)
 
