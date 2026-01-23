@@ -66,3 +66,53 @@ func TestConfig(t *testing.T) {
 
 	require.Equal(t, expected, cfg)
 }
+
+func TestConfig_CastNamespacePrecedence(t *testing.T) {
+	tests := []struct {
+		name                    string
+		castNamespace           string
+		leaderElectionNamespace string
+		expectedNamespace       string
+	}{
+		{
+			name:                    "CAST_NAMESPACE takes precedence when both are set",
+			castNamespace:           "cast-namespace",
+			leaderElectionNamespace: "old-namespace",
+			expectedNamespace:       "cast-namespace",
+		},
+		{
+			name:                    "LEADER_ELECTION_NAMESPACE used as fallback",
+			castNamespace:           "",
+			leaderElectionNamespace: "old-namespace",
+			expectedNamespace:       "old-namespace",
+		},
+		{
+			name:                    "CAST_NAMESPACE used when only it is set",
+			castNamespace:           "cast-namespace",
+			leaderElectionNamespace: "",
+			expectedNamespace:       "cast-namespace",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset the cached config for each test
+			cfg = nil
+
+			clusterId := uuid.New().String()
+			t.Setenv("API_KEY", "abc")
+			t.Setenv("API_URL", "api.cast.ai")
+			t.Setenv("CLUSTER_ID", clusterId)
+
+			if tt.castNamespace != "" {
+				t.Setenv("CAST_NAMESPACE", tt.castNamespace)
+			}
+			if tt.leaderElectionNamespace != "" {
+				t.Setenv("LEADER_ELECTION_NAMESPACE", tt.leaderElectionNamespace)
+			}
+
+			config := Get()
+			require.Equal(t, tt.expectedNamespace, config.SelfPod.Namespace)
+		})
+	}
+}
