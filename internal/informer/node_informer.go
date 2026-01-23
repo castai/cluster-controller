@@ -157,8 +157,10 @@ func (n *nodeInformer) Wait(ctx context.Context, name string, condition Predicat
 			return
 		}
 		delete(n.tracked, name)
-		o.done <- ctx.Err()
-		close(o.done)
+		select {
+		case o.done <- ctx.Err():
+		default:
+		}
 	}(name)
 
 	return done
