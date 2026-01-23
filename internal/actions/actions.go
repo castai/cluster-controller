@@ -25,7 +25,7 @@ func NewDefaultActionHandlers(
 	nodeInformer informer.NodeInformer,
 	vaWaiter volume.DetachmentWaiter,
 ) ActionHandlers {
-	return ActionHandlers{
+	handlers := ActionHandlers{
 		reflect.TypeFor[*castai.ActionDeleteNode]():        NewDeleteNodeHandler(log, clientset),
 		reflect.TypeFor[*castai.ActionDrainNode]():         NewDrainNodeHandler(log, clientset, castNamespace, vaWaiter),
 		reflect.TypeFor[*castai.ActionPatchNode]():         NewPatchNodeHandler(log, clientset),
@@ -35,12 +35,18 @@ func NewDefaultActionHandlers(
 		reflect.TypeFor[*castai.ActionChartRollback]():     NewChartRollbackHandler(log, helmClient, k8sVersion),
 		reflect.TypeFor[*castai.ActionDisconnectCluster](): NewDisconnectClusterHandler(log, clientset),
 		reflect.TypeFor[*castai.ActionCheckNodeDeleted]():  NewCheckNodeDeletedHandler(log, clientset),
-		reflect.TypeFor[*castai.ActionCheckNodeStatus]():   NewCheckNodeStatusHandler(log, clientset, nodeInformer),
+		reflect.TypeFor[*castai.ActionCheckNodeStatus]():   NewCheckNodeStatusHandler(log, clientset),
 		reflect.TypeFor[*castai.ActionEvictPod]():          NewEvictPodHandler(log, clientset),
 		reflect.TypeFor[*castai.ActionPatch]():             NewPatchHandler(log, dynamicClient),
 		reflect.TypeFor[*castai.ActionCreate]():            NewCreateHandler(log, dynamicClient),
 		reflect.TypeFor[*castai.ActionDelete]():            NewDeleteHandler(log, dynamicClient),
 	}
+
+	if nodeInformer != nil {
+		handlers[reflect.TypeFor[*castai.ActionCheckNodeStatus]()] = NewCheckNodeStatusInformerHandler(log, clientset, nodeInformer)
+	}
+
+	return handlers
 }
 
 func (h ActionHandlers) Close() error {
