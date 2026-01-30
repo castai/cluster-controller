@@ -101,10 +101,8 @@ func (ts *gkeTestSuite) Run(ctx context.Context, t *testing.T) {
 	ts.t.Logf("created nginx deployment to schedule on new node")
 
 	node, cleanupNode, err := ts.addNode(ctx, *extCluster.Id, client.ExternalclusterV1NodeConfig{
-		InstanceType: "e2-small",
-		KubernetesLabels: &client.ExternalclusterV1NodeConfig_KubernetesLabels{
-			AdditionalProperties: castNodeSelector,
-		},
+		InstanceType:     "e2-small",
+		KubernetesLabels: &castNodeSelector,
 		KubernetesTaints: &[]client.ExternalclusterV1Taint{
 			{Key: castNodeTaintKey, Value: "true", Effect: "NoSchedule"},
 		},
@@ -114,11 +112,11 @@ func (ts *gkeTestSuite) Run(ctx context.Context, t *testing.T) {
 
 	t.Cleanup(func() {
 		if err := cleanupNode(); err != nil {
-			ts.t.Logf("failed to cleanup node %s: %v", *node.Id, err)
+			ts.t.Logf("failed to cleanup node %s: %v", node.Id, err)
 		}
 	})
 
-	ts.t.Logf("node %s ready", *node.Id)
+	ts.t.Logf("node %s ready", node.Id)
 
 	r.NoError(backoff.Retry(func() error {
 		deployment, err := ts.k8sClient.AppsV1().Deployments("default").Get(ctx, "nginx", metav1.GetOptions{})
@@ -133,7 +131,7 @@ func (ts *gkeTestSuite) Run(ctx context.Context, t *testing.T) {
 		return nil
 	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), 12)))
 
-	drainResp, err := ts.castClient.ExternalClusterAPIDrainNodeWithResponse(ctx, *extCluster.Id, *node.Id, client.ExternalclusterV1DrainConfig{
+	drainResp, err := ts.castClient.ExternalClusterAPIDrainNodeWithResponse(ctx, *extCluster.Id, node.Id, client.ExternalclusterV1DrainConfig{
 		TimeoutSeconds: lo.ToPtr(int32(60)),
 	})
 	r.NoError(err)

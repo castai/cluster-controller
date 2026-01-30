@@ -148,7 +148,7 @@ func (suite *baseSuite) addNode(ctx context.Context, clusterID string, cfg clien
 			return nil
 		}
 
-		resp, err := suite.castClient.ExternalClusterAPIDeleteNodeWithResponse(ctx, clusterID, *getNodeResp.JSON200.Id, &client.ExternalClusterAPIDeleteNodeParams{})
+		resp, err := suite.castClient.ExternalClusterAPIDeleteNodeWithResponse(ctx, clusterID, getNodeResp.JSON200.Id, &client.ExternalClusterAPIDeleteNodeParams{})
 		if err != nil {
 			return err
 		}
