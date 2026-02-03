@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/k8s"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
 
@@ -35,7 +36,7 @@ type PatchNodeHandler struct {
 
 func (h *PatchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
 	if action == nil || action.Data() == nil {
-		return fmt.Errorf("action or action data is nil %w", errAction)
+		return fmt.Errorf("action or action data is nil %w", k8s.ErrAction)
 	}
 	req, ok := action.Data().(*castai.ActionPatchNode)
 	if !ok {
@@ -43,17 +44,17 @@ func (h *PatchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	}
 	for k := range req.Labels {
 		if k == "" {
-			return fmt.Errorf("labels contain entry with empty key %w", errAction)
+			return fmt.Errorf("labels contain entry with empty key %w", k8s.ErrAction)
 		}
 	}
 	for k := range req.Annotations {
 		if k == "" {
-			return fmt.Errorf("annotations contain entry with empty key %w", errAction)
+			return fmt.Errorf("annotations contain entry with empty key %w", k8s.ErrAction)
 		}
 	}
 	for _, t := range req.Taints {
 		if t.Key == "" {
-			return fmt.Errorf("taints contain entry with empty key %w", errAction)
+			return fmt.Errorf("taints contain entry with empty key %w", k8s.ErrAction)
 		}
 	}
 
@@ -68,12 +69,12 @@ func (h *PatchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	log.Info("patching kubernetes node")
 	if req.NodeName == "" ||
 		(req.NodeID == "" && req.ProviderId == "") {
-		return fmt.Errorf("node name or node ID/provider ID is empty %w", errAction)
+		return fmt.Errorf("node name or node ID/provider ID is empty %w", k8s.ErrAction)
 	}
 
 	node, err := h.getNodeForPatching(ctx, req.NodeName, req.NodeID, req.ProviderId)
 	if err != nil {
-		if errors.Is(err, errNodeNotFound) {
+		if errors.Is(err, k8s.ErrNodeNotFound) {
 			log.WithError(err).Infof("node not found, skipping patch")
 			return nil
 		}
@@ -95,7 +96,7 @@ func (h *PatchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 			"capacity":    req.Capacity,
 		}).Infof("patching node, labels=%v, taints=%v, annotations=%v, unschedulable=%v", req.Labels, req.Taints, req.Annotations, unschedulable)
 
-		err = patchNode(ctx, h.log, h.clientset, node, func(n *v1.Node) {
+		err = k8s.PatchNode(ctx, h.log, h.clientset, node, func(n *v1.Node) {
 			n.Labels = patchNodeMapField(n.Labels, req.Labels)
 			n.Annotations = patchNodeMapField(n.Annotations, req.Annotations)
 			n.Spec.Taints = patchTaints(n.Spec.Taints, req.Taints)
@@ -116,7 +117,7 @@ func (h *PatchNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 		if err != nil {
 			return fmt.Errorf("marshal patch for status: %w", err)
 		}
-		return patchNodeStatus(ctx, h.log, h.clientset, node.Name, patch)
+		return k8s.PatchNodeStatus(ctx, h.log, h.clientset, node.Name, patch)
 	}
 	return nil
 }
@@ -138,7 +139,7 @@ func (h *PatchNodeHandler) getNodeForPatching(ctx context.Context, nodeName, nod
 		5,
 		func(ctx context.Context) (bool, error) {
 			var err error
-			node, err = getNodeByIDs(ctx, h.clientset.CoreV1().Nodes(), nodeName, nodeID, providerID, h.log)
+			node, err = k8s.GetNodeByIDs(ctx, h.clientset.CoreV1().Nodes(), nodeName, nodeID, providerID, h.log)
 			if err != nil {
 				return true, err
 			}

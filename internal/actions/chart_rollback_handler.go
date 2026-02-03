@@ -8,6 +8,7 @@ import (
 
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/helm"
+	"github.com/castai/cluster-controller/internal/k8s"
 )
 
 var _ ActionHandler = &ChartRollbackHandler{}
@@ -49,13 +50,13 @@ func (c *ChartRollbackHandler) Handle(_ context.Context, action *castai.ClusterA
 
 func (c *ChartRollbackHandler) validateRequest(req *castai.ActionChartRollback) error {
 	if req.ReleaseName == "" {
-		return fmt.Errorf("release name not provided %w", errAction)
+		return fmt.Errorf("release name not provided %w", k8s.ErrAction)
 	}
 	if req.Namespace == "" {
-		return fmt.Errorf("namespace not provided %w", errAction)
+		return fmt.Errorf("namespace not provided %w", k8s.ErrAction)
 	}
 	if req.Version == "" {
-		return fmt.Errorf("version not provided %w", errAction)
+		return fmt.Errorf("version not provided %w", k8s.ErrAction)
 	}
 	return nil
 }

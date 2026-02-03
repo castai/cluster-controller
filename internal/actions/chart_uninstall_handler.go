@@ -8,6 +8,7 @@ import (
 
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/helm"
+	"github.com/castai/cluster-controller/internal/k8s"
 )
 
 var _ ActionHandler = &ChartUninstallHandler{}
@@ -42,10 +43,10 @@ func (c *ChartUninstallHandler) Handle(_ context.Context, action *castai.Cluster
 
 func (c *ChartUninstallHandler) validateRequest(req *castai.ActionChartUninstall) error {
 	if req.ReleaseName == "" {
-		return fmt.Errorf("release name not provided %w", errAction)
+		return fmt.Errorf("release name not provided %w", k8s.ErrAction)
 	}
 	if req.Namespace == "" {
-		return fmt.Errorf("namespace not provided %w", errAction)
+		return fmt.Errorf("namespace not provided %w", k8s.ErrAction)
 	}
 	return nil
 }

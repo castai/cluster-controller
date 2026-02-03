@@ -12,6 +12,7 @@ import (
 
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/informer"
+	"github.com/castai/cluster-controller/internal/k8s"
 )
 
 func NewCheckNodeStatusInformerHandler(log logrus.FieldLogger, clientset kubernetes.Interface, nodeInformer informer.NodeInformer) ActionHandler {
@@ -33,7 +34,7 @@ type checkNodeStatusInformerHandler struct {
 
 func (h *checkNodeStatusInformerHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
 	if action == nil {
-		return fmt.Errorf("action is nil %w", errAction)
+		return fmt.Errorf("action is nil %w", k8s.ErrAction)
 	}
 	req, ok := action.Data().(*castai.ActionCheckNodeStatus)
 	if !ok {
@@ -51,7 +52,7 @@ func (h *checkNodeStatusInformerHandler) Handle(ctx context.Context, action *cas
 
 	if req.NodeName == "" ||
 		(req.NodeID == "" && req.ProviderId == "") {
-		return fmt.Errorf("node name or node ID/provider ID is empty %w", errAction)
+		return fmt.Errorf("node name or node ID/provider ID is empty %w", k8s.ErrAction)
 	}
 
 	switch req.NodeStatus {

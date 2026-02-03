@@ -16,6 +16,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/k8s"
 )
 
 func TestPatchNodeHandler_Handle(t *testing.T) {
@@ -41,7 +42,7 @@ func TestPatchNodeHandler_Handle(t *testing.T) {
 		{
 			name:    "nil",
 			args:    args{},
-			wantErr: errAction,
+			wantErr: k8s.ErrAction,
 		},
 		{
 			name: "wrong action type",
@@ -50,7 +51,7 @@ func TestPatchNodeHandler_Handle(t *testing.T) {
 					ActionDeleteNode: &castai.ActionDeleteNode{},
 				},
 			},
-			wantErr: errAction,
+			wantErr: k8s.ErrAction,
 		},
 		{
 			name: "labels contain entry with empty key",
@@ -61,7 +62,7 @@ func TestPatchNodeHandler_Handle(t *testing.T) {
 					},
 					nil, nil, nil, nil),
 			},
-			wantErr: errAction,
+			wantErr: k8s.ErrAction,
 		},
 		{
 			name: "annotations contain entry with empty key",
@@ -73,7 +74,7 @@ func TestPatchNodeHandler_Handle(t *testing.T) {
 					},
 					nil, nil, nil),
 			},
-			wantErr: errAction,
+			wantErr: k8s.ErrAction,
 		},
 		{
 			name: "taints contain entry with empty key",
@@ -88,7 +89,7 @@ func TestPatchNodeHandler_Handle(t *testing.T) {
 					},
 					nil, nil),
 			},
-			wantErr: errAction,
+			wantErr: k8s.ErrAction,
 		},
 		{
 			name: "empty node name",
@@ -96,7 +97,7 @@ func TestPatchNodeHandler_Handle(t *testing.T) {
 				action: newPatchNodeAction("", nodeID, providerID,
 					nil, nil, nil, nil, nil),
 			},
-			wantErr: errAction,
+			wantErr: k8s.ErrAction,
 		},
 		{
 			name: "empty node ID and provider ID",
@@ -104,7 +105,7 @@ func TestPatchNodeHandler_Handle(t *testing.T) {
 				action: newPatchNodeAction(nodeName, "", "",
 					nil, nil, nil, nil, nil),
 			},
-			wantErr: errAction,
+			wantErr: k8s.ErrAction,
 		},
 		{
 			name: "empty node ID and provider ID at Node", // for Azure legacy nodes it is real case, we consider it as error
@@ -122,7 +123,7 @@ func TestPatchNodeHandler_Handle(t *testing.T) {
 				action: newPatchNodeAction(nodeName, nodeID, providerID,
 					nil, nil, nil, nil, nil),
 			},
-			wantErr: errNodeDoesNotMatch,
+			wantErr: k8s.ErrNodeDoesNotMatch,
 		},
 		{
 			name: "patch node successfully",

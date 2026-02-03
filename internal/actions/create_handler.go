@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/dynamic"
 
 	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/k8s"
 )
 
 var _ ActionHandler = &CreateHandler{}
@@ -37,7 +38,7 @@ func (h *CreateHandler) Handle(ctx context.Context, action *castai.ClusterAction
 	}
 
 	if req.Object == nil {
-		return fmt.Errorf("object not provided %w", errAction)
+		return fmt.Errorf("object not provided %w", k8s.ErrAction)
 	}
 
 	newObj := &unstructured.Unstructured{Object: req.Object}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/helm"
+	"github.com/castai/cluster-controller/internal/k8s"
 )
 
 var _ ActionHandler = &ChartUpsertHandler{}
@@ -79,10 +80,10 @@ func (c *ChartUpsertHandler) Handle(ctx context.Context, action *castai.ClusterA
 
 func (c *ChartUpsertHandler) validateRequest(req *castai.ActionChartUpsert) error {
 	if req.ReleaseName == "" {
-		return fmt.Errorf("release name not provided %w", errAction)
+		return fmt.Errorf("release name not provided %w", k8s.ErrAction)
 	}
 	if req.Namespace == "" {
-		return fmt.Errorf("namespace not provided %w", errAction)
+		return fmt.Errorf("namespace not provided %w", k8s.ErrAction)
 	}
 	if err := req.ChartSource.Validate(); err != nil {
 		return fmt.Errorf("validating chart source: %w", err)

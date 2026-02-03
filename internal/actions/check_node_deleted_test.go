@@ -13,6 +13,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/k8s"
 )
 
 func TestCheckNodeDeletedHandler_Handle(t *testing.T) {
@@ -32,21 +33,21 @@ func TestCheckNodeDeletedHandler_Handle(t *testing.T) {
 	}{
 		{
 			name:    "nil action",
-			wantErr: errAction,
+			wantErr: k8s.ErrAction,
 		},
 		{
 			name: "wrong action type",
 			args: args{
 				action: &castai.ClusterAction{},
 			},
-			wantErr: errAction,
+			wantErr: k8s.ErrAction,
 		},
 		{
 			name: "empty node name",
 			args: args{
 				action: newActionCheckNodeDeleted("", nodeID, providerID),
 			},
-			wantErr: errAction,
+			wantErr: k8s.ErrAction,
 		},
 		{
 			name: "nodeID is not matching",

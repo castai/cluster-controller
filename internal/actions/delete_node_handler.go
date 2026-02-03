@@ -16,6 +16,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/k8s"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
 
@@ -52,7 +53,7 @@ type DeleteNodeHandler struct {
 
 func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
 	if action == nil {
-		return fmt.Errorf("action is nil %w", errAction)
+		return fmt.Errorf("action is nil %w", k8s.ErrAction)
 	}
 	req, ok := action.Data().(*castai.ActionDeleteNode)
 	if !ok {
@@ -70,7 +71,7 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 	log.Info("deleting kubernetes node")
 	if req.NodeName == "" ||
 		(req.NodeID == "" && req.ProviderId == "") {
-		return fmt.Errorf("node name or node ID/provider ID is empty %w", errAction)
+		return fmt.Errorf("node name or node ID/provider ID is empty %w", k8s.ErrAction)
 	}
 
 	b := waitext.NewConstantBackoff(h.cfg.deleteRetryWait)
@@ -79,9 +80,9 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 		b,
 		h.cfg.deleteRetries,
 		func(ctx context.Context) (bool, error) {
-			current, err := getNodeByIDs(ctx, h.clientset.CoreV1().Nodes(), req.NodeName, req.NodeID, req.ProviderId, log)
+			current, err := k8s.GetNodeByIDs(ctx, h.clientset.CoreV1().Nodes(), req.NodeName, req.NodeID, req.ProviderId, log)
 			if err != nil {
-				if errors.Is(err, errNodeNotFound) || errors.Is(err, errNodeDoesNotMatch) {
+				if errors.Is(err, k8s.ErrNodeNotFound) || errors.Is(err, k8s.ErrNodeDoesNotMatch) {
 					return false, err
 				}
 
@@ -94,7 +95,7 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 				},
 			})
 			if apierrors.IsNotFound(err) {
-				return false, errNodeNotFound
+				return false, k8s.ErrNodeNotFound
 			}
 			return true, err
 		},
@@ -103,7 +104,7 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 		},
 	)
 
-	if errors.Is(err, errNodeNotFound) || errors.Is(err, errNodeDoesNotMatch) {
+	if errors.Is(err, k8s.ErrNodeNotFound) || errors.Is(err, k8s.ErrNodeDoesNotMatch) {
 		log.Infof("node already deleted or does not match the requested node ID/provider ID %v", err)
 		return nil
 	}
@@ -145,7 +146,7 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 		return h.deletePod(ctx, *deleteOptions, pod)
 	}
 
-	deletedPods, failedPods := executeBatchPodActions(ctx, log, pods, deletePod, "delete-pod")
+	deletedPods, failedPods := k8s.ExecuteBatchPodActions(ctx, log, pods, deletePod, "delete-pod")
 	log.Infof("successfully deleted %d pods, failed to delete %d pods", len(deletedPods), len(failedPods))
 
 	if err := h.deleteNodeVolumeAttachments(ctx, req.NodeName); err != nil {

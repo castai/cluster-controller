@@ -21,6 +21,7 @@ import (
 	"k8s.io/kubectl/pkg/drain"
 
 	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/k8s"
 	"github.com/castai/cluster-controller/internal/volume"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
@@ -88,7 +89,7 @@ type nodePods struct {
 
 func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
 	if action == nil {
-		return fmt.Errorf("action is nil %w", errAction)
+		return fmt.Errorf("action is nil %w", k8s.ErrAction)
 	}
 	req, ok := action.Data().(*castai.ActionDrainNode)
 	if !ok {
@@ -107,11 +108,11 @@ func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	log.Info("draining kubernetes node")
 	if req.NodeName == "" ||
 		(req.NodeID == "" && req.ProviderId == "") {
-		return fmt.Errorf("node name or node ID/provider ID is empty %w", errAction)
+		return fmt.Errorf("node name or node ID/provider ID is empty %w", k8s.ErrAction)
 	}
 
-	node, err := getNodeByIDs(ctx, h.clientset.CoreV1().Nodes(), req.NodeName, req.NodeID, req.ProviderId, log)
-	if errors.Is(err, errNodeNotFound) || errors.Is(err, errNodeDoesNotMatch) {
+	node, err := k8s.GetNodeByIDs(ctx, h.clientset.CoreV1().Nodes(), req.NodeName, req.NodeID, req.ProviderId, log)
+	if errors.Is(err, k8s.ErrNodeNotFound) || errors.Is(err, k8s.ErrNodeDoesNotMatch) {
 		log.Info("node not found, skipping draining")
 		return nil
 	}
@@ -197,7 +198,7 @@ func (h *DrainNodeHandler) cordonNode(ctx context.Context, node *v1.Node) error 
 		return nil
 	}
 
-	err := patchNode(ctx, h.log, h.clientset, node, func(n *v1.Node) {
+	err := k8s.PatchNode(ctx, h.log, h.clientset, node, func(n *v1.Node) {
 		n.Spec.Unschedulable = true
 	})
 	if err != nil {
@@ -217,7 +218,7 @@ func (h *DrainNodeHandler) shouldWaitForVolumeDetach(req *castai.ActionDrainNode
 
 // waitForVolumeDetachIfEnabled waits for VolumeAttachments to be deleted if the feature is enabled.
 // This is called after successful drain to give CSI drivers time to clean up volumes.
-// nonEvictablePods are pods that won't be evicted (DaemonSet, static) - their VAs are excluded from waiting.
+// nonEvictablePods are pods that won't be evicted (DaemonSet, static) - their was are excluded from waiting.
 func (h *DrainNodeHandler) waitForVolumeDetachIfEnabled(ctx context.Context, log logrus.FieldLogger, nodeName string, req *castai.ActionDrainNode, nonEvictablePods []v1.Pod) {
 	if !h.shouldWaitForVolumeDetach(req) || h.vaWaiter == nil {
 		return
@@ -264,20 +265,20 @@ func (h *DrainNodeHandler) evictNodePods(ctx context.Context, log logrus.FieldLo
 		return h.evictPod(ctx, pod, groupVersion)
 	}
 
-	_, podsWithFailedEviction := executeBatchPodActions(ctx, log, nodePods.toEvict, evictPod, "evict-pod")
+	_, podsWithFailedEviction := k8s.ExecuteBatchPodActions(ctx, log, nodePods.toEvict, evictPod, "evict-pod")
 	var podsToIgnoreForTermination []*v1.Pod
 	var failedPodsError *podFailedActionError
 	if len(podsWithFailedEviction) > 0 {
-		podErrors := lo.Map(podsWithFailedEviction, func(failure podActionFailure, _ int) error {
-			return fmt.Errorf("pod %s/%s failed eviction: %w", failure.pod.Namespace, failure.pod.Name, failure.err)
+		podErrors := lo.Map(podsWithFailedEviction, func(failure k8s.PodActionFailure, _ int) error {
+			return fmt.Errorf("pod %s/%s failed eviction: %w", failure.Pod.Namespace, failure.Pod.Name, failure.Err)
 		})
 		failedPodsError = &podFailedActionError{
 			Action: "evict",
 			Errors: podErrors,
 		}
 		log.Warnf("some pods failed eviction, will ignore for termination wait: %v", failedPodsError)
-		podsToIgnoreForTermination = lo.Map(podsWithFailedEviction, func(failure podActionFailure, _ int) *v1.Pod {
-			return failure.pod
+		podsToIgnoreForTermination = lo.Map(podsWithFailedEviction, func(failure k8s.PodActionFailure, _ int) *v1.Pod {
+			return failure.Pod
 		})
 	}
 
@@ -319,20 +320,20 @@ func (h *DrainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldL
 		return h.deletePod(ctx, options, pod)
 	}
 
-	_, podsWithFailedDeletion := executeBatchPodActions(ctx, log, nodePods.toEvict, deletePod, "delete-pod")
+	_, podsWithFailedDeletion := k8s.ExecuteBatchPodActions(ctx, log, nodePods.toEvict, deletePod, "delete-pod")
 	var podsToIgnoreForTermination []*v1.Pod
 	var failedPodsError *podFailedActionError
 	if len(podsWithFailedDeletion) > 0 {
-		podErrors := lo.Map(podsWithFailedDeletion, func(failure podActionFailure, _ int) error {
-			return fmt.Errorf("pod %s/%s failed deletion: %w", failure.pod.Namespace, failure.pod.Name, failure.err)
+		podErrors := lo.Map(podsWithFailedDeletion, func(failure k8s.PodActionFailure, _ int) error {
+			return fmt.Errorf("pod %s/%s failed deletion: %w", failure.Pod.Namespace, failure.Pod.Name, failure.Err)
 		})
 		failedPodsError = &podFailedActionError{
 			Action: "delete",
 			Errors: podErrors,
 		}
 		log.Warnf("some pods failed deletion, will ignore for termination wait: %v", failedPodsError)
-		podsToIgnoreForTermination = lo.Map(podsWithFailedDeletion, func(failure podActionFailure, _ int) *v1.Pod {
-			return failure.pod
+		podsToIgnoreForTermination = lo.Map(podsWithFailedDeletion, func(failure k8s.PodActionFailure, _ int) *v1.Pod {
+			return failure.Pod
 		})
 	}
 
@@ -359,8 +360,8 @@ func (h *DrainNodeHandler) listNodePods(ctx context.Context, log logrus.FieldLog
 	var pods *v1.PodList
 	err := waitext.Retry(
 		ctx,
-		defaultBackoff(),
-		defaultMaxRetriesK8SOperation,
+		k8s.DefaultBackoff(),
+		k8s.DefaultMaxRetriesK8SOperation,
 		func(ctx context.Context) (bool, error) {
 			p, err := h.clientset.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
 				FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": node.Name}).String(),

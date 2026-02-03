@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/k8s"
 )
 
 var _ ActionHandler = &CheckNodeStatusHandler{}
@@ -35,7 +36,7 @@ type CheckNodeStatusHandler struct {
 
 func (h *CheckNodeStatusHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
 	if action == nil {
-		return fmt.Errorf("action is nil %w", errAction)
+		return fmt.Errorf("action is nil %w", k8s.ErrAction)
 	}
 	req, ok := action.Data().(*castai.ActionCheckNodeStatus)
 	if !ok {
@@ -54,7 +55,7 @@ func (h *CheckNodeStatusHandler) Handle(ctx context.Context, action *castai.Clus
 	log.Info("checking status of node")
 	if req.NodeName == "" ||
 		(req.NodeID == "" && req.ProviderId == "") {
-		return fmt.Errorf("node name or node ID/provider ID is empty %w", errAction)
+		return fmt.Errorf("node name or node ID/provider ID is empty %w", k8s.ErrAction)
 	}
 
 	switch req.NodeStatus {
@@ -101,7 +102,7 @@ func (h *CheckNodeStatusHandler) checkNodeReady(ctx context.Context, _ *logrus.E
 			return fmt.Errorf("node %s request timeout: %v %w", req.NodeName, timeout, ctx.Err())
 		case r, ok := <-watch.ResultChan():
 			if !ok {
-				return fmt.Errorf("node %s request timeout: %v %w", req.NodeName, timeout, errNodeWatcherClosed)
+				return fmt.Errorf("node %s request timeout: %v %w", req.NodeName, timeout, k8s.ErrNodeWatcherClosed)
 			}
 			if node, ok := r.Object.(*corev1.Node); ok {
 				if isNodeReady(h.log, node, req.NodeID, req.ProviderId) {
@@ -115,7 +116,7 @@ func (h *CheckNodeStatusHandler) checkNodeReady(ctx context.Context, _ *logrus.E
 func isNodeReady(log logrus.FieldLogger, node *corev1.Node, castNodeID, providerID string) bool {
 	// if node has castai node id label, check if it matches the one we are waiting for
 	// if it doesn't match, we can skip this node.
-	if err := isNodeIDProviderIDValid(node, castNodeID, providerID, log); err != nil {
+	if err := k8s.IsNodeIDProviderIDValid(node, castNodeID, providerID, log); err != nil {
 		log.WithFields(logrus.Fields{
 			"node":        node.Name,
 			"node_id":     castNodeID,

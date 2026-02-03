@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/k8s"
 )
 
 func Test_newCreateHandler(t *testing.T) {
@@ -37,7 +38,7 @@ func Test_newCreateHandler(t *testing.T) {
 			action: &castai.ClusterAction{
 				ActionDeleteNode: &castai.ActionDeleteNode{},
 			},
-			err: errAction,
+			err: k8s.ErrAction,
 		},
 		"should return error when object is not provided": {
 			action: &castai.ClusterAction{
@@ -45,7 +46,7 @@ func Test_newCreateHandler(t *testing.T) {
 					GroupVersionResource: castai.GroupVersionResource{},
 				},
 			},
-			err: errAction,
+			err: k8s.ErrAction,
 		},
 		"should create new deployment": {
 			action: &castai.ClusterAction{
