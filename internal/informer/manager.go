@@ -10,7 +10,9 @@ import (
 
 	"github.com/sirupsen/logrus"
 	authorizationv1 "k8s.io/api/authorization/v1"
+	core "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -85,6 +87,25 @@ func EnableNodeInformer() Option {
 func WithNodeIndexers(indexers cache.Indexers) Option {
 	return func(n *Manager) {
 		n.nodes.SetIndexers(indexers)
+	}
+}
+
+func WithDefaultPodNodeNameIndexer() Option {
+	return WithPodIndexers(cache.Indexers{
+		PodIndexerName: func(obj any) ([]string, error) {
+			pod, ok := obj.(core.Pod)
+			if !ok {
+				return nil, nil
+			}
+			return []string{pod.Spec.NodeName}, nil
+		},
+	})
+}
+
+// WithPodIndexers sets custom indexers for the pod informer.
+func WithPodIndexers(indexers cache.Indexers) Option {
+	return func(n *Manager) {
+		n.pods.indexers = indexers
 	}
 }
 
@@ -390,8 +411,8 @@ func (m *Manager) reportCacheSize(ctx context.Context) {
 			}
 
 			if m.vaAvailable {
-				vas := m.volumeAttachments.Informer().GetStore().ListKeys()
-				size := len(vas)
+				was := m.volumeAttachments.Informer().GetStore().ListKeys()
+				size := len(was)
 				m.log.WithField("cache_size", size).Debug("volumeattachment informer cache size")
 				metrics.SetInformerCacheSize("volumeattachment", size)
 			}
