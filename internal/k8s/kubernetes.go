@@ -310,8 +310,6 @@ func (c *Client) DeletePod(ctx context.Context, options metav1.DeleteOptions, po
 	return nil
 }
 
-// --- Package-level utility functions (no state needed) ---
-
 // IsNodeIDProviderIDValid checks if the node's ID and provider ID match the requested ones.
 func IsNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string, log logrus.FieldLogger) error {
 	if nodeID == "" && providerID == "" {
