@@ -438,9 +438,6 @@ func IsControlledBy(p *v1.Pod, kind string) bool {
 	return ctrl != nil && ctrl.Kind == kind
 }
 
-// --- Legacy function wrappers for backwards compatibility ---
-// These maintain the old function signatures and delegate to Client methods.
-
 // PatchNode patches a node with the given change function.
 // Deprecated: Use Client.PatchNode instead.
 func PatchNode(ctx context.Context, log logrus.FieldLogger, clientset kubernetes.Interface, node *v1.Node, changeFn func(*v1.Node)) error {
