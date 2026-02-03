@@ -21,6 +21,7 @@ import (
 	ktest "k8s.io/client-go/testing"
 
 	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/k8s"
 	"github.com/castai/cluster-controller/internal/volume"
 )
 
@@ -271,7 +272,7 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 					return fake.NewClientset()
 				},
 			},
-			wantErr: errAction,
+			wantErr: k8s.ErrAction,
 		},
 		{
 			name: "wrong action type",
@@ -285,7 +286,7 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 					return fake.NewClientset()
 				},
 			},
-			wantErr: errAction,
+			wantErr: k8s.ErrAction,
 		},
 		{
 			name: "empty node name",
@@ -297,7 +298,7 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 					return setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
 				},
 			},
-			wantErr: errAction,
+			wantErr: k8s.ErrAction,
 		},
 		{
 			name: "empty node ID and provider ID",
@@ -310,7 +311,7 @@ func TestDrainNodeHandler_Handle(t *testing.T) {
 					return setupFakeClientWithNodePodEviction(nodeName, nodeID, providerID, podName)
 				},
 			},
-			wantErr: errAction,
+			wantErr: k8s.ErrAction,
 		},
 		{
 			name: "action with another node id and provider id - skip drain",

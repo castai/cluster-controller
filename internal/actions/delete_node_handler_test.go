@@ -15,6 +15,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/k8s"
 )
 
 func TestDeleteNodeHandler_Handle(t *testing.T) {
@@ -48,7 +49,7 @@ func TestDeleteNodeHandler_Handle(t *testing.T) {
 		{
 			name:    "nil",
 			args:    args{},
-			wantErr: errAction,
+			wantErr: k8s.ErrAction,
 		},
 		{
 			name: "wrong action type",
@@ -57,21 +58,21 @@ func TestDeleteNodeHandler_Handle(t *testing.T) {
 					ActionDrainNode: &castai.ActionDrainNode{},
 				},
 			},
-			wantErr: errAction,
+			wantErr: k8s.ErrAction,
 		},
 		{
 			name: "empty node name",
 			args: args{
 				action: newActionDeleteNode("", nodeID, providerID),
 			},
-			wantErr: errAction,
+			wantErr: k8s.ErrAction,
 		},
 		{
 			name: "empty node ID and provider ID",
 			args: args{
 				action: newActionDeleteNode(nodeName, "", ""),
 			},
-			wantErr:         errAction,
+			wantErr:         k8s.ErrAction,
 			wantDeletedNode: false,
 		},
 		{

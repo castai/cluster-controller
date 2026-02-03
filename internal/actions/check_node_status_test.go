@@ -17,6 +17,7 @@ import (
 	k8stest "k8s.io/client-go/testing"
 
 	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/k8s"
 )
 
 const (
@@ -55,7 +56,7 @@ func TestCheckNodeStatusHandler_Handle_Deleted(t *testing.T) {
 	}{
 		{
 			name:    "action is nil",
-			wantErr: errAction,
+			wantErr: k8s.ErrAction,
 		},
 		{
 			name: "return error when action data with wrong action type",
@@ -64,7 +65,7 @@ func TestCheckNodeStatusHandler_Handle_Deleted(t *testing.T) {
 					ActionDrainNode: &castai.ActionDrainNode{},
 				},
 			},
-			wantErr: errAction,
+			wantErr: k8s.ErrAction,
 		},
 		{
 			name: "provider is not matching",
@@ -300,14 +301,14 @@ func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
 	}{
 		{
 			name:    "action is nil",
-			wantErr: errAction,
+			wantErr: k8s.ErrAction,
 		},
 		{
 			name: "empty node name",
 			args: args{
 				action: newActionCheckNodeStatus("", nodeID, providerID, castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(1))),
 			},
-			wantErr: errAction,
+			wantErr: k8s.ErrAction,
 		},
 		{
 			name: "return error when ctx timeout",

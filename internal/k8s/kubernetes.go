@@ -1,8 +1,9 @@
-package actions
+package k8s
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -23,11 +24,18 @@ import (
 	"github.com/castai/cluster-controller/internal/waitext"
 )
 
-const (
-	defaultMaxRetriesK8SOperation = 5
+var (
+	ErrAction            = errors.New("not valid action")
+	ErrNodeNotFound      = errors.New("node not found")
+	ErrNodeDoesNotMatch  = fmt.Errorf("node does not match")
+	ErrNodeWatcherClosed = fmt.Errorf("node watcher closed, no more events will be received")
 )
 
-func patchNode(ctx context.Context, log logrus.FieldLogger, clientset kubernetes.Interface, node *v1.Node, changeFn func(*v1.Node)) error {
+const (
+	DefaultMaxRetriesK8SOperation = 5
+)
+
+func PatchNode(ctx context.Context, log logrus.FieldLogger, clientset kubernetes.Interface, node *v1.Node, changeFn func(*v1.Node)) error {
 	oldData, err := json.Marshal(node)
 	if err != nil {
 		return fmt.Errorf("marshaling old data: %w", err)
@@ -47,8 +55,8 @@ func patchNode(ctx context.Context, log logrus.FieldLogger, clientset kubernetes
 
 	err = waitext.Retry(
 		ctx,
-		defaultBackoff(),
-		defaultMaxRetriesK8SOperation,
+		DefaultBackoff(),
+		DefaultMaxRetriesK8SOperation,
 		func(ctx context.Context) (bool, error) {
 			_, err = clientset.CoreV1().Nodes().Patch(ctx, node.Name, apitypes.StrategicMergePatchType, patch, metav1.PatchOptions{})
 			return true, err
@@ -64,11 +72,11 @@ func patchNode(ctx context.Context, log logrus.FieldLogger, clientset kubernetes
 	return nil
 }
 
-func patchNodeStatus(ctx context.Context, log logrus.FieldLogger, clientset kubernetes.Interface, name string, patch []byte) error {
+func PatchNodeStatus(ctx context.Context, log logrus.FieldLogger, clientset kubernetes.Interface, name string, patch []byte) error {
 	err := waitext.Retry(
 		ctx,
-		defaultBackoff(),
-		defaultMaxRetriesK8SOperation,
+		DefaultBackoff(),
+		DefaultMaxRetriesK8SOperation,
 		func(ctx context.Context) (bool, error) {
 			_, err := clientset.CoreV1().Nodes().PatchStatus(ctx, name, patch)
 			if k8serrors.IsForbidden(err) {
@@ -88,24 +96,24 @@ func patchNodeStatus(ctx context.Context, log logrus.FieldLogger, clientset kube
 	return nil
 }
 
-func getNodeByIDs(ctx context.Context, clientSet corev1.NodeInterface, nodeName, nodeID, providerID string, log logrus.FieldLogger) (*v1.Node, error) {
+func GetNodeByIDs(ctx context.Context, clientSet corev1.NodeInterface, nodeName, nodeID, providerID string, log logrus.FieldLogger) (*v1.Node, error) {
 	if nodeID == "" && providerID == "" {
-		return nil, fmt.Errorf("node and provider IDs are empty %w", errAction)
+		return nil, fmt.Errorf("node and provider IDs are empty %w", ErrAction)
 	}
 
 	n, err := clientSet.Get(ctx, nodeName, metav1.GetOptions{})
 	if err != nil && k8serrors.IsNotFound(err) {
-		return nil, errNodeNotFound
+		return nil, ErrNodeNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
 
 	if n == nil {
-		return nil, errNodeNotFound
+		return nil, ErrNodeNotFound
 	}
 
-	if err := isNodeIDProviderIDValid(n, nodeID, providerID, log); err != nil {
+	if err := IsNodeIDProviderIDValid(n, nodeID, providerID, log); err != nil {
 		return nil, fmt.Errorf("requested node ID %s, provider ID %s for node name: %s %w",
 			nodeID, providerID, n.Name, err)
 	}
@@ -113,11 +121,11 @@ func getNodeByIDs(ctx context.Context, clientSet corev1.NodeInterface, nodeName,
 	return n, nil
 }
 
-// isNodeIDProviderIDValid checks if the node's ID and provider ID match the requested ones.
-func isNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string, log logrus.FieldLogger) error {
+// IsNodeIDProviderIDValid checks if the node's ID and provider ID match the requested ones.
+func IsNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string, log logrus.FieldLogger) error {
 	if nodeID == "" && providerID == "" {
 		// if both node ID and provider ID are empty, we can't validate the node
-		return fmt.Errorf("node and provider IDs are empty %w", errAction)
+		return fmt.Errorf("node and provider IDs are empty %w", ErrAction)
 	}
 	emptyProviderID := providerID == "" || node.Spec.ProviderID == ""
 
@@ -155,20 +163,20 @@ func isNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string, log logru
 
 	// if we reach here, it means that node ID and/or provider ID does not match
 	return fmt.Errorf("node %v has ID %s and provider ID %s: %w",
-		node.Name, currentNodeID, node.Spec.ProviderID, errNodeDoesNotMatch)
+		node.Name, currentNodeID, node.Spec.ProviderID, ErrNodeDoesNotMatch)
 }
 
-// executeBatchPodActions executes the action for each pod in the list.
+// ExecuteBatchPodActions executes the action for each pod in the list.
 // It does internal throttling to avoid spawning a goroutine-per-pod on large lists.
 // Returns two sets of pods - the ones that successfully executed the action and the ones that failed.
 // actionName might be used to distinguish what is the operation (for logs, debugging, etc.) but is optional.
-func executeBatchPodActions(
+func ExecuteBatchPodActions(
 	ctx context.Context,
 	log logrus.FieldLogger,
 	pods []v1.Pod,
 	action func(context.Context, v1.Pod) error,
 	actionName string,
-) ([]*v1.Pod, []podActionFailure) {
+) ([]*v1.Pod, []PodActionFailure) {
 	if actionName == "" {
 		actionName = "unspecified"
 	}
@@ -183,7 +191,7 @@ func executeBatchPodActions(
 		parallelTasks      = lo.Clamp(len(pods), 1, 50)
 		taskChan           = make(chan v1.Pod, len(pods))
 		successfulPodsChan = make(chan *v1.Pod, len(pods))
-		failedPodsChan     = make(chan podActionFailure, len(pods))
+		failedPodsChan     = make(chan PodActionFailure, len(pods))
 		wg                 sync.WaitGroup
 	)
 
@@ -194,10 +202,10 @@ func executeBatchPodActions(
 	worker := func(taskChan <-chan v1.Pod) {
 		for pod := range taskChan {
 			if err := action(ctx, pod); err != nil {
-				failedPodsChan <- podActionFailure{
-					actionName: actionName,
-					pod:        &pod,
-					err:        err,
+				failedPodsChan <- PodActionFailure{
+					ActionName: actionName,
+					Pod:        &pod,
+					Err:        err,
 				}
 			} else {
 				successfulPodsChan <- &pod
@@ -225,7 +233,7 @@ func executeBatchPodActions(
 		successfulPods = append(successfulPods, pod)
 	}
 
-	var failedPods []podActionFailure
+	var failedPods []PodActionFailure
 	for failure := range failedPodsChan {
 		failedPods = append(failedPods, failure)
 	}
@@ -233,12 +241,12 @@ func executeBatchPodActions(
 	return successfulPods, failedPods
 }
 
-func defaultBackoff() wait.Backoff {
+func DefaultBackoff() wait.Backoff {
 	return waitext.NewConstantBackoff(500 * time.Millisecond)
 }
 
-type podActionFailure struct {
-	actionName string
-	pod        *v1.Pod
-	err        error
+type PodActionFailure struct {
+	ActionName string
+	Pod        *v1.Pod
+	Err        error
 }

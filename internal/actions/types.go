@@ -6,10 +6,10 @@ package actions
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/k8s"
 )
 
 const (
@@ -18,15 +18,8 @@ const (
 	ActionIDLogField = "id"
 )
 
-var (
-	errAction            = errors.New("not valid action")
-	errNodeNotFound      = errors.New("node not found")
-	errNodeDoesNotMatch  = fmt.Errorf("node does not match")
-	errNodeWatcherClosed = fmt.Errorf("node watcher closed, no more events will be received")
-)
-
 func newUnexpectedTypeErr(value, expectedType any) error {
-	return fmt.Errorf("unexpected type %T, expected %T %w", value, expectedType, errAction)
+	return fmt.Errorf("unexpected type %T, expected %T %w", value, expectedType, k8s.ErrAction)
 }
 
 type ActionHandler interface {

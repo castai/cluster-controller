@@ -20,6 +20,7 @@ import (
 
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/informer"
+	"github.com/castai/cluster-controller/internal/k8s"
 )
 
 func TestCheckNodeStatusInformerHandler_Handle_Validation(t *testing.T) {
@@ -34,24 +35,24 @@ func TestCheckNodeStatusInformerHandler_Handle_Validation(t *testing.T) {
 		{
 			name:    "action is nil",
 			action:  nil,
-			wantErr: errAction,
+			wantErr: k8s.ErrAction,
 		},
 		{
 			name: "wrong action type",
 			action: &castai.ClusterAction{
 				ActionDrainNode: &castai.ActionDrainNode{},
 			},
-			wantErr: errAction,
+			wantErr: k8s.ErrAction,
 		},
 		{
 			name:    "empty node name",
 			action:  newActionCheckNodeStatus("", nodeID, providerID, castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(1))),
-			wantErr: errAction,
+			wantErr: k8s.ErrAction,
 		},
 		{
 			name:    "empty node ID and provider ID",
 			action:  newActionCheckNodeStatus(nodeName, "", "", castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(1))),
-			wantErr: errAction,
+			wantErr: k8s.ErrAction,
 		},
 		{
 			name:            "unknown status returns error",

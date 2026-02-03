@@ -1,4 +1,4 @@
-package actions
+package k8s
 
 import (
 	"context"
@@ -14,6 +14,13 @@ import (
 
 	mock_actions "github.com/castai/cluster-controller/internal/actions/mock"
 	"github.com/castai/cluster-controller/internal/castai"
+)
+
+const (
+	nodeName   = "node1"
+	nodeID     = "node-id"
+	providerID = "aws:///us-east-1"
+	podName    = "pod1"
 )
 
 func Test_isNodeIDProviderIDValid(t *testing.T) {
@@ -36,7 +43,7 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 				providerID: "",
 				nodeID:     "",
 			},
-			wantErr: errAction,
+			wantErr: ErrAction,
 		},
 		{
 			name: "request node ID is empty but node id exists in node labels and provider ID matches",
@@ -101,7 +108,7 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 				nodeID:     nodeID,
 				providerID: providerID,
 			},
-			wantErr: errNodeDoesNotMatch,
+			wantErr: ErrNodeDoesNotMatch,
 		},
 		{
 			name: "node ID is empty at Node spec and Provider is matching",
@@ -185,7 +192,7 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 				nodeID:     nodeID,
 				providerID: providerID,
 			},
-			wantErr: errNodeDoesNotMatch,
+			wantErr: ErrNodeDoesNotMatch,
 		},
 		{
 			name: "node ID does not match label, provider ID empty",
@@ -203,7 +210,7 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 				nodeID:     nodeID,
 				providerID: "",
 			},
-			wantErr: errNodeDoesNotMatch,
+			wantErr: ErrNodeDoesNotMatch,
 		},
 		{
 			name: "node ID and provider ID do not match",
@@ -221,7 +228,7 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 				nodeID:     nodeID,
 				providerID: providerID,
 			},
-			wantErr: errNodeDoesNotMatch,
+			wantErr: ErrNodeDoesNotMatch,
 		},
 		{
 			name: "node ID is match and provider ID does not match",
@@ -239,7 +246,7 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 				nodeID:     nodeID,
 				providerID: providerID,
 			},
-			wantErr: errNodeDoesNotMatch,
+			wantErr: ErrNodeDoesNotMatch,
 		},
 		{
 			name: "node ID is match and request provider ID is empty",
@@ -279,7 +286,7 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := isNodeIDProviderIDValid(tt.args.node, tt.args.nodeID, tt.args.providerID, logrus.New())
+			got := IsNodeIDProviderIDValid(tt.args.node, tt.args.nodeID, tt.args.providerID, logrus.New())
 			require.Equal(t, tt.wantErr != nil, got != nil, "error mismatch", got)
 			require.ErrorIs(t, got, tt.wantErr)
 		})
@@ -304,7 +311,7 @@ func Test_getNodeByIDs(t *testing.T) {
 	}{
 		{
 			name:    "empty node and provider IDs",
-			wantErr: errAction,
+			wantErr: ErrAction,
 		},
 		{
 			name: "node not found",
@@ -316,7 +323,7 @@ func Test_getNodeByIDs(t *testing.T) {
 						Return(nil, k8serrors.NewNotFound(v1.Resource("nodes"), nodeName))
 				},
 			},
-			wantErr: errNodeNotFound,
+			wantErr: ErrNodeNotFound,
 		},
 		{
 			name: "not matching node ID",
@@ -339,7 +346,7 @@ func Test_getNodeByIDs(t *testing.T) {
 						}, nil)
 				},
 			},
-			wantErr: errNodeDoesNotMatch,
+			wantErr: ErrNodeDoesNotMatch,
 		},
 		{
 			name: "not matching provider ID",
@@ -362,7 +369,7 @@ func Test_getNodeByIDs(t *testing.T) {
 						}, nil)
 				},
 			},
-			wantErr: errNodeDoesNotMatch,
+			wantErr: ErrNodeDoesNotMatch,
 		},
 		{
 			name: "node id at request is empty but provider ID matches",
@@ -520,7 +527,7 @@ func Test_getNodeByIDs(t *testing.T) {
 						Return(nil, nil)
 				},
 			},
-			wantErr: errNodeNotFound,
+			wantErr: ErrNodeNotFound,
 		},
 		{
 			name: "node found with matching IDs",
@@ -555,7 +562,7 @@ func Test_getNodeByIDs(t *testing.T) {
 				tt.args.tuneNodeV1Interface(clientSet)
 			}
 
-			got, err := getNodeByIDs(context.Background(), clientSet, tt.args.nodeName, tt.args.nodeID, tt.args.providerID, logrus.New())
+			got, err := GetNodeByIDs(context.Background(), clientSet, tt.args.nodeName, tt.args.nodeID, tt.args.providerID, logrus.New())
 			require.ErrorIs(t, err, tt.wantErr)
 			require.Equal(t, tt.wantNode, got != nil, "getNodeByIDs() does not expect node")
 		})

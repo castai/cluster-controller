@@ -12,6 +12,7 @@ import (
 	v1 "k8s.io/client-go/kubernetes/typed/core/v1"
 
 	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/k8s"
 	"github.com/castai/cluster-controller/internal/waitext"
 )
 
@@ -43,7 +44,7 @@ var errNodeNotDeleted = errors.New("node is not deleted")
 
 func (h *CheckNodeDeletedHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
 	if action == nil {
-		return fmt.Errorf("action is nil %w", errAction)
+		return fmt.Errorf("action is nil %w", k8s.ErrAction)
 	}
 	req, ok := action.Data().(*castai.ActionCheckNodeDeleted)
 	if !ok {
@@ -62,7 +63,7 @@ func (h *CheckNodeDeletedHandler) Handle(ctx context.Context, action *castai.Clu
 	if req.NodeName == "" ||
 		(req.NodeID == "" && req.ProviderId == "") {
 		return fmt.Errorf("node name %v or node ID: %v or provider ID: %v is empty %w",
-			req.NodeName, req.NodeID, req.ProviderId, errAction)
+			req.NodeName, req.NodeID, req.ProviderId, k8s.ErrAction)
 	}
 
 	log.Info("checking if node is deleted")
@@ -87,13 +88,13 @@ func checkNodeDeleted(ctx context.Context, clientSet v1.NodeInterface, nodeName,
 	// If providerID or label have mismatch, then it's reused and deleted
 	// If label is present and matches - node is not deleted
 	// All other use cases can be found in tests
-	n, err := getNodeByIDs(ctx, clientSet, nodeName, nodeID, providerID, log)
-	if errors.Is(err, errNodeDoesNotMatch) {
+	n, err := k8s.GetNodeByIDs(ctx, clientSet, nodeName, nodeID, providerID, log)
+	if errors.Is(err, k8s.ErrNodeDoesNotMatch) {
 		// it means that node with given name exists, but it does not match requested node ID or provider ID.
 		return false, nil
 	}
 
-	if errors.Is(err, errNodeNotFound) {
+	if errors.Is(err, k8s.ErrNodeNotFound) {
 		return false, nil
 	}
 
