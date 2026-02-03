@@ -13,7 +13,18 @@ jobs:
   fossa-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: fossas/fossa-action@v1
+      - uses: actions/checkout@v4
+
+      - name: FOSSA Scan
+        uses: fossas/fossa-action@v1
         with:
           api-key: ${{ secrets.FOSSA_API_KEY }}
+
+      - name: FOSSA Test
+        uses: fossas/fossa-action@v1
+        id: fossa-test
+        if: ${{ github.event_name == 'pull_request' }}
+        with:
+          api-key: ${{ secrets.FOSSA_API_KEY }}
+          run-tests: true
+          test-diff-revision: ${{ github.event.pull_request.base.sha }}
