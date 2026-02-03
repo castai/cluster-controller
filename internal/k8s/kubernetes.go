@@ -439,18 +439,21 @@ func IsControlledBy(p *v1.Pod, kind string) bool {
 }
 
 // PatchNode patches a node with the given change function.
+//
 // Deprecated: Use Client.PatchNode instead.
 func PatchNode(ctx context.Context, log logrus.FieldLogger, clientset kubernetes.Interface, node *v1.Node, changeFn func(*v1.Node)) error {
 	return NewClient(clientset, log).PatchNode(ctx, node, changeFn)
 }
 
 // PatchNodeStatus patches the status of a node.
+//
 // Deprecated: Use Client.PatchNodeStatus instead.
 func PatchNodeStatus(ctx context.Context, log logrus.FieldLogger, clientset kubernetes.Interface, name string, patch []byte) error {
 	return NewClient(clientset, log).PatchNodeStatus(ctx, name, patch)
 }
 
 // GetNodeByIDs retrieves a node by name and validates its ID and provider ID.
+//
 // Deprecated: Use Client.GetNodeByIDs instead.
 func GetNodeByIDs(ctx context.Context, clientSet corev1client.NodeInterface, nodeName, nodeID, providerID string, log logrus.FieldLogger) (*v1.Node, error) {
 	if nodeID == "" && providerID == "" {
@@ -478,6 +481,7 @@ func GetNodeByIDs(ctx context.Context, clientSet corev1client.NodeInterface, nod
 }
 
 // ExecuteBatchPodActions executes the action for each pod in the list.
+//
 // Deprecated: Use Client.ExecuteBatchPodActions instead.
 func ExecuteBatchPodActions(
 	ctx context.Context,
@@ -490,12 +494,14 @@ func ExecuteBatchPodActions(
 }
 
 // EvictPod evicts a pod from a k8s node.
+//
 // Deprecated: Use Client.EvictPod instead.
 func EvictPod(ctx context.Context, pod v1.Pod, podEvictRetryDelay time.Duration, clientset kubernetes.Interface, log logrus.FieldLogger, version schema.GroupVersion) error {
 	return NewClient(clientset, log).EvictPod(ctx, pod, podEvictRetryDelay, version)
 }
 
 // DeletePod deletes a pod from the cluster.
+//
 // Deprecated: Use Client.DeletePod instead.
 func DeletePod(ctx context.Context, options metav1.DeleteOptions, pod v1.Pod, podDeleteRetries int, podDeleteRetryDelay time.Duration, clientset kubernetes.Interface, log logrus.FieldLogger) error {
 	return NewClient(clientset, log).DeletePod(ctx, options, pod, podDeleteRetries, podDeleteRetryDelay)

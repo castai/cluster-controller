@@ -398,9 +398,9 @@ func TestClient_GetNodeByIDs(t *testing.T) {
 
 			var clientset kubernetes.Interface
 			if tt.existNode != nil {
-				clientset = fake.NewSimpleClientset(tt.existNode)
+				clientset = fake.NewClientset(tt.existNode)
 			} else {
-				clientset = fake.NewSimpleClientset()
+				clientset = fake.NewClientset()
 			}
 
 			client := NewClient(clientset, logrus.New())
@@ -585,7 +585,7 @@ func TestClient_PatchNode(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			clientset := fake.NewSimpleClientset(tt.existNode)
+			clientset := fake.NewClientset(tt.existNode)
 			client := NewClient(clientset, logrus.New())
 
 			nodeCopy := tt.existNode.DeepCopy()
@@ -634,7 +634,7 @@ func TestClient_PatchNodeStatus(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			clientset := fake.NewSimpleClientset(tt.existNode)
+			clientset := fake.NewClientset(tt.existNode)
 			client := NewClient(clientset, logrus.New())
 
 			err := client.PatchNodeStatus(context.Background(), nodeName, tt.patch)
@@ -652,13 +652,13 @@ func TestClient_DeletePod(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name               string
-		existPod           *v1.Pod
-		podToDelete        v1.Pod
-		deleteRetries      int
-		deleteRetryDelay   time.Duration
-		wantErr            bool
-		wantPodToNotExist  bool
+		name              string
+		existPod          *v1.Pod
+		podToDelete       v1.Pod
+		deleteRetries     int
+		deleteRetryDelay  time.Duration
+		wantErr           bool
+		wantPodToNotExist bool
 	}{
 		{
 			name: "successfully delete existing pod",
@@ -700,9 +700,9 @@ func TestClient_DeletePod(t *testing.T) {
 
 			var clientset kubernetes.Interface
 			if tt.existPod != nil {
-				clientset = fake.NewSimpleClientset(tt.existPod)
+				clientset = fake.NewClientset(tt.existPod)
 			} else {
-				clientset = fake.NewSimpleClientset()
+				clientset = fake.NewClientset()
 			}
 
 			client := NewClient(clientset, logrus.New())
