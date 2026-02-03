@@ -116,7 +116,7 @@ func (h *CheckNodeStatusHandler) checkNodeReady(ctx context.Context, _ *logrus.E
 func isNodeReady(log logrus.FieldLogger, node *corev1.Node, castNodeID, providerID string) bool {
 	// if node has castai node id label, check if it matches the one we are waiting for
 	// if it doesn't match, we can skip this node.
-	if err := k8s.IsNodeIDProviderIDValid(node, castNodeID, providerID, log); err != nil {
+	if err := k8s.IsNodeIDProviderIDValid(node, castNodeID, providerID); err != nil {
 		log.WithFields(logrus.Fields{
 			"node":        node.Name,
 			"node_id":     castNodeID,

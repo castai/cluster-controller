@@ -52,3 +52,12 @@ func NewDefaultActionHandlers(
 func (h ActionHandlers) Close() error {
 	return h[reflect.TypeFor[*castai.ActionCreateEvent]()].(*CreateEventHandler).Close()
 }
+
+// ShouldWaitForVolumeDetach returns whether to wait for VolumeAttachments based on per-action config.
+// Returns true only if explicitly enabled via action field; defaults to false (disabled).
+func ShouldWaitForVolumeDetach(req *castai.ActionDrainNode) bool {
+	if req.WaitForVolumeDetach != nil {
+		return *req.WaitForVolumeDetach
+	}
+	return false
+}

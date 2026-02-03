@@ -5,13 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"strings"
 	"time"
 
 	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/kubernetes"
@@ -61,17 +59,6 @@ func NewDrainNodeHandler(
 	}
 }
 
-// getDrainTimeout returns drain timeout adjusted to action creation time.
-// the result is clamped between 0s and the requested timeout.
-func (h *DrainNodeHandler) getDrainTimeout(action *castai.ClusterAction) time.Duration {
-	timeSinceCreated := time.Since(action.CreatedAt)
-	requestedTimeout := time.Duration(action.ActionDrainNode.DrainTimeoutSeconds) * time.Second
-
-	drainTimeout := requestedTimeout - timeSinceCreated
-
-	return lo.Clamp(drainTimeout, minDrainTimeout*time.Second, requestedTimeout)
-}
-
 type DrainNodeHandler struct {
 	log       logrus.FieldLogger
 	clientset kubernetes.Interface
@@ -92,7 +79,7 @@ func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	if !ok {
 		return newUnexpectedTypeErr(action.Data(), req)
 	}
-	drainTimeout := h.getDrainTimeout(action)
+	drainTimeout := k8s.GetDrainTimeout(action)
 
 	log := h.log.WithFields(logrus.Fields{
 		"node_name":      req.NodeName,
@@ -119,7 +106,7 @@ func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 
 	log.Info("cordoning node for draining")
 
-	if err := h.cordonNode(ctx, node); err != nil {
+	if err := k8s.CordonNode(ctx, h.log, h.clientset, node); err != nil {
 		return fmt.Errorf("cordoning node %q: %w", req.NodeName, err)
 	}
 
@@ -190,34 +177,11 @@ func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 	return deleteErr
 }
 
-func (h *DrainNodeHandler) cordonNode(ctx context.Context, node *v1.Node) error {
-	if node.Spec.Unschedulable {
-		return nil
-	}
-
-	err := k8s.PatchNode(ctx, h.log, h.clientset, node, func(n *v1.Node) {
-		n.Spec.Unschedulable = true
-	})
-	if err != nil {
-		return fmt.Errorf("patching node unschedulable: %w", err)
-	}
-	return nil
-}
-
-// shouldWaitForVolumeDetach returns whether to wait for VolumeAttachments based on per-action config.
-// Returns true only if explicitly enabled via action field; defaults to false (disabled).
-func (h *DrainNodeHandler) shouldWaitForVolumeDetach(req *castai.ActionDrainNode) bool {
-	if req.WaitForVolumeDetach != nil {
-		return *req.WaitForVolumeDetach
-	}
-	return false
-}
-
 // waitForVolumeDetachIfEnabled waits for VolumeAttachments to be deleted if the feature is enabled.
 // This is called after successful drain to give CSI drivers time to clean up volumes.
 // nonEvictablePods are pods that won't be evicted (DaemonSet, static) - their was are excluded from waiting.
 func (h *DrainNodeHandler) waitForVolumeDetachIfEnabled(ctx context.Context, log logrus.FieldLogger, nodeName string, req *castai.ActionDrainNode, nonEvictablePods []v1.Pod) {
-	if !h.shouldWaitForVolumeDetach(req) || h.vaWaiter == nil {
+	if !ShouldWaitForVolumeDetach(req) || h.vaWaiter == nil {
 		return
 	}
 
@@ -314,7 +278,7 @@ func (h *DrainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldL
 	}
 
 	deletePod := func(ctx context.Context, pod v1.Pod) error {
-		return h.deletePod(ctx, options, pod)
+		return k8s.DeletePod(ctx, options, pod, h.cfg.podDeleteRetries, h.cfg.podDeleteRetryDelay, h.clientset, h.log)
 	}
 
 	_, podsWithFailedDeletion := k8s.ExecuteBatchPodActions(ctx, log, nodePods.toEvict, deletePod, "delete-pod")
@@ -440,46 +404,4 @@ func (h *DrainNodeHandler) waitNodePodsTerminated(ctx context.Context, log logru
 			h.log.Warnf("waiting for pod termination on node %v, will retry: %v", node.Name, err)
 		},
 	)
-}
-
-func (h *DrainNodeHandler) deletePod(ctx context.Context, options metav1.DeleteOptions, pod v1.Pod) error {
-	b := waitext.NewConstantBackoff(h.cfg.podDeleteRetryDelay)
-	action := func(ctx context.Context) (bool, error) {
-		err := h.clientset.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, options)
-		if err != nil {
-			// Pod is not found - ignore.
-			if apierrors.IsNotFound(err) {
-				return false, nil
-			}
-
-			// Pod is misconfigured - stop retry.
-			if apierrors.IsInternalError(err) {
-				return false, err
-			}
-		}
-
-		// Other errors - retry.
-		return true, err
-	}
-	err := waitext.Retry(ctx, b, h.cfg.podDeleteRetries, action, func(err error) {
-		h.log.Warnf("deleting pod %s on node %s in namespace %s, will retry: %v", pod.Name, pod.Spec.NodeName, pod.Namespace, err)
-	})
-	if err != nil {
-		return fmt.Errorf("deleting pod %s in namespace %s: %w", pod.Name, pod.Namespace, err)
-	}
-	return nil
-}
-
-func logCastPodsToEvict(log logrus.FieldLogger, castPods []v1.Pod) {
-	if len(castPods) == 0 {
-		return
-	}
-
-	castPodsNames := make([]string, 0, len(castPods))
-	for _, p := range castPods {
-		castPodsNames = append(castPodsNames, p.Name)
-	}
-	joinedPodNames := strings.Join(castPodsNames, ", ")
-
-	log.Warnf("evicting CAST AI pods: %s", joinedPodNames)
 }

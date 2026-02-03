@@ -231,7 +231,7 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 				nodeID:     nodeID,
 				providerID: providerID,
 			},
-			wantErr: ErrNodeDoesNotMatch,
+			wantErr: ErrProviderIDMismatch,
 		},
 		{
 			name: "node ID is match and provider ID does not match",
@@ -249,7 +249,7 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 				nodeID:     nodeID,
 				providerID: providerID,
 			},
-			wantErr: ErrNodeDoesNotMatch,
+			wantErr: ErrProviderIDMismatch,
 		},
 		{
 			name: "node ID is match and request provider ID is empty",
@@ -289,7 +289,7 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := IsNodeIDProviderIDValid(tt.args.node, tt.args.nodeID, tt.args.providerID, logrus.New())
+			got := IsNodeIDProviderIDValid(tt.args.node, tt.args.nodeID, tt.args.providerID)
 			require.Equal(t, tt.wantErr != nil, got != nil, "error mismatch", got)
 			require.ErrorIs(t, got, tt.wantErr)
 		})
@@ -799,7 +799,7 @@ func Test_getNodeByIDs(t *testing.T) {
 						}, nil)
 				},
 			},
-			wantErr: ErrNodeDoesNotMatch,
+			wantErr: ErrProviderIDMismatch,
 		},
 		{
 			name: "node id at request is empty but provider ID matches",
