@@ -246,7 +246,7 @@ func addEvictionSupport(c *fake.Clientset) {
 
 // nolint: gocognit
 func TestDrainNodeHandler_Handle(t *testing.T) {
-	podFailedDeletionErr := &podFailedActionError{}
+	podFailedDeletionErr := &k8s.PodFailedActionError{}
 	t.Parallel()
 	type fields struct {
 		clientSet func(t *testing.T) *fake.Clientset
