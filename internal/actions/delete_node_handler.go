@@ -143,7 +143,7 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 	// Create delete options with grace period 0 - force delete.
 	deleteOptions := metav1.NewDeleteOptions(0)
 	deletePod := func(ctx context.Context, pod v1.Pod) error {
-		return h.deletePod(ctx, *deleteOptions, pod)
+		return k8s.DeletePod(ctx, *deleteOptions, pod, h.cfg.deleteRetries, h.cfg.deleteRetryWait, h.clientset, h.log)
 	}
 
 	deletedPods, failedPods := k8s.ExecuteBatchPodActions(ctx, log, pods, deletePod, "delete-pod")

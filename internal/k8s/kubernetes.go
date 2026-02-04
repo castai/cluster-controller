@@ -24,7 +24,12 @@ import (
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 
 	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/logger"
 	"github.com/castai/cluster-controller/internal/waitext"
+)
+
+const (
+	minDrainTimeout = 0 // Minimal pod drain timeout.
 )
 
 var (
@@ -64,6 +69,7 @@ func (c *Client) Log() logrus.FieldLogger {
 
 // PatchNode patches a node with the given change function.
 func (c *Client) PatchNode(ctx context.Context, node *v1.Node, changeFn func(*v1.Node)) error {
+	logger := logger.FromContext(ctx, c.log)
 	oldData, err := json.Marshal(node)
 	if err != nil {
 		return fmt.Errorf("marshaling old data: %w", err)
@@ -90,7 +96,7 @@ func (c *Client) PatchNode(ctx context.Context, node *v1.Node, changeFn func(*v1
 			return true, err
 		},
 		func(err error) {
-			c.log.Warnf("patch node, will retry: %v", err)
+			logger.Warnf("patch node, will retry: %v", err)
 		},
 	)
 	if err != nil {
@@ -102,6 +108,8 @@ func (c *Client) PatchNode(ctx context.Context, node *v1.Node, changeFn func(*v1
 
 // PatchNodeStatus patches the status of a node.
 func (c *Client) PatchNodeStatus(ctx context.Context, name string, patch []byte) error {
+	logger := logger.FromContext(ctx, c.log)
+
 	err := waitext.Retry(
 		ctx,
 		DefaultBackoff(),
@@ -110,17 +118,31 @@ func (c *Client) PatchNodeStatus(ctx context.Context, name string, patch []byte)
 			_, err := c.clientset.CoreV1().Nodes().PatchStatus(ctx, name, patch)
 			if k8serrors.IsForbidden(err) {
 				// permissions might be of older version that can't patch node/status.
-				c.log.WithField("node", name).WithError(err).Warn("skip patch node/status")
+				logger.WithField("node", name).WithError(err).Warn("skip patch node/status")
 				return false, nil
 			}
 			return true, err
 		},
 		func(err error) {
-			c.log.Warnf("patch node status, will retry: %v", err)
+			logger.Warnf("patch node status, will retry: %v", err)
 		},
 	)
 	if err != nil {
 		return fmt.Errorf("patch status: %w", err)
+	}
+	return nil
+}
+
+func (c *Client) CordonNode(ctx context.Context, node *v1.Node) error {
+	if node.Spec.Unschedulable {
+		return nil
+	}
+
+	err := c.PatchNode(ctx, node, func(n *v1.Node) {
+		n.Spec.Unschedulable = true
+	})
+	if err != nil {
+		return fmt.Errorf("patching node unschedulable: %w", err)
 	}
 	return nil
 }
@@ -143,7 +165,7 @@ func (c *Client) GetNodeByIDs(ctx context.Context, nodeName, nodeID, providerID 
 		return nil, ErrNodeNotFound
 	}
 
-	if err := IsNodeIDProviderIDValid(n, nodeID, providerID, c.log); err != nil {
+	if err := IsNodeIDProviderIDValid(n, nodeID, providerID); err != nil {
 		return nil, fmt.Errorf("requested node ID %s, provider ID %s for node name: %s %w",
 			nodeID, providerID, n.Name, err)
 	}
@@ -164,10 +186,10 @@ func (c *Client) ExecuteBatchPodActions(
 	if actionName == "" {
 		actionName = "unspecified"
 	}
-	log := c.log.WithField("actionName", actionName)
+	logger := logger.FromContext(ctx, c.log).WithField("actionName", actionName)
 
 	if len(pods) == 0 {
-		log.Debug("empty list of pods to execute action against")
+		logger.Debug("empty list of pods to execute action against")
 		return []*v1.Pod{}, nil
 	}
 
@@ -179,7 +201,7 @@ func (c *Client) ExecuteBatchPodActions(
 		wg                 sync.WaitGroup
 	)
 
-	log.Debugf("Starting %d parallel tasks for %d pods: [%v]", parallelTasks, len(pods), lo.Map(pods, func(t v1.Pod, i int) string {
+	logger.Debugf("Starting %d parallel tasks for %d pods: [%v]", parallelTasks, len(pods), lo.Map(pods, func(t v1.Pod, i int) string {
 		return fmt.Sprintf("%s/%s", t.Namespace, t.Name)
 	}))
 
@@ -228,6 +250,8 @@ func (c *Client) ExecuteBatchPodActions(
 // EvictPod evicts a pod from a k8s node. Error handling is based on eviction api documentation:
 // https://kubernetes.io/docs/tasks/administer-cluster/safely-drain-node/#the-eviction-api
 func (c *Client) EvictPod(ctx context.Context, pod v1.Pod, podEvictRetryDelay time.Duration, version schema.GroupVersion) error {
+	logger := logger.FromContext(ctx, c.log)
+
 	b := waitext.NewConstantBackoff(podEvictRetryDelay)
 	action := func(ctx context.Context) (bool, error) {
 		var err error
@@ -273,7 +297,7 @@ func (c *Client) EvictPod(ctx context.Context, pod v1.Pod, podEvictRetryDelay ti
 		return true, err
 	}
 	err := waitext.Retry(ctx, b, waitext.Forever, action, func(err error) {
-		c.log.Warnf("evict pod %s on node %s in namespace %s, will retry: %v", pod.Name, pod.Spec.NodeName, pod.Namespace, err)
+		logger.Warnf("evict pod %s on node %s in namespace %s, will retry: %v", pod.Name, pod.Spec.NodeName, pod.Namespace, err)
 	})
 	if err != nil {
 		return fmt.Errorf("evicting pod %s in namespace %s: %w", pod.Name, pod.Namespace, err)
@@ -283,6 +307,8 @@ func (c *Client) EvictPod(ctx context.Context, pod v1.Pod, podEvictRetryDelay ti
 
 // DeletePod deletes a pod from the cluster.
 func (c *Client) DeletePod(ctx context.Context, options metav1.DeleteOptions, pod v1.Pod, podDeleteRetries int, podDeleteRetryDelay time.Duration) error {
+	logger := logger.FromContext(ctx, c.log)
+
 	b := waitext.NewConstantBackoff(podDeleteRetryDelay)
 	action := func(ctx context.Context) (bool, error) {
 		err := c.clientset.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, options)
@@ -302,7 +328,7 @@ func (c *Client) DeletePod(ctx context.Context, options metav1.DeleteOptions, po
 		return true, err
 	}
 	err := waitext.Retry(ctx, b, podDeleteRetries, action, func(err error) {
-		c.log.Warnf("deleting pod %s on node %s in namespace %s, will retry: %v", pod.Name, pod.Spec.NodeName, pod.Namespace, err)
+		logger.Warnf("deleting pod %s on node %s in namespace %s, will retry: %v", pod.Name, pod.Spec.NodeName, pod.Namespace, err)
 	})
 	if err != nil {
 		return fmt.Errorf("deleting pod %s in namespace %s: %w", pod.Name, pod.Namespace, err)
@@ -311,7 +337,7 @@ func (c *Client) DeletePod(ctx context.Context, options metav1.DeleteOptions, po
 }
 
 // IsNodeIDProviderIDValid checks if the node's ID and provider ID match the requested ones.
-func IsNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string, log logrus.FieldLogger) error {
+func IsNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string) error {
 	if nodeID == "" && providerID == "" {
 		// if both node ID and provider ID are empty, we can't validate the node
 		return fmt.Errorf("node and provider IDs are empty %w", ErrAction)
@@ -343,11 +369,6 @@ func IsNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string, log logru
 	if (!ok || currentNodeID == "") && validProviderID {
 		// if node ID is not set in labels, but provider ID is valid, node is valid
 		return nil
-	}
-
-	if !emptyProviderID && node.Spec.ProviderID != providerID {
-		// if provider ID is not empty in request and does not match node's provider ID, log err for investigations
-		log.Errorf("node %v has provider ID %s, but requested provider ID is %s", node.Name, node.Spec.ProviderID, providerID)
 	}
 
 	// if we reach here, it means that node ID and/or provider ID does not match
@@ -466,7 +487,10 @@ func GetNodeByIDs(ctx context.Context, clientSet corev1client.NodeInterface, nod
 		return nil, ErrNodeNotFound
 	}
 
-	if err := IsNodeIDProviderIDValid(n, nodeID, providerID, log); err != nil {
+	if err := IsNodeIDProviderIDValid(n, nodeID, providerID); err != nil {
+		if errors.Is(err, ErrNodeDoesNotMatch) {
+			log.Errorf("node %v has provider ID %s, but requested provider ID is %s", nodeID, n.Spec.ProviderID, providerID)
+		}
 		return nil, fmt.Errorf("requested node ID %s, provider ID %s for node name: %s %w",
 			nodeID, providerID, n.Name, err)
 	}
@@ -493,4 +517,19 @@ func EvictPod(ctx context.Context, pod v1.Pod, podEvictRetryDelay time.Duration,
 // DeletePod deletes a pod from the cluster.
 func DeletePod(ctx context.Context, options metav1.DeleteOptions, pod v1.Pod, podDeleteRetries int, podDeleteRetryDelay time.Duration, clientset kubernetes.Interface, log logrus.FieldLogger) error {
 	return NewClient(clientset, log).DeletePod(ctx, options, pod, podDeleteRetries, podDeleteRetryDelay)
+}
+
+func CordonNode(ctx context.Context, log logrus.FieldLogger, clientset kubernetes.Interface, node *v1.Node) error {
+	return NewClient(clientset, log).CordonNode(ctx, node)
+}
+
+// GetDrainTimeout returns drain timeout adjusted to action creation time.
+// the result is clamped between 0s and the requested timeout.
+func GetDrainTimeout(action *castai.ClusterAction) time.Duration {
+	timeSinceCreated := time.Since(action.CreatedAt)
+	requestedTimeout := time.Duration(action.ActionDrainNode.DrainTimeoutSeconds) * time.Second
+
+	drainTimeout := requestedTimeout - timeSinceCreated
+
+	return lo.Clamp(drainTimeout, minDrainTimeout*time.Second, requestedTimeout)
 }

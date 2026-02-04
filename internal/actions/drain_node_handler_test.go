@@ -40,12 +40,7 @@ func TestGetDrainTimeout(t *testing.T) {
 			},
 			CreatedAt: time.Now().UTC(),
 		}
-		h := DrainNodeHandler{
-			log: log,
-			cfg: drainNodeConfig{},
-		}
-
-		timeout := h.getDrainTimeout(action)
+		timeout := k8s.GetDrainTimeout(action)
 
 		// We give some wiggle room as the test might get here a few milliseconds late.
 		r.InDelta((100 * time.Second).Milliseconds(), timeout.Milliseconds(), 10)
@@ -62,12 +57,8 @@ func TestGetDrainTimeout(t *testing.T) {
 			},
 			CreatedAt: time.Now().UTC().Add(-3 * time.Minute),
 		}
-		h := DrainNodeHandler{
-			log: log,
-			cfg: drainNodeConfig{},
-		}
 
-		timeout := h.getDrainTimeout(action)
+		timeout := k8s.GetDrainTimeout(action)
 		r.Less(int(math.Floor(timeout.Seconds())), 600)
 	})
 
@@ -82,12 +73,8 @@ func TestGetDrainTimeout(t *testing.T) {
 			},
 			CreatedAt: time.Now().UTC().Add(-60 * time.Minute),
 		}
-		h := DrainNodeHandler{
-			log: log,
-			cfg: drainNodeConfig{},
-		}
 
-		timeout := h.getDrainTimeout(action)
+		timeout := k8s.GetDrainTimeout(action)
 		r.Equal(0, int(timeout.Seconds()))
 	})
 }
@@ -776,11 +763,10 @@ func TestShouldWaitForVolumeDetach(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			h := &DrainNodeHandler{}
 			req := &castai.ActionDrainNode{
 				WaitForVolumeDetach: tt.waitForVolumeDetach,
 			}
-			require.Equal(t, tt.want, h.shouldWaitForVolumeDetach(req))
+			require.Equal(t, tt.want, ShouldWaitForVolumeDetach(req))
 		})
 	}
 }

@@ -216,42 +216,6 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 			wantErr: ErrNodeDoesNotMatch,
 		},
 		{
-			name: "node ID and provider ID do not match",
-			args: args{
-				node: &v1.Node{
-					ObjectMeta: metav1.ObjectMeta{
-						Labels: map[string]string{
-							castai.LabelNodeID: "node-id-123-not-matching",
-						},
-					},
-					Spec: v1.NodeSpec{
-						ProviderID: "provider-id-456-not-matching",
-					},
-				},
-				nodeID:     nodeID,
-				providerID: providerID,
-			},
-			wantErr: ErrNodeDoesNotMatch,
-		},
-		{
-			name: "node ID is match and provider ID does not match",
-			args: args{
-				node: &v1.Node{
-					ObjectMeta: metav1.ObjectMeta{
-						Labels: map[string]string{
-							castai.LabelNodeID: nodeID,
-						},
-					},
-					Spec: v1.NodeSpec{
-						ProviderID: "provider-id-456-not-matching",
-					},
-				},
-				nodeID:     nodeID,
-				providerID: providerID,
-			},
-			wantErr: ErrNodeDoesNotMatch,
-		},
-		{
 			name: "node ID is match and request provider ID is empty",
 			args: args{
 				node: &v1.Node{
@@ -289,7 +253,7 @@ func Test_isNodeIDProviderIDValid(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := IsNodeIDProviderIDValid(tt.args.node, tt.args.nodeID, tt.args.providerID, logrus.New())
+			got := IsNodeIDProviderIDValid(tt.args.node, tt.args.nodeID, tt.args.providerID)
 			require.Equal(t, tt.wantErr != nil, got != nil, "error mismatch", got)
 			require.ErrorIs(t, got, tt.wantErr)
 		})
@@ -772,29 +736,6 @@ func Test_getNodeByIDs(t *testing.T) {
 							},
 							Spec: v1.NodeSpec{
 								ProviderID: providerID,
-							},
-						}, nil)
-				},
-			},
-			wantErr: ErrNodeDoesNotMatch,
-		},
-		{
-			name: "not matching provider ID",
-			args: args{
-				nodeName:   nodeName,
-				nodeID:     nodeID,
-				providerID: providerID,
-				tuneNodeV1Interface: func(m *mock_actions.MockNodeInterface) {
-					m.EXPECT().Get(gomock.Any(), nodeName, metav1.GetOptions{}).
-						Return(&v1.Node{
-							ObjectMeta: metav1.ObjectMeta{
-								Name: nodeName,
-								Labels: map[string]string{
-									castai.LabelNodeID: nodeID,
-								},
-							},
-							Spec: v1.NodeSpec{
-								ProviderID: "another-provider-id",
 							},
 						}, nil)
 				},
