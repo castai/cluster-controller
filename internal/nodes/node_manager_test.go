@@ -48,6 +48,7 @@ func (f *fakeIndexer) ByIndex(indexName, indexedValue string) ([]any, error) {
 	return f.objects[key], nil
 }
 
+// nolint: unparam
 func (f *fakeIndexer) addPodToNode(nodeName string, pod *v1.Pod) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
