@@ -11,12 +11,9 @@ import (
 	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
-	policyv1 "k8s.io/api/policy/v1"
-	"k8s.io/api/policy/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/kubectl/pkg/drain"
 
@@ -144,7 +141,7 @@ func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 		return fmt.Errorf("node failed to drain via graceful eviction, force=%v, timeout=%f, will not force delete pods: %w", req.Force, drainTimeout.Seconds(), err)
 	}
 
-	var podsFailedEvictionErr *podFailedActionError
+	var podsFailedEvictionErr *k8s.PodFailedActionError
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
 		log.Infof("timeout=%f exceeded during pod eviction, force=%v, starting pod deletion", drainTimeout.Seconds(), req.Force)
@@ -175,7 +172,7 @@ func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 			break
 		}
 
-		var podsFailedDeletionErr *podFailedActionError
+		var podsFailedDeletionErr *k8s.PodFailedActionError
 		if errors.Is(deleteErr, context.DeadlineExceeded) || errors.As(deleteErr, &podsFailedDeletionErr) {
 			continue
 		}
@@ -262,17 +259,17 @@ func (h *DrainNodeHandler) evictNodePods(ctx context.Context, log logrus.FieldLo
 		return nil, err
 	}
 	evictPod := func(ctx context.Context, pod v1.Pod) error {
-		return h.evictPod(ctx, pod, groupVersion)
+		return k8s.EvictPod(ctx, pod, h.cfg.podEvictRetryDelay, h.clientset, h.log, groupVersion)
 	}
 
 	_, podsWithFailedEviction := k8s.ExecuteBatchPodActions(ctx, log, nodePods.toEvict, evictPod, "evict-pod")
 	var podsToIgnoreForTermination []*v1.Pod
-	var failedPodsError *podFailedActionError
+	var failedPodsError *k8s.PodFailedActionError
 	if len(podsWithFailedEviction) > 0 {
 		podErrors := lo.Map(podsWithFailedEviction, func(failure k8s.PodActionFailure, _ int) error {
 			return fmt.Errorf("pod %s/%s failed eviction: %w", failure.Pod.Namespace, failure.Pod.Name, failure.Err)
 		})
-		failedPodsError = &podFailedActionError{
+		failedPodsError = &k8s.PodFailedActionError{
 			Action: "evict",
 			Errors: podErrors,
 		}
@@ -322,12 +319,12 @@ func (h *DrainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldL
 
 	_, podsWithFailedDeletion := k8s.ExecuteBatchPodActions(ctx, log, nodePods.toEvict, deletePod, "delete-pod")
 	var podsToIgnoreForTermination []*v1.Pod
-	var failedPodsError *podFailedActionError
+	var failedPodsError *k8s.PodFailedActionError
 	if len(podsWithFailedDeletion) > 0 {
 		podErrors := lo.Map(podsWithFailedDeletion, func(failure k8s.PodActionFailure, _ int) error {
 			return fmt.Errorf("pod %s/%s failed deletion: %w", failure.Pod.Namespace, failure.Pod.Name, failure.Err)
 		})
-		failedPodsError = &podFailedActionError{
+		failedPodsError = &k8s.PodFailedActionError{
 			Action: "delete",
 			Errors: podErrors,
 		}
@@ -380,40 +377,16 @@ func (h *DrainNodeHandler) listNodePods(ctx context.Context, log logrus.FieldLog
 		return nil, fmt.Errorf("listing node %v pods: %w", node.Name, err)
 	}
 
+	partitioned := k8s.PartitionPodsForEviction(pods.Items, h.cfg.castNamespace, h.cfg.skipDeletedTimeoutSeconds)
+
 	result := &nodePods{
-		toEvict:      make([]v1.Pod, 0),
-		nonEvictable: make([]v1.Pod, 0),
-	}
-	// Evict CAST PODs as last ones.
-	castPods := make([]v1.Pod, 0)
-
-	for _, p := range pods.Items {
-		// Skip pods that have been recently removed.
-		if !p.DeletionTimestamp.IsZero() &&
-			int(time.Since(p.ObjectMeta.GetDeletionTimestamp().Time).Seconds()) > h.cfg.skipDeletedTimeoutSeconds {
-			continue
-		}
-
-		// Skip completed pods. Will be removed during node removal.
-		if p.Status.Phase == v1.PodSucceeded || p.Status.Phase == v1.PodFailed {
-			continue
-		}
-
-		if isDaemonSetPod(&p) || isStaticPod(&p) {
-			result.nonEvictable = append(result.nonEvictable, p)
-			continue
-		}
-
-		if p.Namespace == h.cfg.castNamespace {
-			castPods = append(castPods, p)
-			continue
-		}
-
-		result.toEvict = append(result.toEvict, p)
+		toEvict:      make([]v1.Pod, 0, len(partitioned.Evictable)+len(partitioned.CastPods)),
+		nonEvictable: make([]v1.Pod, 0, len(partitioned.NonEvictable)),
 	}
 
-	logCastPodsToEvict(log, castPods)
-	result.toEvict = append(result.toEvict, castPods...)
+	logCastPodsToEvict(log, partitioned.CastPods)
+	result.toEvict = append(result.toEvict, partitioned.Evictable...)
+	result.toEvict = append(result.toEvict, partitioned.CastPods...)
 	return result, nil
 }
 
@@ -469,62 +442,6 @@ func (h *DrainNodeHandler) waitNodePodsTerminated(ctx context.Context, log logru
 	)
 }
 
-// evictPod from the k8s node. Error handling is based on eviction api documentation:
-// https://kubernetes.io/docs/tasks/administer-cluster/safely-drain-node/#the-eviction-api
-func (h *DrainNodeHandler) evictPod(ctx context.Context, pod v1.Pod, groupVersion schema.GroupVersion) error {
-	b := waitext.NewConstantBackoff(h.cfg.podEvictRetryDelay)
-	action := func(ctx context.Context) (bool, error) {
-		var err error
-
-		h.log.Debugf("requesting eviction for pod %s/%s", pod.Namespace, pod.Name)
-		if groupVersion == policyv1.SchemeGroupVersion {
-			err = h.clientset.PolicyV1().Evictions(pod.Namespace).Evict(ctx, &policyv1.Eviction{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      pod.Name,
-					Namespace: pod.Namespace,
-				},
-			})
-		} else {
-			err = h.clientset.CoreV1().Pods(pod.Namespace).EvictV1beta1(ctx, &v1beta1.Eviction{
-				TypeMeta: metav1.TypeMeta{
-					APIVersion: "policy/v1beta1",
-					Kind:       "Eviction",
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      pod.Name,
-					Namespace: pod.Namespace,
-				},
-			})
-		}
-
-		if err != nil {
-			// Pod is not found - ignore.
-			if apierrors.IsNotFound(err) {
-				return false, nil
-			}
-
-			// Pod is misconfigured - stop retry.
-			if apierrors.IsInternalError(err) {
-				return false, err
-			}
-		}
-
-		// Other errors - retry.
-		// This includes 429 TooManyRequests (due to throttling) and 429 TooManyRequests + DisruptionBudgetCause (due to violated PDBs)
-		// This is done to try and do graceful eviction for as long as possible;
-		// it is expected that caller has a timeout that will stop this process if the PDB can never be satisfied.
-		// Note: pods only receive SIGTERM signals if they are evicted; if PDB prevents that, the signal will not happen here.
-		return true, err
-	}
-	err := waitext.Retry(ctx, b, waitext.Forever, action, func(err error) {
-		h.log.Warnf("evict pod %s on node %s in namespace %s, will retry: %v", pod.Name, pod.Spec.NodeName, pod.Namespace, err)
-	})
-	if err != nil {
-		return fmt.Errorf("evicting pod %s in namespace %s: %w", pod.Name, pod.Namespace, err)
-	}
-	return nil
-}
-
 func (h *DrainNodeHandler) deletePod(ctx context.Context, options metav1.DeleteOptions, pod v1.Pod) error {
 	b := waitext.NewConstantBackoff(h.cfg.podDeleteRetryDelay)
 	action := func(ctx context.Context) (bool, error) {
@@ -565,33 +482,4 @@ func logCastPodsToEvict(log logrus.FieldLogger, castPods []v1.Pod) {
 	joinedPodNames := strings.Join(castPodsNames, ", ")
 
 	log.Warnf("evicting CAST AI pods: %s", joinedPodNames)
-}
-
-func isDaemonSetPod(p *v1.Pod) bool {
-	return isControlledBy(p, "DaemonSet")
-}
-
-func isStaticPod(p *v1.Pod) bool {
-	return isControlledBy(p, "Node")
-}
-
-func isControlledBy(p *v1.Pod, kind string) bool {
-	ctrl := metav1.GetControllerOf(p)
-
-	return ctrl != nil && ctrl.Kind == kind
-}
-
-type podFailedActionError struct {
-	// Action holds context what was the code trying to do.
-	Action string
-	// Errors should hold an entry per pod, for which the action failed.
-	Errors []error
-}
-
-func (p *podFailedActionError) Error() string {
-	return fmt.Sprintf("action %q: %v", p.Action, errors.Join(p.Errors...))
-}
-
-func (p *podFailedActionError) Unwrap() []error {
-	return p.Errors
 }
