@@ -51,6 +51,7 @@ type DeleteNodeHandler struct {
 	cfg       deleteNodeConfig
 }
 
+// nolint: gocognit
 func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
 	if action == nil {
 		return fmt.Errorf("action is nil %w", k8s.ErrAction)

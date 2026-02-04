@@ -3,7 +3,9 @@ package nodes
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -22,9 +24,9 @@ const (
 	testCastNamespace = "cast-namespace"
 )
 
-// fakeIndexer implements cache.Indexer for testing
 type fakeIndexer struct {
 	cache.Indexer
+	mu      sync.RWMutex
 	objects map[string][]any
 	err     error
 }
@@ -36,6 +38,9 @@ func newFakeIndexer() *fakeIndexer {
 }
 
 func (f *fakeIndexer) ByIndex(indexName, indexedValue string) ([]any, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -44,16 +49,43 @@ func (f *fakeIndexer) ByIndex(indexName, indexedValue string) ([]any, error) {
 }
 
 func (f *fakeIndexer) addPodToNode(nodeName string, pod *v1.Pod) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	key := informer.PodIndexerName + "/" + nodeName
 	f.objects[key] = append(f.objects[key], pod)
 }
 
 func (f *fakeIndexer) clearPodsFromNode(nodeName string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	key := informer.PodIndexerName + "/" + nodeName
 	f.objects[key] = nil
 }
 
+func (f *fakeIndexer) removeFirstPodFromNode(nodeName string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	key := informer.PodIndexerName + "/" + nodeName
+	if len(f.objects[key]) > 0 {
+		f.objects[key] = f.objects[key][1:]
+	}
+}
+
+func (f *fakeIndexer) addObjectToNode(nodeName string, obj any) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	key := informer.PodIndexerName + "/" + nodeName
+	f.objects[key] = append(f.objects[key], obj)
+}
+
 func (f *fakeIndexer) setError(err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	f.err = err
 }
 
@@ -110,7 +142,6 @@ func TestManager_List(t *testing.T) {
 		{
 			name: "returns empty list when no pods",
 			setupPods: func(f *fakeIndexer) {
-				// no pods
 			},
 			wantPodLen: 0,
 		},
@@ -140,9 +171,7 @@ func TestManager_List(t *testing.T) {
 				f.addPodToNode(testNodeName, &v1.Pod{
 					ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"},
 				})
-				// Add a non-pod object (this shouldn't happen in practice, but tests defensive coding)
-				key := informer.PodIndexerName + "/" + testNodeName
-				f.objects[key] = append(f.objects[key], "not-a-pod")
+				f.addObjectToNode(testNodeName, "not-a-pod")
 			},
 			wantPodLen: 1,
 		},
@@ -196,7 +225,6 @@ func TestManager_Evict(t *testing.T) {
 		{
 			name: "returns empty when no pods to evict",
 			setupPods: func(f *fakeIndexer) {
-				// no pods
 			},
 			wantIgnoredPodsLen:    0,
 			terminatesImmediately: true,
@@ -286,7 +314,7 @@ func TestManager_Evict(t *testing.T) {
 					},
 				})
 			},
-			skipDeletedTimeoutSecs: 60, // 1 minute timeout, pod deleted 10 minutes ago
+			skipDeletedTimeoutSecs: 60,
 			wantIgnoredPodsLen:     0,
 			terminatesImmediately:  true,
 		},
@@ -355,7 +383,6 @@ func TestManager_Drain(t *testing.T) {
 		{
 			name: "returns empty when no pods to drain",
 			setupPods: func(f *fakeIndexer) {
-				// no pods
 			},
 			wantIgnoredPodsLen:    0,
 			terminatesImmediately: true,
@@ -435,19 +462,18 @@ func TestManager_WaitTermination(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name           string
-		setupPods      func(*fakeIndexer)
-		ignoredPods    []*v1.Pod
-		contextTimeout time.Duration
-		wantErr        bool
-		wantErrText    string
+		name              string
+		setupPods         func(*fakeIndexer)
+		simulateTerminate func(*fakeIndexer)
+		ignoredPods       []*v1.Pod
+		contextTimeout    time.Duration
+		wantErr           bool
+		wantErrText       string
 	}{
 		{
 			name: "returns immediately when no pods",
 			setupPods: func(f *fakeIndexer) {
-				// no pods
 			},
-			ignoredPods:    nil,
 			contextTimeout: 100 * time.Millisecond,
 			wantErr:        false,
 		},
@@ -465,24 +491,10 @@ func TestManager_WaitTermination(t *testing.T) {
 			wantErr:        false,
 		},
 		{
-			name: "returns context error when pods remain and context times out",
-			setupPods: func(f *fakeIndexer) {
-				f.addPodToNode(testNodeName, &v1.Pod{
-					ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"},
-				})
-			},
-			ignoredPods:    nil,
-			contextTimeout: 50 * time.Millisecond,
-			wantErr:        true,
-			wantErrText:    "context",
-		},
-		{
 			name: "returns error when context is already canceled",
 			setupPods: func(f *fakeIndexer) {
-				// no setup needed - context will be canceled
 			},
-			ignoredPods:    nil,
-			contextTimeout: 0, // will be canceled immediately
+			contextTimeout: 0,
 			wantErr:        true,
 			wantErrText:    "context canceled",
 		},
@@ -491,10 +503,66 @@ func TestManager_WaitTermination(t *testing.T) {
 			setupPods: func(f *fakeIndexer) {
 				f.setError(errors.New("indexer error"))
 			},
-			ignoredPods:    nil,
 			contextTimeout: 100 * time.Millisecond,
 			wantErr:        true,
 			wantErrText:    "indexer error",
+		},
+		{
+			name: "waits for single pod to terminate",
+			setupPods: func(f *fakeIndexer) {
+				f.addPodToNode(testNodeName, &v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"},
+				})
+			},
+			simulateTerminate: func(f *fakeIndexer) {
+				go func() {
+					time.Sleep(50 * time.Millisecond)
+					f.clearPodsFromNode(testNodeName)
+				}()
+			},
+			contextTimeout: 500 * time.Millisecond,
+			wantErr:        false,
+		},
+		{
+			name: "waits for multiple pods terminating at different times",
+			setupPods: func(f *fakeIndexer) {
+				f.addPodToNode(testNodeName, &v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"},
+				})
+				f.addPodToNode(testNodeName, &v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "pod2", Namespace: "default"},
+				})
+				f.addPodToNode(testNodeName, &v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "pod3", Namespace: "default"},
+				})
+			},
+			simulateTerminate: func(f *fakeIndexer) {
+				go func() {
+					time.Sleep(30 * time.Millisecond)
+					f.removeFirstPodFromNode(testNodeName)
+				}()
+				go func() {
+					time.Sleep(60 * time.Millisecond)
+					f.removeFirstPodFromNode(testNodeName)
+				}()
+				go func() {
+					time.Sleep(90 * time.Millisecond)
+					f.clearPodsFromNode(testNodeName)
+				}()
+			},
+			contextTimeout: 500 * time.Millisecond,
+			wantErr:        false,
+		},
+		{
+			name: "returns context error when pods remain and timeout",
+			setupPods: func(f *fakeIndexer) {
+				f.addPodToNode(testNodeName, &v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"},
+				})
+			},
+			contextTimeout: 50 * time.Millisecond,
+			wantErr:        true,
+			wantErrText:    "context",
 		},
 	}
 
@@ -502,82 +570,53 @@ func TestManager_WaitTermination(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			indexer := newFakeIndexer()
-			if tt.setupPods != nil {
-				tt.setupPods(indexer)
-			}
-
-			clientset := fake.NewClientset()
-			client := k8s.NewClient(clientset, logrus.New())
-			log := logrus.New()
-
-			m := &manager{
-				indexer: indexer,
-				client:  client,
-				log:     log,
-				cfg: ManagerConfig{
-					podEvictRetryDelay:            10 * time.Millisecond,
-					podsTerminationWaitRetryDelay: 10 * time.Millisecond,
-				},
-			}
-
-			var ctx context.Context
-			var cancel context.CancelFunc
-			if tt.contextTimeout == 0 {
-				ctx, cancel = context.WithCancel(context.Background())
-				cancel() // cancel immediately
-			} else {
-				ctx, cancel = context.WithTimeout(context.Background(), tt.contextTimeout)
-				defer cancel()
-			}
-
-			err := m.waitTerminaition(ctx, testNodeName, tt.ignoredPods)
-
-			if tt.wantErr {
-				require.Error(t, err)
-				if tt.wantErrText != "" {
-					require.Contains(t, err.Error(), tt.wantErrText)
+			synctest.Test(t, func(t *testing.T) {
+				indexer := newFakeIndexer()
+				if tt.setupPods != nil {
+					tt.setupPods(indexer)
 				}
-			} else {
-				require.NoError(t, err)
-			}
+
+				clientset := fake.NewClientset()
+				client := k8s.NewClient(clientset, logrus.New())
+				log := logrus.New()
+
+				m := &manager{
+					indexer: indexer,
+					client:  client,
+					log:     log,
+					cfg: ManagerConfig{
+						podEvictRetryDelay:            10 * time.Millisecond,
+						podsTerminationWaitRetryDelay: 10 * time.Millisecond,
+					},
+				}
+
+				var ctx context.Context
+				var cancel context.CancelFunc
+				if tt.contextTimeout == 0 {
+					ctx, cancel = context.WithCancel(context.Background())
+					cancel()
+				} else {
+					ctx, cancel = context.WithTimeout(context.Background(), tt.contextTimeout)
+					defer cancel()
+				}
+
+				if tt.simulateTerminate != nil {
+					tt.simulateTerminate(indexer)
+				}
+
+				err := m.waitTerminaition(ctx, testNodeName, tt.ignoredPods)
+
+				if tt.wantErr {
+					require.Error(t, err)
+					if tt.wantErrText != "" {
+						require.Contains(t, err.Error(), tt.wantErrText)
+					}
+				} else {
+					require.NoError(t, err)
+				}
+			})
 		})
 	}
-}
-
-func TestManager_WaitTermination_PodsTerminate(t *testing.T) {
-	t.Parallel()
-
-	indexer := newFakeIndexer()
-	indexer.addPodToNode(testNodeName, &v1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"},
-	})
-
-	clientset := fake.NewClientset()
-	client := k8s.NewClient(clientset, logrus.New())
-	log := logrus.New()
-
-	m := &manager{
-		indexer: indexer,
-		client:  client,
-		log:     log,
-		cfg: ManagerConfig{
-			podEvictRetryDelay:            10 * time.Millisecond,
-			podsTerminationWaitRetryDelay: 10 * time.Millisecond,
-		},
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
-
-	// Simulate pod termination after a short delay
-	go func() {
-		time.Sleep(50 * time.Millisecond)
-		indexer.clearPodsFromNode(testNodeName)
-	}()
-
-	err := m.waitTerminaition(ctx, testNodeName, nil)
-	require.NoError(t, err)
 }
 
 func TestPartitionPodsForEviction(t *testing.T) {
@@ -688,7 +727,7 @@ func TestPartitionPodsForEviction(t *testing.T) {
 				},
 			},
 			castNamespace:    testCastNamespace,
-			wantEvictableLen: 1, // cast pods are added to evictable
+			wantEvictableLen: 1,
 			wantCastPodsLen:  1,
 			wantCastPodNames: []string{"cast-pod"},
 		},
@@ -752,9 +791,9 @@ func TestPartitionPodsForEviction(t *testing.T) {
 				},
 			},
 			castNamespace:            testCastNamespace,
-			wantEvictableLen:         2, // regular-pod + cast-pod (cast pods are appended)
-			wantNonEvictableLen:      1, // daemonset-pod
-			wantCastPodsLen:          1, // cast-pod
+			wantEvictableLen:         2,
+			wantNonEvictableLen:      1,
+			wantCastPodsLen:          1,
 			wantEvictablePodNames:    []string{"regular-pod", "cast-pod"},
 			wantNonEvictablePodNames: []string{"daemonset-pod"},
 			wantCastPodNames:         []string{"cast-pod"},

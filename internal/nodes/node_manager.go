@@ -5,17 +5,17 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/castai/cluster-controller/internal/informer"
-	"github.com/castai/cluster-controller/internal/k8s"
-	"github.com/castai/cluster-controller/internal/logger"
-	"github.com/castai/cluster-controller/internal/waitext"
 	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/kubectl/pkg/drain"
+
+	"github.com/castai/cluster-controller/internal/informer"
+	"github.com/castai/cluster-controller/internal/k8s"
+	"github.com/castai/cluster-controller/internal/logger"
+	"github.com/castai/cluster-controller/internal/waitext"
 )
 
 type EvictRequest struct {
@@ -83,19 +83,18 @@ func (m *manager) Drain(ctx context.Context, data DrainRequest) ([]*core.Pod, er
 	toEvict = append(toEvict, partitioned.Evictable...)
 	toEvict = append(toEvict, partitioned.CastPods...)
 
-	_, ignored, err := m.tryDrain(ctx, toEvict, data.DeleteOptions)
-
-	err = m.waitTerminaition(ctx, data.Node, ignored)
+	_, failed := m.tryDrain(ctx, toEvict, data.DeleteOptions)
+	err = m.waitTerminaition(ctx, data.Node, failed)
 	if err != nil {
 		return []*core.Pod{}, err
 	}
 
 	logger.Info("drain finished")
 
-	return ignored, nil
+	return failed, nil
 }
 
-func (m *manager) tryDrain(ctx context.Context, toEvict []*core.Pod, options meta.DeleteOptions) ([]*core.Pod, []*core.Pod, error) {
+func (m *manager) tryDrain(ctx context.Context, toEvict []*core.Pod, options meta.DeleteOptions) ([]*core.Pod, []*core.Pod) {
 	logger := logger.FromContext(ctx, m.log)
 
 	deletePod := func(ctx context.Context, pod core.Pod) error {
@@ -119,7 +118,7 @@ func (m *manager) tryDrain(ctx context.Context, toEvict []*core.Pod, options met
 		})
 	}
 
-	return successful, failed, nil
+	return successful, failed
 }
 
 func (m *manager) Evict(ctx context.Context, data EvictRequest) ([]*core.Pod, error) {
@@ -143,6 +142,9 @@ func (m *manager) Evict(ctx context.Context, data EvictRequest) ([]*core.Pod, er
 	toEvict = append(toEvict, partitioned.CastPods...)
 
 	_, ignored, err := m.tryEvict(ctx, toEvict)
+	if err != nil {
+		return nil, err
+	}
 
 	err = m.waitTerminaition(ctx, data.Node, ignored)
 	if err != nil {
@@ -155,10 +157,13 @@ func (m *manager) Evict(ctx context.Context, data EvictRequest) ([]*core.Pod, er
 }
 
 func (m *manager) list(ctx context.Context, fromNode string) ([]core.Pod, error) {
+	logger := logger.FromContext(ctx, m.log)
 	objects, err := m.indexer.ByIndex(informer.PodIndexerName, fromNode)
 	if err != nil {
 		return nil, err
 	}
+
+	logger.Infof("pods in cache: %v", len(objects))
 
 	pods := make([]core.Pod, 0, len(objects))
 	for _, obj := range objects {
