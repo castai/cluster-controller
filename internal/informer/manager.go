@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -50,7 +49,6 @@ type Manager struct {
 	started     bool
 	vaAvailable bool
 	cancelFunc  context.CancelFunc
-	mu          sync.RWMutex
 }
 
 // Option is a functional option for configuring the Manager.
@@ -390,8 +388,8 @@ func (m *Manager) reportCacheSize(ctx context.Context) {
 			}
 
 			if m.vaAvailable {
-				vas := m.volumeAttachments.Informer().GetStore().ListKeys()
-				size := len(vas)
+				was := m.volumeAttachments.Informer().GetStore().ListKeys()
+				size := len(was)
 				m.log.WithField("cache_size", size).Debug("volumeattachment informer cache size")
 				metrics.SetInformerCacheSize("volumeattachment", size)
 			}
