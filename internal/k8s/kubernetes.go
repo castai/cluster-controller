@@ -494,6 +494,10 @@ func GetNodeByIDs(ctx context.Context, clientSet corev1client.NodeInterface, nod
 	}
 
 	if err := IsNodeIDProviderIDValid(n, nodeID, providerID); err != nil {
+		if errors.Is(err, ErrProviderIDMismatch) {
+			log.Errorf("node %v has provider ID %s, but requested provider ID is %s", nodeID, n.Spec.ProviderID, providerID)
+			return n, nil
+		}
 		return nil, fmt.Errorf("requested node ID %s, provider ID %s for node name: %s %w",
 			nodeID, providerID, n.Name, err)
 	}
