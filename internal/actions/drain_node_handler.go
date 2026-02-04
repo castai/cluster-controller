@@ -63,8 +63,8 @@ type DrainNodeHandler struct {
 }
 
 type nodePods struct {
-	toEvict      []v1.Pod
-	nonEvictable []v1.Pod
+	toEvict      []*v1.Pod
+	nonEvictable []*v1.Pod
 }
 
 func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
@@ -176,7 +176,7 @@ func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 // waitForVolumeDetachIfEnabled waits for VolumeAttachments to be deleted if the feature is enabled.
 // This is called after successful drain to give CSI drivers time to clean up volumes.
 // nonEvictablePods are pods that won't be evicted (DaemonSet, static) - their was are excluded from waiting.
-func (h *DrainNodeHandler) waitForVolumeDetachIfEnabled(ctx context.Context, log logrus.FieldLogger, nodeName string, req *castai.ActionDrainNode, nonEvictablePods []v1.Pod) {
+func (h *DrainNodeHandler) waitForVolumeDetachIfEnabled(ctx context.Context, log logrus.FieldLogger, nodeName string, req *castai.ActionDrainNode, nonEvictablePods []*v1.Pod) {
 	if !ShouldWaitForVolumeDetach(req) || h.vaWaiter == nil {
 		return
 	}
@@ -203,7 +203,7 @@ func (h *DrainNodeHandler) waitForVolumeDetachIfEnabled(ctx context.Context, log
 // The method will still wait for termination of other evicted pods first.
 // Returns non-evictable pods (DaemonSet, static).
 // A return value of (pods, nil) means all evictable pods on the node should be evicted and terminated.
-func (h *DrainNodeHandler) evictNodePods(ctx context.Context, log logrus.FieldLogger, node *v1.Node) ([]v1.Pod, error) {
+func (h *DrainNodeHandler) evictNodePods(ctx context.Context, log logrus.FieldLogger, node *v1.Node) ([]*v1.Pod, error) {
 	nodePods, err := h.listNodePods(ctx, log, node)
 	if err != nil {
 		return nil, err
@@ -256,7 +256,7 @@ func (h *DrainNodeHandler) evictNodePods(ctx context.Context, log logrus.FieldLo
 // The method will still wait for termination of other deleted pods first.
 // Returns non-evictable pods (DaemonSet, static).
 // A return value of (pods, nil) means all evictable pods on the node should be deleted and terminated.
-func (h *DrainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldLogger, node *v1.Node, options metav1.DeleteOptions) ([]v1.Pod, error) {
+func (h *DrainNodeHandler) deleteNodePods(ctx context.Context, log logrus.FieldLogger, node *v1.Node, options metav1.DeleteOptions) ([]*v1.Pod, error) {
 	nodePods, err := h.listNodePods(ctx, log, node)
 	if err != nil {
 		return nil, err
@@ -340,8 +340,8 @@ func (h *DrainNodeHandler) listNodePods(ctx context.Context, log logrus.FieldLog
 	partitioned := k8s.PartitionPodsForEviction(pods.Items, h.cfg.castNamespace, h.cfg.skipDeletedTimeoutSeconds)
 
 	result := &nodePods{
-		toEvict:      make([]v1.Pod, 0, len(partitioned.Evictable)+len(partitioned.CastPods)),
-		nonEvictable: make([]v1.Pod, 0, len(partitioned.NonEvictable)),
+		toEvict:      make([]*v1.Pod, 0, len(partitioned.Evictable)+len(partitioned.CastPods)),
+		nonEvictable: make([]*v1.Pod, 0, len(partitioned.NonEvictable)),
 	}
 
 	logCastPodsToEvict(log, partitioned.CastPods)
@@ -380,7 +380,7 @@ func (h *DrainNodeHandler) waitNodePodsTerminated(ctx context.Context, log logru
 				return true, fmt.Errorf("listing %q pods to be terminated: %w", node.Name, err)
 			}
 
-			podsNames := lo.Map(nodePods.toEvict, func(p v1.Pod, _ int) string {
+			podsNames := lo.Map(nodePods.toEvict, func(p *v1.Pod, _ int) string {
 				return fmt.Sprintf("%s/%s", p.Namespace, p.Name)
 			})
 

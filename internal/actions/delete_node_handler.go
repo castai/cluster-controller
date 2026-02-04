@@ -115,7 +115,7 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 	}
 
 	podsListingBackoff := waitext.NewConstantBackoff(h.cfg.podsTerminationWait)
-	var pods []v1.Pod
+	var pods []*v1.Pod
 	err = waitext.Retry(
 		ctx,
 		podsListingBackoff,
@@ -127,7 +127,9 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 			if err != nil {
 				return true, err
 			}
-			pods = podList.Items
+			for _, p := range podList.Items {
+				pods = append(pods, &p)
+			}
 			return false, nil
 		},
 		func(err error) {

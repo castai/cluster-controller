@@ -325,7 +325,11 @@ func TestManager_Evict(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 			defer cancel()
 
-			ignored, err := m.Evict(ctx, testNodeName, testCastNamespace, tt.skipDeletedTimeoutSecs)
+			ignored, err := m.Evict(ctx, EvictRequest{
+				Node:                      testNodeName,
+				CastNamespace:             testCastNamespace,
+				SkipDeletedTimeoutSeconds: tt.skipDeletedTimeoutSecs,
+			})
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -410,7 +414,12 @@ func TestManager_Drain(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 			defer cancel()
 
-			ignored, err := m.Drain(ctx, testNodeName, testCastNamespace, tt.skipDeletedTimeoutSecs)
+			ignored, err := m.Drain(ctx, DrainRequest{
+				Node:                      testNodeName,
+				CastNamespace:             testCastNamespace,
+				SkipDeletedTimeoutSeconds: tt.skipDeletedTimeoutSecs,
+				DeleteOptions:             metav1.DeleteOptions{},
+			})
 
 			if tt.wantErr {
 				require.Error(t, err)

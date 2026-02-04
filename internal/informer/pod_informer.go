@@ -11,7 +11,7 @@ var ErrIndexerMissing = errors.New("missing indexer")
 
 const PodIndexerName = "spec.NodeName"
 
-type podInformer struct {
+type PodInformer struct {
 	informer cache.SharedIndexInformer
 	lister   listerv1.PodLister
 	indexers cache.Indexers
@@ -21,22 +21,22 @@ func NewPodInformer(
 	informer cache.SharedIndexInformer,
 	lister listerv1.PodLister,
 	indexer cache.Indexer,
-) *podInformer {
-	p := &podInformer{
+) *PodInformer {
+	p := &PodInformer{
 		informer: informer,
 		lister:   lister,
 	}
 	return p
 }
 
-func (p *podInformer) Informer() cache.SharedIndexInformer {
+func (p *PodInformer) Informer() cache.SharedIndexInformer {
 	return p.informer
 }
 
-func (p *podInformer) Lister() listerv1.PodLister {
+func (p *PodInformer) Lister() listerv1.PodLister {
 	return p.lister
 }
 
-func (p *podInformer) HasSynced() bool {
+func (p *PodInformer) HasSynced() bool {
 	return p.informer.HasSynced()
 }

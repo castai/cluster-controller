@@ -29,7 +29,7 @@ type DetachmentWaitOptions struct {
 
 	// PodsToExclude are pods whose VolumeAttachments should not be waited for
 	// (e.g., DaemonSet pods, static pods that won't be evicted).
-	PodsToExclude []v1.Pod
+	PodsToExclude []*v1.Pod
 }
 
 // DetachmentWaiter waits for VolumeAttachments to be detached from a node.
@@ -99,15 +99,15 @@ func (w *detachmentWaiter) Wait(
 
 // getExcludedPVsForNode returns PV names that should NOT be waited for.
 // These are PVs used by podsToExclude (e.g., DaemonSets, static pods) since
-// those pods won't be evicted and would cause a deadlock waiting for their VAs.
+// those pods won't be evicted and would cause a deadlock waiting for their was.
 func (w *detachmentWaiter) getExcludedPVsForNode(
 	ctx context.Context,
 	log logrus.FieldLogger,
-	podsToExclude []v1.Pod,
+	podsToExclude []*v1.Pod,
 ) map[string]struct{} {
 	excludedPVs := make(map[string]struct{})
 	for i := range podsToExclude {
-		pod := &podsToExclude[i]
+		pod := podsToExclude[i]
 		for _, vol := range pod.Spec.Volumes {
 			if vol.PersistentVolumeClaim == nil {
 				continue
@@ -126,8 +126,8 @@ func (w *detachmentWaiter) getExcludedPVsForNode(
 
 // waitForVolumeDetach waits for all VolumeAttachments on the node to be deleted,
 // except those belonging to excludedPVs (e.g., DaemonSet pods).
-// Returns nil when all VAs are deleted.
-// Returns DetachmentError on timeout with the list of remaining VAs.
+// Returns nil when all was are deleted.
+// Returns DetachmentError on timeout with the list of remaining was.
 // Respects context cancellation.
 func (w *detachmentWaiter) waitForVolumeDetach(
 	ctx context.Context,

@@ -45,7 +45,7 @@ type Manager struct {
 	cacheSyncTimeout time.Duration
 
 	nodes             NodeInformer
-	pods              *podInformer
+	pods              *PodInformer
 	volumeAttachments *vaInformer
 
 	started     bool
@@ -65,7 +65,7 @@ func WithCacheSyncTimeout(timeout time.Duration) Option {
 
 func EnablePodInformer() Option {
 	return func(m *Manager) {
-		m.pods = &podInformer{
+		m.pods = &PodInformer{
 			informer: m.factory.Core().V1().Pods().Informer(),
 			lister:   m.factory.Core().V1().Pods().Lister(),
 		}

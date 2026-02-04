@@ -8,20 +8,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/kubectl/pkg/drain"
 
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/k8s"
 	"github.com/castai/cluster-controller/internal/logger"
 	"github.com/castai/cluster-controller/internal/nodes"
 	"github.com/castai/cluster-controller/internal/volume"
-	"github.com/castai/cluster-controller/internal/waitext"
 )
 
 var _ ActionHandler = &DrainNodeInfomerHandler{}
@@ -97,7 +93,7 @@ func (h *DrainNodeInfomerHandler) Handle(ctx context.Context, action *castai.Clu
 
 	log.Info("cordoning node for draining")
 
-	if err := h.client.CordonNode(ctx, node); err != nil {
+	if err = h.client.CordonNode(ctx, node); err != nil {
 		return fmt.Errorf("cordoning node %q: %w", req.NodeName, err)
 	}
 
@@ -107,7 +103,11 @@ func (h *DrainNodeInfomerHandler) Handle(ctx context.Context, action *castai.Clu
 	evictCtx, evictCancel := context.WithTimeout(ctx, drainTimeout)
 	defer evictCancel()
 
-	nonEvictablePods, err := h.nodeManager.Evict(evictCtx, node.Name, h.cfg.castNamespace, h.cfg.skipDeletedTimeoutSeconds)
+	nonEvictablePods, err := h.nodeManager.Evict(evictCtx, nodes.EvictRequest{
+		Node:                      node.Name,
+		SkipDeletedTimeoutSeconds: h.cfg.skipDeletedTimeoutSeconds,
+		CastNamespace:             h.cfg.castNamespace,
+	})
 
 	if err == nil {
 		log.Info("node fully drained via graceful eviction")
@@ -140,11 +140,14 @@ func (h *DrainNodeInfomerHandler) Handle(ctx context.Context, action *castai.Clu
 	var deleteErr error
 	for _, o := range options {
 		deleteCtx, deleteCancel := context.WithTimeout(ctx, h.cfg.podsDeleteTimeout)
+		defer deleteCancel()
 
-		nonEvictablePods, deleteErr = h.deleteNodePods(deleteCtx, log, node, o)
-
-		// Clean-up the child context if we got here; no reason to wait for the function to exit.
-		deleteCancel()
+		nonEvictablePods, deleteErr = h.nodeManager.Drain(deleteCtx, nodes.DrainRequest{
+			Node:                      node.Name,
+			CastNamespace:             h.cfg.castNamespace,
+			SkipDeletedTimeoutSeconds: h.cfg.skipDeletedTimeoutSeconds,
+			DeleteOptions:             o,
+		})
 
 		if deleteErr == nil {
 			break
@@ -171,7 +174,7 @@ func (h *DrainNodeInfomerHandler) Handle(ctx context.Context, action *castai.Clu
 // waitForVolumeDetachIfEnabled waits for VolumeAttachments to be deleted if the feature is enabled.
 // This is called after successful drain to give CSI drivers time to clean up volumes.
 // nonEvictablePods are pods that won't be evicted (DaemonSet, static) - their was are excluded from waiting.
-func (h *DrainNodeInfomerHandler) waitForVolumeDetachIfEnabled(ctx context.Context, log logrus.FieldLogger, nodeName string, req *castai.ActionDrainNode, nonEvictablePods []v1.Pod) {
+func (h *DrainNodeInfomerHandler) waitForVolumeDetachIfEnabled(ctx context.Context, log logrus.FieldLogger, nodeName string, req *castai.ActionDrainNode, nonEvictablePods []*v1.Pod) {
 	if !ShouldWaitForVolumeDetach(req) || h.vaWaiter == nil {
 		return
 	}
@@ -191,213 +194,7 @@ func (h *DrainNodeInfomerHandler) waitForVolumeDetachIfEnabled(ctx context.Conte
 	}
 }
 
-// evictNodePods attempts voluntarily eviction for all pods on node.
-// This method will wait until all evictable pods on the node either terminate or fail deletion.
-// A timeout should be used to avoid infinite waits.
-// Errors in calling EVICT for individual pods are accumulated. If at least one pod failed this but termination was successful, an instance of podFailedActionError is returned.
-// The method will still wait for termination of other evicted pods first.
-// Returns non-evictable pods (DaemonSet, static).
-// A return value of (pods, nil) means all evictable pods on the node should be evicted and terminated.
-func (h *DrainNodeInfomerHandler) evictNodePods(ctx context.Context, log logrus.FieldLogger, node *v1.Node) ([]v1.Pod, error) {
-	nodePods, err := h.listNodePods(ctx, log, node)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(nodePods.toEvict) == 0 {
-		log.Infof("no pods to evict")
-		return nodePods.nonEvictable, nil
-	}
-	log.Infof("evicting %d pods", len(nodePods.toEvict))
-	groupVersion, err := drain.CheckEvictionSupport(h.clientset)
-	if err != nil {
-		return nil, err
-	}
-	evictPod := func(ctx context.Context, pod v1.Pod) error {
-		return k8s.EvictPod(ctx, pod, h.cfg.podEvictRetryDelay, h.clientset, h.log, groupVersion)
-	}
-
-	_, podsWithFailedEviction := k8s.ExecuteBatchPodActions(ctx, log, nodePods.toEvict, evictPod, "evict-pod")
-	var podsToIgnoreForTermination []*v1.Pod
-	var failedPodsError *k8s.PodFailedActionError
-	if len(podsWithFailedEviction) > 0 {
-		podErrors := lo.Map(podsWithFailedEviction, func(failure k8s.PodActionFailure, _ int) error {
-			return fmt.Errorf("pod %s/%s failed eviction: %w", failure.Pod.Namespace, failure.Pod.Name, failure.Err)
-		})
-		failedPodsError = &k8s.PodFailedActionError{
-			Action: "evict",
-			Errors: podErrors,
-		}
-		log.Warnf("some pods failed eviction, will ignore for termination wait: %v", failedPodsError)
-		podsToIgnoreForTermination = lo.Map(podsWithFailedEviction, func(failure k8s.PodActionFailure, _ int) *v1.Pod {
-			return failure.Pod
-		})
-	}
-
-	err = h.waitNodePodsTerminated(ctx, log, node, podsToIgnoreForTermination)
-	if err != nil {
-		return nil, err
-	}
-	if failedPodsError != nil {
-		return nil, failedPodsError
-	}
-	return nodePods.nonEvictable, nil
-}
-
-// deleteNodePods deletes the pods running on node. Use options to control if eviction is graceful or forced.
-// This method will wait until all evictable pods on the node either terminate or fail deletion.
-// A timeout should be used to avoid infinite waits.
-// Errors in calling DELETE for individual pods are accumulated. If at least one pod failed this but termination was successful, an instance of podFailedActionError is returned.
-// The method will still wait for termination of other deleted pods first.
-// Returns non-evictable pods (DaemonSet, static).
-// A return value of (pods, nil) means all evictable pods on the node should be deleted and terminated.
-func (h *DrainNodeInfomerHandler) deleteNodePods(ctx context.Context, log logrus.FieldLogger, node *v1.Node, options metav1.DeleteOptions) ([]v1.Pod, error) {
-	nodePods, err := h.listNodePods(ctx, log, node)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(nodePods.toEvict) == 0 {
-		log.Infof("no pods to delete")
-		return nodePods.nonEvictable, nil
-	}
-
-	if options.GracePeriodSeconds != nil {
-		log.Infof("forcefully deleting %d pods with gracePeriod %d", len(nodePods.toEvict), *options.GracePeriodSeconds)
-	} else {
-		log.Infof("forcefully deleting %d pods", len(nodePods.toEvict))
-	}
-
-	deletePod := func(ctx context.Context, pod v1.Pod) error {
-		return k8s.DeletePod(ctx, options, pod, h.cfg.podDeleteRetries, h.cfg.podDeleteRetryDelay, h.clientset, h.log)
-	}
-
-	_, podsWithFailedDeletion := k8s.ExecuteBatchPodActions(ctx, log, nodePods.toEvict, deletePod, "delete-pod")
-	var podsToIgnoreForTermination []*v1.Pod
-	var failedPodsError *k8s.PodFailedActionError
-	if len(podsWithFailedDeletion) > 0 {
-		podErrors := lo.Map(podsWithFailedDeletion, func(failure k8s.PodActionFailure, _ int) error {
-			return fmt.Errorf("pod %s/%s failed deletion: %w", failure.Pod.Namespace, failure.Pod.Name, failure.Err)
-		})
-		failedPodsError = &k8s.PodFailedActionError{
-			Action: "delete",
-			Errors: podErrors,
-		}
-		log.Warnf("some pods failed deletion, will ignore for termination wait: %v", failedPodsError)
-		podsToIgnoreForTermination = lo.Map(podsWithFailedDeletion, func(failure k8s.PodActionFailure, _ int) *v1.Pod {
-			return failure.Pod
-		})
-	}
-
-	err = h.waitNodePodsTerminated(ctx, log, node, podsToIgnoreForTermination)
-	if err != nil {
-		return nil, err
-	}
-	if failedPodsError != nil {
-		return nil, failedPodsError
-	}
-	return nodePods.nonEvictable, nil
-}
-
-// listNodePods lists all pods on a node and categorizes them into evictable and non-evictable.
-// This makes a single API call and returns both categories.
-// The following pods are considered non-evictable:
-//   - static pods
-//   - DaemonSet pods
-//
-// The following pods are filtered out entirely:
-//   - pods that are already finished (Succeeded or Failed)
-//   - pods that were marked for deletion recently (Terminating state); the meaning of "recently" is controlled by config
-func (h *DrainNodeInfomerHandler) listNodePods(ctx context.Context, log logrus.FieldLogger, node *v1.Node) (*nodePods, error) {
-	var pods *v1.PodList
-	err := waitext.Retry(
-		ctx,
-		k8s.DefaultBackoff(),
-		k8s.DefaultMaxRetriesK8SOperation,
-		func(ctx context.Context) (bool, error) {
-			p, err := h.clientset.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
-				FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": node.Name}).String(),
-			})
-			if err != nil {
-				return true, err
-			}
-			pods = p
-			return false, nil
-		},
-		func(err error) {
-			log.Warnf("listing pods on node %s: %v", node.Name, err)
-		},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("listing node %v pods: %w", node.Name, err)
-	}
-
-	partitioned := k8s.PartitionPodsForEviction(pods.Items, h.cfg.castNamespace, h.cfg.skipDeletedTimeoutSeconds)
-
-	result := &nodePods{
-		toEvict:      make([]v1.Pod, 0, len(partitioned.Evictable)+len(partitioned.CastPods)),
-		nonEvictable: make([]v1.Pod, 0, len(partitioned.NonEvictable)),
-	}
-
-	logCastPodsToEvict(log, partitioned.CastPods)
-	result.toEvict = append(result.toEvict, partitioned.Evictable...)
-	result.toEvict = append(result.toEvict, partitioned.CastPods...)
-	return result, nil
-}
-
-// waitNodePodsTerminated waits until the pods on the node terminate.
-// The wait only considers evictable pods (see listNodePods).
-// If podsToIgnore is not empty, the list is further filtered by it.
-// This is useful when you don't expect some pods on the node to terminate (e.g. because eviction failed for them) so there is no reason to wait until timeout.
-// The wait can potentially run forever if pods are scheduled on the node and are not evicted/deleted by anything. Use a timeout to avoid infinite wait.
-func (h *DrainNodeInfomerHandler) waitNodePodsTerminated(ctx context.Context, log logrus.FieldLogger, node *v1.Node, podsToIgnore []*v1.Pod) error {
-	// Check if context is canceled before starting any work.
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-		// Continue with the work.
-	}
-
-	podsToIgnoreLookup := make(map[string]struct{})
-	for _, pod := range podsToIgnore {
-		podsToIgnoreLookup[fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)] = struct{}{}
-	}
-
-	log.Infof("starting wait for pod termination, %d pods in ignore list", len(podsToIgnore))
-	return waitext.Retry(
-		ctx,
-		waitext.NewConstantBackoff(h.cfg.podsTerminationWaitRetryDelay),
-		waitext.Forever,
-		func(ctx context.Context) (bool, error) {
-			nodePods, err := h.listNodePods(ctx, log, node)
-			if err != nil {
-				return true, fmt.Errorf("listing %q pods to be terminated: %w", node.Name, err)
-			}
-
-			podsNames := lo.Map(nodePods.toEvict, func(p v1.Pod, _ int) string {
-				return fmt.Sprintf("%s/%s", p.Namespace, p.Name)
-			})
-
-			remainingPodsList := podsNames
-			if len(podsToIgnore) > 0 {
-				remainingPodsList = lo.Filter(remainingPodsList, func(podName string, _ int) bool {
-					_, ok := podsToIgnoreLookup[podName]
-					return !ok
-				})
-			}
-			if remainingPods := len(remainingPodsList); remainingPods > 0 {
-				return true, fmt.Errorf("waiting for %d pods (%v) to be terminated on node %v", remainingPods, remainingPodsList, node.Name)
-			}
-			return false, nil
-		},
-		func(err error) {
-			h.log.Warnf("waiting for pod termination on node %v, will retry: %v", node.Name, err)
-		},
-	)
-}
-
-func logCastPodsToEvict(log logrus.FieldLogger, castPods []v1.Pod) {
+func logCastPodsToEvict(log logrus.FieldLogger, castPods []*v1.Pod) {
 	if len(castPods) == 0 {
 		return
 	}
