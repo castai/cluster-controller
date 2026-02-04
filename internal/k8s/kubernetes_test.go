@@ -380,7 +380,7 @@ func TestClient_ExecuteBatchPodActions(t *testing.T) {
 
 	tests := []struct {
 		name              string
-		pods              []v1.Pod
+		pods              []*v1.Pod
 		action            func(context.Context, v1.Pod) error
 		actionName        string
 		wantSuccessCount  int
@@ -389,7 +389,7 @@ func TestClient_ExecuteBatchPodActions(t *testing.T) {
 	}{
 		{
 			name:             "empty pod list",
-			pods:             []v1.Pod{},
+			pods:             []*v1.Pod{},
 			action:           func(ctx context.Context, pod v1.Pod) error { return nil },
 			actionName:       "test-action",
 			wantSuccessCount: 0,
@@ -397,7 +397,7 @@ func TestClient_ExecuteBatchPodActions(t *testing.T) {
 		},
 		{
 			name: "all pods succeed",
-			pods: []v1.Pod{
+			pods: []*v1.Pod{
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"}},
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod2", Namespace: "default"}},
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod3", Namespace: "default"}},
@@ -409,7 +409,7 @@ func TestClient_ExecuteBatchPodActions(t *testing.T) {
 		},
 		{
 			name: "all pods fail",
-			pods: []v1.Pod{
+			pods: []*v1.Pod{
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"}},
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod2", Namespace: "default"}},
 			},
@@ -421,7 +421,7 @@ func TestClient_ExecuteBatchPodActions(t *testing.T) {
 		},
 		{
 			name: "mixed success and failure",
-			pods: []v1.Pod{
+			pods: []*v1.Pod{
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"}},
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod-fail", Namespace: "default"}},
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod2", Namespace: "default"}},
@@ -439,7 +439,7 @@ func TestClient_ExecuteBatchPodActions(t *testing.T) {
 		},
 		{
 			name: "default action name when empty",
-			pods: []v1.Pod{
+			pods: []*v1.Pod{
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"}},
 			},
 			action:            func(ctx context.Context, pod v1.Pod) error { return fmt.Errorf("fail") },

@@ -33,10 +33,11 @@ const (
 )
 
 var (
-	ErrAction            = errors.New("not valid action")
-	ErrNodeNotFound      = errors.New("node not found")
-	ErrNodeDoesNotMatch  = fmt.Errorf("node does not match")
-	ErrNodeWatcherClosed = fmt.Errorf("node watcher closed, no more events will be received")
+	ErrAction             = errors.New("not valid action")
+	ErrNodeNotFound       = errors.New("node not found")
+	ErrNodeDoesNotMatch   = fmt.Errorf("node does not match")
+	ErrProviderIDMismatch = errors.New("provider ID mismatch")
+	ErrNodeWatcherClosed  = fmt.Errorf("node watcher closed, no more events will be received")
 )
 
 const (
@@ -179,7 +180,7 @@ func (c *Client) GetNodeByIDs(ctx context.Context, nodeName, nodeID, providerID 
 // actionName might be used to distinguish what is the operation (for logs, debugging, etc.) but is optional.
 func (c *Client) ExecuteBatchPodActions(
 	ctx context.Context,
-	pods []v1.Pod,
+	pods []*v1.Pod,
 	action func(context.Context, v1.Pod) error,
 	actionName string,
 ) ([]*v1.Pod, []PodActionFailure) {
@@ -201,7 +202,7 @@ func (c *Client) ExecuteBatchPodActions(
 		wg                 sync.WaitGroup
 	)
 
-	logger.Debugf("Starting %d parallel tasks for %d pods: [%v]", parallelTasks, len(pods), lo.Map(pods, func(t v1.Pod, i int) string {
+	logger.Debugf("Starting %d parallel tasks for %d pods: [%v]", parallelTasks, len(pods), lo.Map(pods, func(t *v1.Pod, i int) string {
 		return fmt.Sprintf("%s/%s", t.Namespace, t.Name)
 	}))
 
@@ -226,7 +227,7 @@ func (c *Client) ExecuteBatchPodActions(
 	}
 
 	for _, pod := range pods {
-		taskChan <- pod
+		taskChan <- *pod
 	}
 
 	close(taskChan)
@@ -402,15 +403,15 @@ type PodActionFailure struct {
 }
 
 type PartitionResult struct {
-	Evictable    []v1.Pod
-	NonEvictable []v1.Pod
-	CastPods     []v1.Pod
+	Evictable    []*v1.Pod
+	NonEvictable []*v1.Pod
+	CastPods     []*v1.Pod
 }
 
 func PartitionPodsForEviction(pods []v1.Pod, castNamespace string, skipDeletedTimeoutSeconds int) *PartitionResult {
-	castPods := make([]v1.Pod, 0)
-	evictable := make([]v1.Pod, 0)
-	nonEvictable := make([]v1.Pod, 0)
+	castPods := make([]*v1.Pod, 0)
+	evictable := make([]*v1.Pod, 0)
+	nonEvictable := make([]*v1.Pod, 0)
 
 	for _, p := range pods {
 		// Skip pods that have been recently removed.
@@ -425,16 +426,16 @@ func PartitionPodsForEviction(pods []v1.Pod, castNamespace string, skipDeletedTi
 		}
 
 		if IsDaemonSetPod(&p) || IsStaticPod(&p) {
-			nonEvictable = append(nonEvictable, p)
+			nonEvictable = append(nonEvictable, &p)
 			continue
 		}
 
 		if p.Namespace == castNamespace {
-			castPods = append(castPods, p)
+			castPods = append(castPods, &p)
 			continue
 		}
 
-		evictable = append(evictable, p)
+		evictable = append(evictable, &p)
 	}
 
 	evictable = append(evictable, castPods...)
@@ -502,7 +503,7 @@ func GetNodeByIDs(ctx context.Context, clientSet corev1client.NodeInterface, nod
 func ExecuteBatchPodActions(
 	ctx context.Context,
 	log logrus.FieldLogger,
-	pods []v1.Pod,
+	pods []*v1.Pod,
 	action func(context.Context, v1.Pod) error,
 	actionName string,
 ) ([]*v1.Pod, []PodActionFailure) {

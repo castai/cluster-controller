@@ -9,6 +9,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	authorizationv1 "k8s.io/api/authorization/v1"
+	core "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
@@ -43,7 +44,7 @@ type Manager struct {
 	cacheSyncTimeout time.Duration
 
 	nodes             NodeInformer
-	pods              *podInformer
+	pods              *PodInformer
 	volumeAttachments *vaInformer
 
 	started     bool
@@ -63,7 +64,7 @@ func WithCacheSyncTimeout(timeout time.Duration) Option {
 
 func EnablePodInformer() Option {
 	return func(m *Manager) {
-		m.pods = &podInformer{
+		m.pods = &PodInformer{
 			informer: m.factory.Core().V1().Pods().Informer(),
 			lister:   m.factory.Core().V1().Pods().Lister(),
 		}
@@ -83,6 +84,25 @@ func EnableNodeInformer() Option {
 func WithNodeIndexers(indexers cache.Indexers) Option {
 	return func(n *Manager) {
 		n.nodes.SetIndexers(indexers)
+	}
+}
+
+func WithDefaultPodNodeNameIndexer() Option {
+	return WithPodIndexers(cache.Indexers{
+		PodIndexerName: func(obj any) ([]string, error) {
+			pod, ok := obj.(core.Pod)
+			if !ok {
+				return nil, nil
+			}
+			return []string{pod.Spec.NodeName}, nil
+		},
+	})
+}
+
+// WithPodIndexers sets custom indexers for the pod informer.
+func WithPodIndexers(indexers cache.Indexers) Option {
+	return func(n *Manager) {
+		n.pods.indexers = indexers
 	}
 }
 
