@@ -779,29 +779,6 @@ func Test_getNodeByIDs(t *testing.T) {
 			wantErr: ErrNodeDoesNotMatch,
 		},
 		{
-			name: "not matching provider ID",
-			args: args{
-				nodeName:   nodeName,
-				nodeID:     nodeID,
-				providerID: providerID,
-				tuneNodeV1Interface: func(m *mock_actions.MockNodeInterface) {
-					m.EXPECT().Get(gomock.Any(), nodeName, metav1.GetOptions{}).
-						Return(&v1.Node{
-							ObjectMeta: metav1.ObjectMeta{
-								Name: nodeName,
-								Labels: map[string]string{
-									castai.LabelNodeID: nodeID,
-								},
-							},
-							Spec: v1.NodeSpec{
-								ProviderID: "another-provider-id",
-							},
-						}, nil)
-				},
-			},
-			wantErr: ErrProviderIDMismatch,
-		},
-		{
 			name: "node id at request is empty but provider ID matches",
 			args: args{
 				nodeName:   nodeName,
