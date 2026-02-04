@@ -372,11 +372,6 @@ func IsNodeIDProviderIDValid(node *v1.Node, nodeID, providerID string) error {
 		return nil
 	}
 
-	if !emptyProviderID && node.Spec.ProviderID != providerID {
-		// if provider ID is not empty in request and does not match node's provider ID, log err for investigations
-		return fmt.Errorf("node %v has provider ID %s, but requested provider ID is %s: %w", node.Name, node.Spec.ProviderID, providerID, ErrProviderIDMismatch)
-	}
-
 	// if we reach here, it means that node ID and/or provider ID does not match
 	return fmt.Errorf("node %v has ID %s and provider ID %s: %w",
 		node.Name, currentNodeID, node.Spec.ProviderID, ErrNodeDoesNotMatch)
@@ -494,6 +489,9 @@ func GetNodeByIDs(ctx context.Context, clientSet corev1client.NodeInterface, nod
 	}
 
 	if err := IsNodeIDProviderIDValid(n, nodeID, providerID); err != nil {
+		if errors.Is(err, ErrNodeDoesNotMatch) {
+			log.Errorf("node %v has provider ID %s, but requested provider ID is %s", nodeID, n.Spec.ProviderID, providerID)
+		}
 		return nil, fmt.Errorf("requested node ID %s, provider ID %s for node name: %s %w",
 			nodeID, providerID, n.Name, err)
 	}

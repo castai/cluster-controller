@@ -23,10 +23,6 @@ import (
 
 var _ ActionHandler = &DrainNodeHandler{}
 
-const (
-	minDrainTimeout = 0 // Minimal pod drain timeout.
-)
-
 type drainNodeConfig struct {
 	podsDeleteTimeout             time.Duration
 	podDeleteRetries              int

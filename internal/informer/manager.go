@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -52,7 +51,6 @@ type Manager struct {
 	started     bool
 	vaAvailable bool
 	cancelFunc  context.CancelFunc
-	mu          sync.RWMutex
 }
 
 // Option is a functional option for configuring the Manager.
