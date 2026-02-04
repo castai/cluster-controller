@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/samber/lo"
@@ -404,4 +405,18 @@ func (h *DrainNodeHandler) waitNodePodsTerminated(ctx context.Context, log logru
 			h.log.Warnf("waiting for pod termination on node %v, will retry: %v", node.Name, err)
 		},
 	)
+}
+
+func logCastPodsToEvict(log logrus.FieldLogger, castPods []v1.Pod) {
+	if len(castPods) == 0 {
+		return
+	}
+
+	castPodsNames := make([]string, 0, len(castPods))
+	for _, p := range castPods {
+		castPodsNames = append(castPodsNames, p.Name)
+	}
+	joinedPodNames := strings.Join(castPodsNames, ", ")
+
+	log.Warnf("evicting CAST AI pods: %s", joinedPodNames)
 }
