@@ -99,7 +99,7 @@ func (w *detachmentWaiter) Wait(
 
 // getExcludedPVsForNode returns PV names that should NOT be waited for.
 // These are PVs used by podsToExclude (e.g., DaemonSets, static pods) since
-// those pods won't be evicted and would cause a deadlock waiting for their was.
+// those pods won't be evicted and would cause a deadlock waiting for their VolumeAttachments.
 func (w *detachmentWaiter) getExcludedPVsForNode(
 	ctx context.Context,
 	log logrus.FieldLogger,
@@ -126,8 +126,8 @@ func (w *detachmentWaiter) getExcludedPVsForNode(
 
 // waitForVolumeDetach waits for all VolumeAttachments on the node to be deleted,
 // except those belonging to excludedPVs (e.g., DaemonSet pods).
-// Returns nil when all was are deleted.
-// Returns DetachmentError on timeout with the list of remaining was.
+// Returns nil when all VolumeAttachments are deleted.
+// Returns DetachmentError on timeout with the list of remaining VolumeAttachments.
 // Respects context cancellation.
 func (w *detachmentWaiter) waitForVolumeDetach(
 	ctx context.Context,
