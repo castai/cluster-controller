@@ -1,0 +1,6 @@
+# KWOK values to disable FlowSchema and PriorityClass creation
+# These features are restricted in some Kubernetes clusters
+
+# Disable PriorityClass creation globally
+priorityClass:
+  enabled: false

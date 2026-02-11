@@ -1,0 +1,13 @@
+{{- if .Values.grafana.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: castai-loadtest-dashboards
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "castai-loadtest.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  cluster-controller-dashboard.json: |-
+{{ .Files.Get "dashboards/cluster-controller-dashboard.json" | indent 4 }}
+{{- end }}

@@ -1,0 +1,37 @@
+apiVersion: v2
+name: castai-loadtest
+description: A Helm chart for CAST AI load testing environment with observability stack
+type: application
+version: 0.1.0
+appVersion: "1.0"
+
+dependencies:
+  # Prometheus for metrics collection
+  - name: prometheus
+    version: "25.30.1"
+    repository: https://prometheus-community.github.io/helm-charts
+    condition: prometheus.enabled
+
+  # Grafana for visualization
+  - name: grafana
+    version: "8.8.3"
+    repository: https://grafana.github.io/helm-charts
+    condition: grafana.enabled
+
+  # Loki for log aggregation
+  - name: loki
+    version: "6.23.0"
+    repository: https://grafana.github.io/helm-charts
+    condition: loki.enabled
+
+  # Promtail for log shipping
+  - name: promtail
+    version: "6.16.6"
+    repository: https://grafana.github.io/helm-charts
+    condition: promtail.enabled
+
+  # kube-state-metrics for Kubernetes metrics
+  - name: kube-state-metrics
+    version: "5.27.0"
+    repository: https://prometheus-community.github.io/helm-charts
+    condition: kube-state-metrics.enabled

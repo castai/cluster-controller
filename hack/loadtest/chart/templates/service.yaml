@@ -1,0 +1,18 @@
+{{- if .Values.loadtestAgent.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: castai-loadtest-agent-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "castai-loadtest.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.loadtestAgent.service.type }}
+  selector:
+    {{- include "castai-loadtest.selectorLabels" . | nindent 4 }}
+    app: castai-loadtest-agent
+  ports:
+    - name: http
+      port: {{ .Values.loadtestAgent.service.port }}
+      targetPort: http
+{{- end }}
