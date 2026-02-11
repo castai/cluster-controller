@@ -18,7 +18,6 @@ CC_IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-$LOADTEST_IMAGE_REPOSITORY}"
 CC_IMAGE_TAG="${IMAGE_TAG:-$LOADTEST_IMAGE_TAG}"
 CC_VALUES_FILE="${CC_VALUES_FILE:-}"  # Cluster controller values file
 DEPLOY_CLUSTER_CONTROLLER="${DEPLOY_CLUSTER_CONTROLLER:-true}"
-KWOK_REPLICAS="${KWOK_REPLICAS:-10}"
 NAMESPACE="${NAMESPACE:-castai-agent}"
 RELEASE_NAME="${RELEASE_NAME:-castai-loadtest}"
 
@@ -37,7 +36,6 @@ KWOK_FILTER="$SCRIPT_DIR/kwok-filter.sh"
 # Deploy kwok with post-renderer to filter out FlowSchema and PriorityClass
 echo "  Filtering out FlowSchema and PriorityClass resources..."
 helm upgrade --namespace "$NAMESPACE" --create-namespace --install kwok kwok/kwok \
-  --set "replicas=$KWOK_REPLICAS" \
   --values "$KWOK_VALUES_PATH" \
   --post-renderer "$KWOK_FILTER"
 

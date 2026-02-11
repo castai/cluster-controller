@@ -60,6 +60,10 @@ prometheus:
       type: ClusterIP
       servicePort: 9090
 
+    # Disable persistence for load testing
+    persistentVolume:
+      enabled: false
+
     # Custom scrape configs
     extraScrapeConfigs: |
       - job_name: 'cluster-controller'
@@ -134,6 +138,10 @@ grafana:
     type: ClusterIP
     port: 3000
 
+  # Disable persistence for load testing
+  persistence:
+    enabled: false
+
   # Disable login for testing
   grafana.ini:
     auth:
@@ -150,12 +158,12 @@ grafana:
         - name: Prometheus
           type: prometheus
           access: proxy
-          url: http://{{ .Release.Name }}-prometheus-server:9090
+          url: http://castai-loadtest-prometheus-server:9090
           isDefault: true
         - name: Loki
           type: loki
           access: proxy
-          url: http://{{ .Release.Name }}-loki:3100
+          url: http://castai-loadtest-loki:3100
           jsonData:
             maxLines: 1000
 
@@ -183,6 +191,9 @@ grafana:
 loki:
   enabled: true
 
+  # Use single binary deployment mode for simplicity
+  deploymentMode: SingleBinary
+
   image:
     repository: grafana/loki
     tag: latest
@@ -191,17 +202,16 @@ loki:
     auth_enabled: false
 
     commonConfig:
-      path_prefix: /loki
       replication_factor: 1
 
     storage:
-      type: filesystem
+      type: inmemory
 
     schemaConfig:
       configs:
         - from: 2020-10-24
           store: tsdb
-          object_store: filesystem
+          object_store: inmemory
           schema: v13
           index:
             prefix: index_
@@ -211,6 +221,15 @@ loki:
       retention_period: 168h
       max_query_series: 10000
       max_query_lookback: 168h
+
+    # Disable ruler storage requirement
+    ruler:
+      enable_api: false
+      enable_alertmanager_v2: false
+      storage:
+        type: local
+        local:
+          directory: /tmp/rules
 
   singleBinary:
     replicas: 1
@@ -230,7 +249,11 @@ loki:
                   values:
                     - kwok
 
-  # Disable unnecessary components
+    # Disable persistence for load testing
+    persistence:
+      enabled: false
+
+  # Disable unnecessary components for load testing
   gateway:
     enabled: false
 
@@ -242,6 +265,17 @@ loki:
 
   backend:
     replicas: 0
+
+  # Disable monitoring canary (not needed for load testing)
+  monitoring:
+    lokiCanary:
+      enabled: false
+
+  lokiCanary:
+    enabled: false
+
+  test:
+    enabled: false
 
 # Promtail configuration
 promtail:
@@ -261,7 +295,7 @@ promtail:
 
   config:
     clients:
-      - url: http://{{ .Release.Name }}-loki:3100/loki/api/v1/push
+      - url: http://castai-loadtest-loki:3100/loki/api/v1/push
 
     snippets:
       scrapeConfigs: |
@@ -270,23 +304,24 @@ promtail:
             - role: pod
               namespaces:
                 names:
-                  - {{ .Release.Namespace }}
+                  - castai-agent
           pipeline_stages:
             - cri: {}
           relabel_configs:
-            # Scrape cluster-controller and loadtest-agent pods
-            - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name, __meta_kubernetes_pod_label_app]
-              action: keep
-              regex: castai-cluster-controller|castai-loadtest-agent
+            - source_labels: [__meta_kubernetes_pod_node_name]
+              target_label: node_name
             - source_labels: [__meta_kubernetes_namespace]
               target_label: namespace
             - source_labels: [__meta_kubernetes_pod_name]
               target_label: pod
             - source_labels: [__meta_kubernetes_pod_container_name]
               target_label: container
-            - source_labels: [__meta_kubernetes_pod_uid]
+            - replacement: /var/log/pods/*$1/*.log
+              separator: /
+              source_labels:
+                - __meta_kubernetes_pod_uid
+                - __meta_kubernetes_pod_container_name
               target_label: __path__
-              replacement: /var/log/pods/*$1/*/*.log
 
 # kube-state-metrics configuration
 kube-state-metrics:
