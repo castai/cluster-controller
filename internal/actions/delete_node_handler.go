@@ -128,9 +128,9 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 			if err != nil {
 				return true, err
 			}
-			podPtrs := make([]*v1.Pod, len(podList.Items))
+			pods = make([]*v1.Pod, len(podList.Items))
 			for i := range podList.Items {
-				podPtrs[i] = &podList.Items[i]
+				pods[i] = &podList.Items[i]
 			}
 			return false, nil
 		},
