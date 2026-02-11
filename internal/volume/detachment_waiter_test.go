@@ -20,11 +20,11 @@ import (
 	"github.com/castai/cluster-controller/internal/informer"
 )
 
-func newTestWaiterVAInformer(t *testing.T, vas []*storagev1.VolumeAttachment, additionalObjs ...runtime.Object) (cache.Indexer, kubernetes.Interface) {
+func newTestWaiterVAInformer(t *testing.T, was []*storagev1.VolumeAttachment, additionalObjs ...runtime.Object) (cache.Indexer, kubernetes.Interface) {
 	t.Helper()
 
-	objs := make([]runtime.Object, 0, len(vas)+len(additionalObjs))
-	for _, va := range vas {
+	objs := make([]runtime.Object, 0, len(was)+len(additionalObjs))
+	for _, va := range was {
 		objs = append(objs, va)
 	}
 	objs = append(objs, additionalObjs...)
@@ -63,7 +63,7 @@ func vaStrPtr(s string) *string {
 func TestDetachmentWaiter_Wait(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should return immediately when no VAs on node", func(t *testing.T) {
+	t.Run("should return immediately when no was on node", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			r := require.New(t)
 			log := logrus.New()
@@ -79,7 +79,7 @@ func TestDetachmentWaiter_Wait(t *testing.T) {
 		})
 	})
 
-	t.Run("should complete when VAs are deleted", func(t *testing.T) {
+	t.Run("should complete when was are deleted", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			r := require.New(t)
 			log := logrus.New()
@@ -163,7 +163,7 @@ func TestDetachmentWaiter_Wait(t *testing.T) {
 		})
 	})
 
-	t.Run("should only wait for VAs on specified node", func(t *testing.T) {
+	t.Run("should only wait for was on specified node", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			r := require.New(t)
 			log := logrus.New()
@@ -199,7 +199,7 @@ func TestDetachmentWaiter_Wait(t *testing.T) {
 		})
 	})
 
-	t.Run("should exclude VAs from excluded pods", func(t *testing.T) {
+	t.Run("should exclude was from excluded pods", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			r := require.New(t)
 			log := logrus.New()
@@ -256,13 +256,13 @@ func TestDetachmentWaiter_Wait(t *testing.T) {
 			err := waiter.Wait(context.Background(), log, DetachmentWaitOptions{
 				NodeName:      "node1",
 				Timeout:       2 * time.Second,
-				PodsToExclude: []v1.Pod{dsPod},
+				PodsToExclude: []*v1.Pod{&dsPod},
 			})
 			r.NoError(err)
 		})
 	})
 
-	t.Run("should exclude VAs from static pods", func(t *testing.T) {
+	t.Run("should exclude was from static pods", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			r := require.New(t)
 			log := logrus.New()
@@ -319,7 +319,7 @@ func TestDetachmentWaiter_Wait(t *testing.T) {
 			err := waiter.Wait(context.Background(), log, DetachmentWaitOptions{
 				NodeName:      "node1",
 				Timeout:       2 * time.Second,
-				PodsToExclude: []v1.Pod{staticPod},
+				PodsToExclude: []*v1.Pod{&staticPod},
 			})
 			r.NoError(err)
 		})
