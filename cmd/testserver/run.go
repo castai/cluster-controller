@@ -19,6 +19,7 @@ import (
 	"k8s.io/client-go/util/flowcontrol"
 
 	"github.com/castai/cluster-controller/internal/helm"
+	"github.com/castai/cluster-controller/internal/metrics"
 	"github.com/castai/cluster-controller/loadtest"
 	"github.com/castai/cluster-controller/loadtest/scenarios"
 )
@@ -27,6 +28,8 @@ func run(ctx context.Context) error {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	cfg := loadtest.GetConfig()
 	logger.Info("creating test server")
+
+	loadtest.RegisterTestMetrics(metrics.GetRegistry())
 
 	testServer := loadtest.NewTestServer(logger, loadtest.TestServerConfig{
 		MaxActionsPerCall:        1000,
@@ -51,7 +54,7 @@ func run(ctx context.Context) error {
 	// Choose scenarios below by adding/removing/etc. instances of scenarios.XXX()
 	// All scenarios in the list run in parallel (but not necessarily at the same time if preparation takes different time).
 	testScenarios := []scenarios.TestScenario{
-		scenarios.CheckNodeStatus(5000, logger),
+		scenarios.DrainNode(1, 10, logger),
 	}
 
 	logger.Info("Starting continuous test scenario execution")
@@ -88,8 +91,10 @@ func run(ctx context.Context) error {
 
 		if len(receivedErrors) > 0 {
 			logger.Error(fmt.Sprintf("Iteration %d completed with (%d) errors: %v", iteration, len(receivedErrors), errors.Join(receivedErrors...)))
+			loadtest.IncrementTestRunFailure(len(receivedErrors))
 		} else {
 			logger.Info(fmt.Sprintf("Iteration %d completed successfully", iteration))
+			loadtest.IncrementTestRunSuccess()
 		}
 
 		logger.Info("Waiting 1 minute before next iteration")
