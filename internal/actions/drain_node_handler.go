@@ -338,7 +338,6 @@ func (h *DrainNodeHandler) listNodePods(ctx context.Context, log logrus.FieldLog
 		return nil, fmt.Errorf("listing node %v pods: %w", node.Name, err)
 	}
 
-	// Convert []v1.Pod to []*v1.Pod
 	podPtrs := make([]*v1.Pod, len(pods.Items))
 	for i := range pods.Items {
 		podPtrs[i] = &pods.Items[i]
