@@ -260,17 +260,17 @@ func TestManager_VAInformer(t *testing.T) {
 	require.True(t, manager.IsVAAvailable())
 
 	// Test lister
-	was, err := manager.GetVALister().List(labels.Everything())
+	volumeAttachments, err := manager.GetVALister().List(labels.Everything())
 	require.NoError(t, err)
-	require.Len(t, was, 1)
-	require.Equal(t, "va-1", was[0].Name)
+	require.Len(t, volumeAttachments, 1)
+	require.Equal(t, "va-1", volumeAttachments[0].Name)
 
 	// Test indexer with node name lookup
 	indexed, err := manager.GetVAIndexer().ByIndex(VANodeNameIndexer, "node-1")
 	require.NoError(t, err)
 	require.Len(t, indexed, 1)
 
-	// Verify no was on non-existent node
+	// Verify no volumeAttachments on non-existent node
 	indexed, err = manager.GetVAIndexer().ByIndex(VANodeNameIndexer, "node-2")
 	require.NoError(t, err)
 	require.Len(t, indexed, 0)
