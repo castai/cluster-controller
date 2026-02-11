@@ -24,10 +24,10 @@ func TestNodeInformer_Informer(t *testing.T) {
 	clientset := fake.NewClientset()
 	manager := NewManager(log, clientset, time.Hour, EnableNodeInformer())
 
-	informer := manager.nodes.Informer()
-	lister := manager.nodes.Lister()
+	informer := manager.nodes.informer
+	lister := manager.nodes.lister
 
-	require.False(t, manager.nodes.HasSynced())
+	require.False(t, manager.nodes.informer.HasSynced())
 	require.NotNil(t, informer)
 	require.NotNil(t, lister)
 }
@@ -481,4 +481,225 @@ func TestNodeInformer_OnEvent_MultipleNodes(t *testing.T) {
 		synctest.Wait()
 		require.NoError(t, err2)
 	})
+}
+
+func TestNodeInformer_Get(t *testing.T) {
+	t.Parallel()
+
+	node1 := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-node-1",
+		},
+		Status: corev1.NodeStatus{
+			Conditions: []corev1.NodeCondition{
+				{
+					Type:   corev1.NodeReady,
+					Status: corev1.ConditionTrue,
+				},
+			},
+		},
+	}
+
+	node2 := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-node-2",
+		},
+		Status: corev1.NodeStatus{
+			Conditions: []corev1.NodeCondition{
+				{
+					Type:   corev1.NodeReady,
+					Status: corev1.ConditionFalse,
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name         string
+		initialNodes []*corev1.Node
+		nodeName     string
+		wantNode     *corev1.Node
+		wantErr      bool
+	}{
+		{
+			name:         "get existing node",
+			initialNodes: []*corev1.Node{node1, node2},
+			nodeName:     "test-node-1",
+			wantNode:     node1,
+			wantErr:      false,
+		},
+		{
+			name:         "get non-existent node",
+			initialNodes: []*corev1.Node{node1},
+			nodeName:     "non-existent-node",
+			wantNode:     nil,
+			wantErr:      true,
+		},
+		{
+			name:         "get from empty cache",
+			initialNodes: nil,
+			nodeName:     "test-node-1",
+			wantNode:     nil,
+			wantErr:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			synctest.Test(t, func(t *testing.T) {
+				var initialObjects []runtime.Object
+				for _, node := range tt.initialNodes {
+					initialObjects = append(initialObjects, node)
+				}
+
+				clientSet := fake.NewClientset(initialObjects...)
+				log := logrus.New()
+
+				infMgr := NewManager(log, clientSet, 10*time.Minute, EnableNodeInformer())
+
+				ctx, cancel := context.WithCancel(t.Context())
+				t.Cleanup(func() {
+					cancel()
+				})
+
+				go func() {
+					_ = infMgr.Start(ctx)
+				}()
+				synctest.Wait()
+
+				node, err := infMgr.GetNodeInformer().Get(tt.nodeName)
+
+				if tt.wantErr {
+					require.Error(t, err)
+					require.Nil(t, node)
+				} else {
+					require.NoError(t, err)
+					require.NotNil(t, node)
+					require.Equal(t, tt.wantNode.Name, node.Name)
+				}
+			})
+		})
+	}
+}
+
+func TestNodeInformer_List(t *testing.T) {
+	t.Parallel()
+
+	node1 := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-node-1",
+		},
+		Status: corev1.NodeStatus{
+			Conditions: []corev1.NodeCondition{
+				{
+					Type:   corev1.NodeReady,
+					Status: corev1.ConditionTrue,
+				},
+			},
+		},
+	}
+
+	node2 := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-node-2",
+		},
+		Status: corev1.NodeStatus{
+			Conditions: []corev1.NodeCondition{
+				{
+					Type:   corev1.NodeReady,
+					Status: corev1.ConditionFalse,
+				},
+			},
+		},
+	}
+
+	node3 := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-node-3",
+		},
+		Status: corev1.NodeStatus{
+			Conditions: []corev1.NodeCondition{
+				{
+					Type:   corev1.NodeReady,
+					Status: corev1.ConditionTrue,
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name         string
+		initialNodes []*corev1.Node
+		wantCount    int
+		wantErr      bool
+	}{
+		{
+			name:         "list multiple nodes",
+			initialNodes: []*corev1.Node{node1, node2, node3},
+			wantCount:    3,
+			wantErr:      false,
+		},
+		{
+			name:         "list single node",
+			initialNodes: []*corev1.Node{node1},
+			wantCount:    1,
+			wantErr:      false,
+		},
+		{
+			name:         "list empty cache",
+			initialNodes: nil,
+			wantCount:    0,
+			wantErr:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			synctest.Test(t, func(t *testing.T) {
+				var initialObjects []runtime.Object
+				for _, node := range tt.initialNodes {
+					initialObjects = append(initialObjects, node)
+				}
+
+				clientSet := fake.NewClientset(initialObjects...)
+				log := logrus.New()
+
+				infMgr := NewManager(log, clientSet, 10*time.Minute, EnableNodeInformer())
+
+				ctx, cancel := context.WithCancel(t.Context())
+				t.Cleanup(func() {
+					cancel()
+				})
+
+				go func() {
+					_ = infMgr.Start(ctx)
+				}()
+				synctest.Wait()
+
+				nodes, err := infMgr.GetNodeInformer().List()
+
+				if tt.wantErr {
+					require.Error(t, err)
+				} else {
+					require.NoError(t, err)
+					require.Len(t, nodes, tt.wantCount)
+
+					if tt.wantCount > 0 {
+						nodeNames := make(map[string]bool)
+						for _, node := range nodes {
+							nodeNames[node.Name] = true
+						}
+
+						for _, expectedNode := range tt.initialNodes {
+							require.True(t, nodeNames[expectedNode.Name], "expected node %s not found in list", expectedNode.Name)
+						}
+					}
+				}
+			})
+		})
+	}
 }

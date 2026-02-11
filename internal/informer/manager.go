@@ -9,6 +9,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	authorizationv1 "k8s.io/api/authorization/v1"
+	core "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
@@ -42,7 +43,7 @@ type Manager struct {
 	factory          informers.SharedInformerFactory
 	cacheSyncTimeout time.Duration
 
-	nodes             NodeInformer
+	nodes             *nodeInformer
 	pods              *podInformer
 	volumeAttachments *vaInformer
 
@@ -63,10 +64,11 @@ func WithCacheSyncTimeout(timeout time.Duration) Option {
 
 func EnablePodInformer() Option {
 	return func(m *Manager) {
-		m.pods = &podInformer{
-			informer: m.factory.Core().V1().Pods().Informer(),
-			lister:   m.factory.Core().V1().Pods().Lister(),
-		}
+		m.pods = NewPodInformer(
+			m.factory.Core().V1().Pods().Informer(),
+			m.factory.Core().V1().Pods().Lister(),
+			nil,
+		)
 	}
 }
 
@@ -82,7 +84,26 @@ func EnableNodeInformer() Option {
 // WithNodeIndexers sets custom indexers for the node informer.
 func WithNodeIndexers(indexers cache.Indexers) Option {
 	return func(n *Manager) {
-		n.nodes.SetIndexers(indexers)
+		n.nodes.indexers = indexers
+	}
+}
+
+func WithDefaultPodNodeNameIndexer() Option {
+	return WithPodIndexers(cache.Indexers{
+		PodIndexerName: func(obj any) ([]string, error) {
+			pod, ok := obj.(*core.Pod)
+			if !ok {
+				return nil, nil
+			}
+			return []string{pod.Spec.NodeName}, nil
+		},
+	})
+}
+
+// WithPodIndexers sets custom indexers for the pod informer.
+func WithPodIndexers(indexers cache.Indexers) Option {
+	return func(n *Manager) {
+		n.pods.indexers = indexers
 	}
 }
 
@@ -168,7 +189,7 @@ func (m *Manager) Start(ctx context.Context) error {
 		}
 
 		m.log.Info("waiting for node informer cache to sync...")
-		if !cache.WaitForCacheSync(syncCtx.Done(), m.nodes.HasSynced) {
+		if !cache.WaitForCacheSync(syncCtx.Done(), m.nodes.informer.HasSynced) {
 			cancel()
 			return fmt.Errorf("failed to sync node informer cache within %v", m.cacheSyncTimeout)
 		}
@@ -178,7 +199,7 @@ func (m *Manager) Start(ctx context.Context) error {
 
 	if m.pods != nil {
 		m.log.Info("waiting for pod informer cache to sync...")
-		if !cache.WaitForCacheSync(syncCtx.Done(), m.pods.HasSynced) {
+		if !cache.WaitForCacheSync(syncCtx.Done(), m.pods.informer.HasSynced) {
 			cancel()
 			return fmt.Errorf("failed to sync pod informer cache within %v", m.cacheSyncTimeout)
 		}
@@ -247,7 +268,7 @@ func (m *Manager) GetNodeLister() listerv1.NodeLister {
 	if m.nodes == nil {
 		return nil
 	}
-	return m.nodes.Lister()
+	return m.nodes.lister
 }
 
 // GetNodeInformer returns the node informer for watching node events.
@@ -258,20 +279,26 @@ func (m *Manager) GetNodeInformer() NodeInformer {
 	return m.nodes
 }
 
+// Nodes returns the node informer for node domain operations.
+// This is a convenience method that returns the same as GetNodeInformer().
+func (m *Manager) Nodes() NodeInformer {
+	return m.GetNodeInformer()
+}
+
 // GetPodLister returns the pod lister for querying the pod cache.
 func (m *Manager) GetPodLister() listerv1.PodLister {
 	if m.pods == nil {
 		return nil
 	}
-	return m.pods.Lister()
+	return m.pods.lister
 }
 
-// GetPodInformer returns the pod informer for watching pod events.
-func (m *Manager) GetPodInformer() cache.SharedIndexInformer {
+// Pods returns the pod informer for pod domain operations.
+func (m *Manager) Pods() PodInformer {
 	if m.pods == nil {
 		return nil
 	}
-	return m.pods.Informer()
+	return m.pods
 }
 
 // IsVAAvailable indicates whether the VolumeAttachment informer is available.
@@ -346,8 +373,8 @@ func (m *Manager) checkVAPermissions(ctx context.Context) error {
 }
 
 func (m *Manager) addIndexers() error {
-	if m.nodes != nil && m.nodes.Indexers() != nil {
-		if err := m.nodes.Informer().AddIndexers(m.nodes.Indexers()); err != nil {
+	if m.nodes != nil && m.nodes.indexers != nil {
+		if err := m.nodes.informer.AddIndexers(m.nodes.indexers); err != nil {
 			return fmt.Errorf("adding node indexers: %w", err)
 		}
 	}
@@ -374,14 +401,14 @@ func (m *Manager) reportCacheSize(ctx context.Context) {
 			return
 		case <-ticker.C:
 			if m.nodes != nil {
-				nodes := m.nodes.Informer().GetStore().ListKeys()
+				nodes := m.nodes.informer.GetStore().ListKeys()
 				size := len(nodes)
 				m.log.WithField("cache_size", size).Debug("node informer cache size")
 				metrics.SetInformerCacheSize("node", size)
 			}
 
 			if m.pods != nil {
-				pods := m.pods.Informer().GetStore().ListKeys()
+				pods := m.pods.informer.GetStore().ListKeys()
 				size := len(pods)
 				m.log.WithField("cache_size", size).Debug("pod informer cache size")
 				metrics.SetInformerCacheSize("pod", size)
