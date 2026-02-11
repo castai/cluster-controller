@@ -30,3 +30,8 @@ func NewMetricsMux() *http.ServeMux {
 func Gather() ([]*dto.MetricFamily, error) {
 	return registry.Gather()
 }
+
+// GetRegistry returns the prometheus registry for registering additional metrics.
+func GetRegistry() prometheus.Registerer {
+	return registry
+}
