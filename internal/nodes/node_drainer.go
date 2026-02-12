@@ -150,7 +150,7 @@ func (d *drainer) tryEvict(ctx context.Context, toEvict []*core.Pod) ([]*core.Po
 func (d *drainer) list(_ context.Context, fromNode string) ([]*core.Pod, error) {
 	podPtrs, err := d.pods.ListByNode(fromNode)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("listing pods from cache: %w", err)
 	}
 
 	pods := make([]*core.Pod, 0, len(podPtrs))
