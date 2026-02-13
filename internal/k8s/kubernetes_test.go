@@ -939,3 +939,346 @@ func Test_getNodeByIDs(t *testing.T) {
 		})
 	}
 }
+
+func TestPartitionPodsForEviction(t *testing.T) {
+	t.Parallel()
+
+	const testCastNamespace = "cast-namespace"
+
+	now := time.Now()
+	recentDeletion := metav1.NewTime(now.Add(-30 * time.Second))
+	oldDeletion := metav1.NewTime(now.Add(-10 * time.Minute))
+
+	tests := []struct {
+		name                     string
+		pods                     []v1.Pod
+		castNamespace            string
+		skipDeletedTimeoutSecs   int
+		wantEvictableLen         int
+		wantNonEvictableLen      int
+		wantCastPodsLen          int
+		wantEvictablePodNames    []string
+		wantNonEvictablePodNames []string
+		wantCastPodNames         []string
+	}{
+		{
+			name:             "empty pods returns empty result",
+			pods:             []v1.Pod{},
+			castNamespace:    testCastNamespace,
+			wantEvictableLen: 0,
+		},
+		{
+			name: "regular pods are evictable",
+			pods: []v1.Pod{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"},
+					Status:     v1.PodStatus{Phase: v1.PodRunning},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "pod2", Namespace: "kube-system"},
+					Status:     v1.PodStatus{Phase: v1.PodRunning},
+				},
+			},
+			castNamespace:         testCastNamespace,
+			wantEvictableLen:      2,
+			wantEvictablePodNames: []string{"pod1", "pod2"},
+		},
+		{
+			name: "daemonset pods are non-evictable",
+			pods: []v1.Pod{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "daemonset-pod",
+						Namespace: "default",
+						OwnerReferences: []metav1.OwnerReference{
+							{Kind: "DaemonSet", Controller: boolPtr(true)},
+						},
+					},
+					Status: v1.PodStatus{Phase: v1.PodRunning},
+				},
+			},
+			castNamespace:            testCastNamespace,
+			wantNonEvictableLen:      1,
+			wantNonEvictablePodNames: []string{"daemonset-pod"},
+		},
+		{
+			name: "static pods are non-evictable",
+			pods: []v1.Pod{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "static-pod",
+						Namespace: "default",
+						OwnerReferences: []metav1.OwnerReference{
+							{Kind: "Node", Controller: boolPtr(true)},
+						},
+					},
+					Status: v1.PodStatus{Phase: v1.PodRunning},
+				},
+			},
+			castNamespace:            testCastNamespace,
+			wantNonEvictableLen:      1,
+			wantNonEvictablePodNames: []string{"static-pod"},
+		},
+		{
+			name: "succeeded pods are skipped",
+			pods: []v1.Pod{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "completed-pod", Namespace: "default"},
+					Status:     v1.PodStatus{Phase: v1.PodSucceeded},
+				},
+			},
+			castNamespace:    testCastNamespace,
+			wantEvictableLen: 0,
+		},
+		{
+			name: "failed pods are skipped",
+			pods: []v1.Pod{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "failed-pod", Namespace: "default"},
+					Status:     v1.PodStatus{Phase: v1.PodFailed},
+				},
+			},
+			castNamespace:    testCastNamespace,
+			wantEvictableLen: 0,
+		},
+		{
+			name: "cast namespace pods are identified separately",
+			pods: []v1.Pod{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "cast-pod", Namespace: testCastNamespace},
+					Status:     v1.PodStatus{Phase: v1.PodRunning},
+				},
+			},
+			castNamespace:    testCastNamespace,
+			wantEvictableLen: 1,
+			wantCastPodsLen:  1,
+			wantCastPodNames: []string{"cast-pod"},
+		},
+		{
+			name: "recently deleted pods are included",
+			pods: []v1.Pod{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "deleted-pod",
+						Namespace:         "default",
+						DeletionTimestamp: &recentDeletion,
+					},
+					Status: v1.PodStatus{Phase: v1.PodRunning},
+				},
+			},
+			castNamespace:          testCastNamespace,
+			skipDeletedTimeoutSecs: 60,
+			wantEvictableLen:       1,
+			wantEvictablePodNames:  []string{"deleted-pod"},
+		},
+		{
+			name: "old deleted pods are skipped",
+			pods: []v1.Pod{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "old-deleted-pod",
+						Namespace:         "default",
+						DeletionTimestamp: &oldDeletion,
+					},
+					Status: v1.PodStatus{Phase: v1.PodRunning},
+				},
+			},
+			castNamespace:          testCastNamespace,
+			skipDeletedTimeoutSecs: 60,
+			wantEvictableLen:       0,
+		},
+		{
+			name: "mixed pods are partitioned correctly",
+			pods: []v1.Pod{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "regular-pod", Namespace: "default"},
+					Status:     v1.PodStatus{Phase: v1.PodRunning},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "daemonset-pod",
+						Namespace: "default",
+						OwnerReferences: []metav1.OwnerReference{
+							{Kind: "DaemonSet", Controller: boolPtr(true)},
+						},
+					},
+					Status: v1.PodStatus{Phase: v1.PodRunning},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "cast-pod", Namespace: testCastNamespace},
+					Status:     v1.PodStatus{Phase: v1.PodRunning},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "completed-pod", Namespace: "default"},
+					Status:     v1.PodStatus{Phase: v1.PodSucceeded},
+				},
+			},
+			castNamespace:            testCastNamespace,
+			wantEvictableLen:         2,
+			wantNonEvictableLen:      1,
+			wantCastPodsLen:          1,
+			wantEvictablePodNames:    []string{"regular-pod", "cast-pod"},
+			wantNonEvictablePodNames: []string{"daemonset-pod"},
+			wantCastPodNames:         []string{"cast-pod"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Convert []v1.Pod to []*v1.Pod
+			podPtrs := make([]*v1.Pod, len(tt.pods))
+			for i := range tt.pods {
+				podPtrs[i] = &tt.pods[i]
+			}
+
+			result := PartitionPodsForEviction(podPtrs, tt.castNamespace, tt.skipDeletedTimeoutSecs)
+
+			require.Len(t, result.Evictable, tt.wantEvictableLen)
+			require.Len(t, result.NonEvictable, tt.wantNonEvictableLen)
+			require.Len(t, result.CastPods, tt.wantCastPodsLen)
+
+			if len(tt.wantEvictablePodNames) > 0 {
+				evictableNames := make([]string, len(result.Evictable))
+				for i, p := range result.Evictable {
+					evictableNames[i] = p.Name
+				}
+				require.ElementsMatch(t, tt.wantEvictablePodNames, evictableNames)
+			}
+
+			if len(tt.wantNonEvictablePodNames) > 0 {
+				nonEvictableNames := make([]string, len(result.NonEvictable))
+				for i, p := range result.NonEvictable {
+					nonEvictableNames[i] = p.Name
+				}
+				require.ElementsMatch(t, tt.wantNonEvictablePodNames, nonEvictableNames)
+			}
+
+			if len(tt.wantCastPodNames) > 0 {
+				castPodNames := make([]string, len(result.CastPods))
+				for i, p := range result.CastPods {
+					castPodNames[i] = p.Name
+				}
+				require.ElementsMatch(t, tt.wantCastPodNames, castPodNames)
+			}
+		})
+	}
+}
+
+func TestIsDaemonSetPod(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		pod  *v1.Pod
+		want bool
+	}{
+		{
+			name: "returns true for daemonset pod",
+			pod: &v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					OwnerReferences: []metav1.OwnerReference{
+						{Kind: "DaemonSet", Controller: boolPtr(true)},
+					},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "returns false for deployment pod",
+			pod: &v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					OwnerReferences: []metav1.OwnerReference{
+						{Kind: "ReplicaSet", Controller: boolPtr(true)},
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "returns false for pod without owner",
+			pod: &v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					OwnerReferences: nil,
+				},
+			},
+			want: false,
+		},
+		{
+			name: "returns false for non-controller daemonset owner",
+			pod: &v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					OwnerReferences: []metav1.OwnerReference{
+						{Kind: "DaemonSet", Controller: boolPtr(false)},
+					},
+				},
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := IsDaemonSetPod(tt.pod)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestIsStaticPod(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		pod  *v1.Pod
+		want bool
+	}{
+		{
+			name: "returns true for static pod",
+			pod: &v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					OwnerReferences: []metav1.OwnerReference{
+						{Kind: "Node", Controller: boolPtr(true)},
+					},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "returns false for deployment pod",
+			pod: &v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					OwnerReferences: []metav1.OwnerReference{
+						{Kind: "ReplicaSet", Controller: boolPtr(true)},
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "returns false for pod without owner",
+			pod: &v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					OwnerReferences: nil,
+				},
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := IsStaticPod(tt.pod)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func boolPtr(b bool) *bool {
+	return &b
+}
