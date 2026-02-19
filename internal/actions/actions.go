@@ -23,6 +23,7 @@ func NewDefaultActionHandlers(
 	dynamicClient dynamic.Interface,
 	helmClient helm.Client,
 	nodeInformer informer.NodeInformer,
+	podInformer informer.PodInformer,
 	vaWaiter volume.DetachmentWaiter,
 ) ActionHandlers {
 	handlers := ActionHandlers{
@@ -44,6 +45,10 @@ func NewDefaultActionHandlers(
 
 	if nodeInformer != nil {
 		handlers[reflect.TypeFor[*castai.ActionCheckNodeStatus]()] = NewCheckNodeStatusInformerHandler(log, clientset, nodeInformer)
+	}
+
+	if podInformer != nil && nodeInformer != nil {
+		handlers[reflect.TypeFor[*castai.ActionDrainNode]()] = NewDrainNodeInformerHandler(log, clientset, castNamespace, vaWaiter, podInformer, nodeInformer)
 	}
 
 	return handlers
