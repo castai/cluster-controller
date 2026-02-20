@@ -1,3 +1,5 @@
+//go:generate mockgen -destination ./mock/kubernetes.go . Drainer
+
 package nodes
 
 import (
@@ -44,14 +46,14 @@ type DrainerConfig struct {
 
 type drainer struct {
 	pods   informer.PodInformer
-	client *k8s.Client
+	client k8s.Client
 	cfg    DrainerConfig
 	log    logrus.FieldLogger
 }
 
 func NewDrainer(
 	pods informer.PodInformer,
-	client *k8s.Client,
+	client k8s.Client,
 	log logrus.FieldLogger,
 	cfg DrainerConfig,
 ) Drainer {
@@ -75,7 +77,7 @@ func (d *drainer) Drain(ctx context.Context, data DrainRequest) ([]*core.Pod, er
 
 	toEvict := d.prioritizePods(pods, data.CastNamespace, data.SkipDeletedTimeoutSeconds)
 	if len(toEvict) == 0 {
-		return []*core.Pod{}, nil
+		return nil, nil
 	}
 
 	_, failed, err := d.tryDrain(ctx, toEvict, data.DeleteOptions)
@@ -85,7 +87,7 @@ func (d *drainer) Drain(ctx context.Context, data DrainRequest) ([]*core.Pod, er
 
 	err = d.waitTerminaition(ctx, data.Node, failed)
 	if err != nil {
-		return []*core.Pod{}, err
+		return nil, err
 	}
 
 	logger.Info("drain finished")
@@ -115,7 +117,7 @@ func (d *drainer) Evict(ctx context.Context, data EvictRequest) ([]*core.Pod, er
 
 	toEvict := d.prioritizePods(pods, data.CastNamespace, data.SkipDeletedTimeoutSeconds)
 	if len(toEvict) == 0 {
-		return []*core.Pod{}, nil
+		return nil, nil
 	}
 
 	_, ignored, err := d.tryEvict(ctx, toEvict)
@@ -125,7 +127,7 @@ func (d *drainer) Evict(ctx context.Context, data EvictRequest) ([]*core.Pod, er
 
 	err = d.waitTerminaition(ctx, data.Node, ignored)
 	if err != nil {
-		return []*core.Pod{}, err
+		return nil, err
 	}
 
 	logger.Info("eviction finished")
