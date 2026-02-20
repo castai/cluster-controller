@@ -24,10 +24,10 @@ func TestNodeInformer_Informer(t *testing.T) {
 	clientset := fake.NewClientset()
 	manager := NewManager(log, clientset, time.Hour, EnableNodeInformer())
 
-	informer := manager.nodes.Informer()
-	lister := manager.nodes.Lister()
+	informer := manager.nodes.informer
+	lister := manager.nodes.lister
 
-	require.False(t, manager.nodes.HasSynced())
+	require.False(t, manager.nodes.informer.HasSynced())
 	require.NotNil(t, informer)
 	require.NotNil(t, lister)
 }

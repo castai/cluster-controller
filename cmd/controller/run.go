@@ -142,7 +142,7 @@ func runController(
 		informerOpts = append(informerOpts, informer.EnableNodeInformer())
 	}
 	if cfg.Informer.EnablePod {
-		informerOpts = append(informerOpts, informer.EnablePodInformer())
+		informerOpts = append(informerOpts, informer.EnablePodInformer(), informer.WithDefaultPodNodeNameIndexer())
 	}
 
 	informerManager := informer.NewManager(
@@ -165,8 +165,8 @@ func runController(
 		clientset,
 		dynamicClient,
 		helmClient,
-		informerManager.GetNodeInformer(),
-		informerManager.GetPodInformer(),
+		informerManager.Nodes(),
+		informerManager.Pods(),
 		vaWaiter,
 	)
 

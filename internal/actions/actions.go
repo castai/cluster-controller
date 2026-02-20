@@ -6,13 +6,10 @@ import (
 	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/cache"
 
 	"github.com/castai/cluster-controller/internal/castai"
 	"github.com/castai/cluster-controller/internal/helm"
 	"github.com/castai/cluster-controller/internal/informer"
-	"github.com/castai/cluster-controller/internal/k8s"
-	"github.com/castai/cluster-controller/internal/nodes"
 	"github.com/castai/cluster-controller/internal/volume"
 )
 
@@ -26,7 +23,7 @@ func NewDefaultActionHandlers(
 	dynamicClient dynamic.Interface,
 	helmClient helm.Client,
 	nodeInformer informer.NodeInformer,
-	podInformer cache.SharedIndexInformer,
+	podInformer informer.PodInformer,
 	vaWaiter volume.DetachmentWaiter,
 ) ActionHandlers {
 	handlers := ActionHandlers{
@@ -50,9 +47,8 @@ func NewDefaultActionHandlers(
 		handlers[reflect.TypeFor[*castai.ActionCheckNodeStatus]()] = NewCheckNodeStatusInformerHandler(log, clientset, nodeInformer)
 	}
 
-	if podInformer != nil {
-		nodeManager := nodes.NewManager(podInformer.GetIndexer(), k8s.NewClient(clientset, log), log, nodes.ManagerConfig{})
-		handlers[reflect.TypeFor[*castai.ActionDrainNode]()] = NewDrainNodeInformerHandler(log, clientset, castNamespace, vaWaiter, nodeManager)
+	if podInformer != nil && nodeInformer != nil {
+		handlers[reflect.TypeFor[*castai.ActionDrainNode]()] = NewDrainNodeInformerHandler(log, clientset, castNamespace, vaWaiter, podInformer, nodeInformer)
 	}
 
 	return handlers

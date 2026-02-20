@@ -11,5 +11,7 @@ func RegisterCustomMetrics() {
 		actionExecutedDuration,
 		informerCacheSize,
 		informerCacheSyncs,
+		testRunCounter,
+		testRunErrorsCounter,
 	)
 }

@@ -102,7 +102,7 @@ func (h *DrainNodeHandler) Handle(ctx context.Context, action *castai.ClusterAct
 
 	log.Info("cordoning node for draining")
 
-	if err := k8s.CordonNode(ctx, h.log, h.clientset, node); err != nil {
+	if err = k8s.CordonNode(ctx, h.log, h.clientset, node); err != nil {
 		return fmt.Errorf("cordoning node %q: %w", req.NodeName, err)
 	}
 
@@ -337,7 +337,13 @@ func (h *DrainNodeHandler) listNodePods(ctx context.Context, log logrus.FieldLog
 		return nil, fmt.Errorf("listing node %v pods: %w", node.Name, err)
 	}
 
-	partitioned := k8s.PartitionPodsForEviction(pods.Items, h.cfg.castNamespace, h.cfg.skipDeletedTimeoutSeconds)
+	// Convert []v1.Pod to []*v1.Pod
+	podPtrs := make([]*v1.Pod, len(pods.Items))
+	for i := range pods.Items {
+		podPtrs[i] = &pods.Items[i]
+	}
+
+	partitioned := k8s.PartitionPodsForEviction(podPtrs, h.cfg.castNamespace, h.cfg.skipDeletedTimeoutSeconds)
 
 	result := &nodePods{
 		toEvict:      make([]*v1.Pod, 0, len(partitioned.Evictable)+len(partitioned.CastPods)),

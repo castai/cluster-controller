@@ -68,7 +68,6 @@ func (s *drainNodeScenario) Preparation(ctx context.Context, namespace string, c
 			deployment.Namespace = namespace
 			//nolint:gosec // Not afraid of overflow here.
 			deployment.Spec.Replicas = lo.ToPtr(int32(s.deploymentReplicas))
-			deployment.Spec.Template.Spec.NodeName = nodeName
 
 			_, err = clientset.AppsV1().Deployments(namespace).Create(ctx, deployment, metav1.CreateOptions{})
 			if err != nil {
@@ -92,7 +91,9 @@ func (s *drainNodeScenario) Preparation(ctx context.Context, namespace string, c
 		})
 	}
 
-	return errGroup.Wait()
+	err := errGroup.Wait()
+
+	return err
 }
 
 func (s *drainNodeScenario) Cleanup(ctx context.Context, namespace string, clientset kubernetes.Interface) error {
@@ -160,7 +161,8 @@ func (s *drainNodeScenario) Run(ctx context.Context, _ string, _ kubernetes.Inte
 			CreatedAt: time.Now().UTC(),
 			ActionDrainNode: &castai.ActionDrainNode{
 				NodeName:            node.Name,
-				NodeID:              "",
+				ProviderId:          node.Name,
+				NodeID:              node.Name,
 				DrainTimeoutSeconds: 60,
 				Force:               true,
 			},

@@ -16,10 +16,10 @@ func TestPodInformer_Informer(t *testing.T) {
 	clientset := fake.NewClientset()
 	manager := NewManager(log, clientset, time.Hour, EnablePodInformer())
 
-	informer := manager.pods.Informer()
-	lister := manager.pods.Lister()
+	informer := manager.pods.informer
+	lister := manager.pods.lister
 
 	require.NotNil(t, informer)
 	require.NotNil(t, lister)
-	require.False(t, manager.pods.HasSynced())
+	require.False(t, manager.pods.informer.HasSynced())
 }

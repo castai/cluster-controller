@@ -257,7 +257,6 @@ func (c *Client) EvictPod(ctx context.Context, pod v1.Pod, podEvictRetryDelay ti
 	action := func(ctx context.Context) (bool, error) {
 		var err error
 
-		c.log.Debugf("requesting eviction for pod %s/%s", pod.Namespace, pod.Name)
 		if version == policyv1.SchemeGroupVersion {
 			err = c.clientset.PolicyV1().Evictions(pod.Namespace).Evict(ctx, &policyv1.Eviction{
 				ObjectMeta: metav1.ObjectMeta{
@@ -408,7 +407,7 @@ type PartitionResult struct {
 	CastPods     []*v1.Pod
 }
 
-func PartitionPodsForEviction(pods []v1.Pod, castNamespace string, skipDeletedTimeoutSeconds int) *PartitionResult {
+func PartitionPodsForEviction(pods []*v1.Pod, castNamespace string, skipDeletedTimeoutSeconds int) *PartitionResult {
 	castPods := make([]*v1.Pod, 0)
 	evictable := make([]*v1.Pod, 0)
 	nonEvictable := make([]*v1.Pod, 0)
@@ -425,17 +424,17 @@ func PartitionPodsForEviction(pods []v1.Pod, castNamespace string, skipDeletedTi
 			continue
 		}
 
-		if IsDaemonSetPod(&p) || IsStaticPod(&p) {
-			nonEvictable = append(nonEvictable, &p)
+		if IsDaemonSetPod(p) || IsStaticPod(p) {
+			nonEvictable = append(nonEvictable, p)
 			continue
 		}
 
 		if p.Namespace == castNamespace {
-			castPods = append(castPods, &p)
+			castPods = append(castPods, p)
 			continue
 		}
 
-		evictable = append(evictable, &p)
+		evictable = append(evictable, p)
 	}
 
 	evictable = append(evictable, castPods...)

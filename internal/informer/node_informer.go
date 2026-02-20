@@ -7,20 +7,26 @@ import (
 
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	listerv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 )
 
 type Predicate func(node *corev1.Node) (bool, error)
 
+// NodeInformer provides domain operations for nodes.
+// Lifecycle (start/stop/sync) is managed by Manager.
 type NodeInformer interface {
-	Start(ctx context.Context) error
+	// Get retrieves a node by name from cache
+	Get(name string) (*corev1.Node, error)
+
+	// List returns all nodes from cache
+	List() ([]*corev1.Node, error)
+
+	// Wait watches for a node to meet a condition.
+	// Returns a channel that signals when condition is met or context is canceled.
+	// Used for event-driven waiting (e.g., wait for node to become ready).
 	Wait(ctx context.Context, name string, condition Predicate) chan error
-	Informer() cache.SharedIndexInformer
-	Lister() listerv1.NodeLister
-	Indexers() cache.Indexers
-	SetIndexers(indexers cache.Indexers)
-	HasSynced() bool
 }
 
 type observable struct {
@@ -44,7 +50,7 @@ type nodeInformer struct {
 func NewNodeInformer(
 	informer cache.SharedIndexInformer,
 	lister listerv1.NodeLister,
-) NodeInformer {
+) *nodeInformer {
 	n := &nodeInformer{
 		informer: informer,
 		lister:   lister,
@@ -123,6 +129,18 @@ func (n *nodeInformer) onEvent(object any) {
 	}
 }
 
+func (n *nodeInformer) Get(name string) (*corev1.Node, error) {
+	return n.lister.Get(name)
+}
+
+func (n *nodeInformer) List() ([]*corev1.Node, error) {
+	nodes, err := n.lister.List(labels.Everything())
+	if err != nil {
+		return nil, err
+	}
+	return nodes, nil
+}
+
 func (n *nodeInformer) Wait(ctx context.Context, name string, condition Predicate) chan error {
 	done := make(chan error, 1)
 
@@ -164,24 +182,4 @@ func (n *nodeInformer) Wait(ctx context.Context, name string, condition Predicat
 	}(name)
 
 	return done
-}
-
-func (n *nodeInformer) Informer() cache.SharedIndexInformer {
-	return n.informer
-}
-
-func (n *nodeInformer) Lister() listerv1.NodeLister {
-	return n.lister
-}
-
-func (n *nodeInformer) Indexers() cache.Indexers {
-	return n.indexers
-}
-
-func (n *nodeInformer) SetIndexers(indexers cache.Indexers) {
-	n.indexers = indexers
-}
-
-func (n *nodeInformer) HasSynced() bool {
-	return n.informer.HasSynced()
 }

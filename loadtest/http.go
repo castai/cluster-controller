@@ -7,10 +7,19 @@ import (
 	"net/http"
 
 	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/metrics"
 )
 
 func NewHttpServer(ctx context.Context, cfg Config, testServer *CastAITestServer) error {
-	http.HandleFunc("/v1/kubernetes/clusters/{cluster_id}/actions", func(w http.ResponseWriter, r *http.Request) {
+	mux := http.NewServeMux()
+
+	// Register metrics endpoint - metrics.NewMetricsMux() has "/metrics" internally, so we strip it
+	metricsMux := metrics.NewMetricsMux()
+	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		metricsMux.ServeHTTP(w, r)
+	})
+
+	mux.HandleFunc("/v1/kubernetes/clusters/{cluster_id}/actions", func(w http.ResponseWriter, r *http.Request) {
 		result, err := testServer.GetActions(r.Context(), "")
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -29,7 +38,7 @@ func NewHttpServer(ctx context.Context, cfg Config, testServer *CastAITestServer
 		}
 	})
 
-	http.HandleFunc("/v1/kubernetes/clusters/{cluster_id}/actions/{action_id}/ack", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/kubernetes/clusters/{cluster_id}/actions/{action_id}/ack", func(w http.ResponseWriter, r *http.Request) {
 		actionID := r.PathValue("action_id")
 		var req castai.AckClusterActionRequest
 		err := json.NewDecoder(r.Body).Decode(&req)
@@ -45,7 +54,7 @@ func NewHttpServer(ctx context.Context, cfg Config, testServer *CastAITestServer
 		}
 	})
 
-	http.HandleFunc("/v1/kubernetes/clusters/{cluster_id}/actions/logs", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/kubernetes/clusters/{cluster_id}/actions/logs", func(w http.ResponseWriter, r *http.Request) {
 		var req castai.LogEntry
 		err := json.NewDecoder(r.Body).Decode(&req)
 		if err != nil {
@@ -61,5 +70,5 @@ func NewHttpServer(ctx context.Context, cfg Config, testServer *CastAITestServer
 	})
 
 	//nolint:gosec // Missing timeouts are not a real issue here.
-	return http.ListenAndServe(fmt.Sprintf(":%d", cfg.Port), nil)
+	return http.ListenAndServe(fmt.Sprintf(":%d", cfg.Port), mux)
 }

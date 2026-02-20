@@ -10,10 +10,12 @@ import (
 
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/castai/cluster-controller/internal/castai"
+	"github.com/castai/cluster-controller/internal/informer"
 	"github.com/castai/cluster-controller/internal/k8s"
 	"github.com/castai/cluster-controller/internal/logger"
 	"github.com/castai/cluster-controller/internal/nodes"
@@ -22,96 +24,97 @@ import (
 
 var _ ActionHandler = &DrainNodeInfomerHandler{}
 
+const (
+	defaultPodsDeleteTimeout             = 2 * time.Minute
+	defaultPodDeleteRetries              = 5
+	defaultPodDeleteRetryDelay           = 5 * time.Second
+	defaultPodEvictRetryDelay            = 5 * time.Second
+	defaultPodsTerminationWaitRetryDelay = 10 * time.Second
+	defaultSkipDeletedTimeoutSeconds     = 60
+)
+
+func newDefaultDrainNodeConfig(castNamespace string) drainNodeConfig {
+	return drainNodeConfig{
+		podsDeleteTimeout:             defaultPodsDeleteTimeout,
+		podDeleteRetries:              defaultPodDeleteRetries,
+		podDeleteRetryDelay:           defaultPodDeleteRetryDelay,
+		podEvictRetryDelay:            defaultPodEvictRetryDelay,
+		podsTerminationWaitRetryDelay: defaultPodsTerminationWaitRetryDelay,
+		castNamespace:                 castNamespace,
+		skipDeletedTimeoutSeconds:     defaultSkipDeletedTimeoutSeconds,
+	}
+}
+
 func NewDrainNodeInformerHandler(
 	log logrus.FieldLogger,
 	clientset kubernetes.Interface,
 	castNamespace string,
 	vaWaiter volume.DetachmentWaiter,
-	nodeManager nodes.Manager,
+	podInformer informer.PodInformer,
+	nodeInformer informer.NodeInformer,
 ) *DrainNodeInfomerHandler {
+	client := k8s.NewClient(clientset, log)
+	nodeManager := nodes.NewManager(podInformer, client, log, nodes.ManagerConfig{
+		PodEvictRetryDelay:            defaultPodEvictRetryDelay,
+		PodsTerminationWaitRetryDelay: defaultPodDeleteRetryDelay,
+		PodDeleteRetries:              defaultPodDeleteRetries,
+	})
+
 	return &DrainNodeInfomerHandler{
-		log:       log,
-		clientset: clientset,
-		vaWaiter:  vaWaiter,
-		cfg: drainNodeConfig{
-			podsDeleteTimeout:             2 * time.Minute,
-			podDeleteRetries:              5,
-			podDeleteRetryDelay:           5 * time.Second,
-			podEvictRetryDelay:            5 * time.Second,
-			podsTerminationWaitRetryDelay: 10 * time.Second,
-			castNamespace:                 castNamespace,
-			skipDeletedTimeoutSeconds:     60,
-		},
-		nodeManager: nodeManager,
-		client:      k8s.NewClient(clientset, log),
+		log:          log,
+		vaWaiter:     vaWaiter,
+		cfg:          newDefaultDrainNodeConfig(castNamespace),
+		nodeManager:  nodeManager,
+		nodeInformer: nodeInformer,
+		client:       client,
 	}
 }
 
 type DrainNodeInfomerHandler struct {
-	log         logrus.FieldLogger
-	clientset   kubernetes.Interface
-	vaWaiter    volume.DetachmentWaiter
-	cfg         drainNodeConfig
-	nodeManager nodes.Manager
-	client      *k8s.Client
+	log          logrus.FieldLogger
+	vaWaiter     volume.DetachmentWaiter
+	cfg          drainNodeConfig
+	nodeManager  nodes.Manager
+	nodeInformer informer.NodeInformer
+	client       *k8s.Client
 }
 
 func (h *DrainNodeInfomerHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
-	if action == nil {
-		return fmt.Errorf("action is nil %w", k8s.ErrAction)
-	}
-	req, ok := action.Data().(*castai.ActionDrainNode)
-	if !ok {
-		return newUnexpectedTypeErr(action.Data(), req)
-	}
-	drainTimeout := k8s.GetDrainTimeout(action)
-
-	log := h.log.WithFields(logrus.Fields{
-		"node_name":      req.NodeName,
-		"node_id":        req.NodeID,
-		"provider_id":    req.ProviderId,
-		"action":         reflect.TypeOf(action.Data().(*castai.ActionDrainNode)).String(),
-		ActionIDLogField: action.ID,
-	})
-
-	ctx = logger.WithLogger(ctx, log)
-
-	log.Info("draining kubernetes node")
-	if req.NodeName == "" ||
-		(req.NodeID == "" && req.ProviderId == "") {
-		return fmt.Errorf("node name or node ID/provider ID is empty %w", k8s.ErrAction)
-	}
-
-	node, err := h.client.GetNodeByIDs(ctx, req.NodeName, req.NodeID, req.ProviderId)
-	if errors.Is(err, k8s.ErrNodeNotFound) || errors.Is(err, k8s.ErrNodeDoesNotMatch) {
-		log.Info("node not found, skipping draining")
-		return nil
-	}
+	req, err := h.validateAction(action)
 	if err != nil {
 		return err
 	}
 
-	log.Info("cordoning node for draining")
+	log := h.createDrainNodeLogger(action, req)
+	log.Info("draining kubernetes node")
 
-	if err = h.client.CordonNode(ctx, node); err != nil {
-		return fmt.Errorf("cordoning node %q: %w", req.NodeName, err)
+	ctx = logger.WithLogger(ctx, log)
+	drainTimeout := k8s.GetDrainTimeout(action)
+
+	node, err := h.getAndValidateNode(ctx, req)
+	if err != nil {
+		return err
+	}
+	if node == nil {
+		return nil
+	}
+
+	if err = h.cordonNode(ctx, node); err != nil {
+		return err
 	}
 
 	log.Infof("draining node, drain_timeout_seconds=%f, force=%v created_at=%s", drainTimeout.Seconds(), req.Force, action.CreatedAt)
 
-	// First try to evict pods gracefully using eviction API.
-	evictCtx, evictCancel := context.WithTimeout(ctx, drainTimeout)
-	defer evictCancel()
+	return h.drainNode(ctx, node.Name, req, drainTimeout)
+}
 
-	nonEvictablePods, err := h.nodeManager.Evict(evictCtx, nodes.EvictRequest{
-		Node:                      node.Name,
-		SkipDeletedTimeoutSeconds: h.cfg.skipDeletedTimeoutSeconds,
-		CastNamespace:             h.cfg.castNamespace,
-	})
+func (h *DrainNodeInfomerHandler) drainNode(ctx context.Context, nodeName string, req *castai.ActionDrainNode, drainTimeout time.Duration) error {
+	log := logger.FromContext(ctx, h.log)
 
+	nonEvictablePods, err := h.tryEviction(ctx, nodeName, drainTimeout)
 	if err == nil {
 		log.Info("node fully drained via graceful eviction")
-		h.waitForVolumeDetachIfEnabled(ctx, log, node.Name, req, nonEvictablePods)
+		h.waitForVolumeDetachIfEnabled(ctx, nodeName, req, nonEvictablePods)
 		return nil
 	}
 
@@ -119,77 +122,193 @@ func (h *DrainNodeInfomerHandler) Handle(ctx context.Context, action *castai.Clu
 		return fmt.Errorf("node failed to drain via graceful eviction, force=%v, timeout=%f, will not force delete pods: %w", req.Force, drainTimeout.Seconds(), err)
 	}
 
-	var podsFailedEvictionErr *k8s.PodFailedActionError
-	switch {
-	case errors.Is(err, context.DeadlineExceeded):
-		log.Infof("timeout=%f exceeded during pod eviction, force=%v, starting pod deletion", drainTimeout.Seconds(), req.Force)
-	case errors.As(err, &podsFailedEvictionErr):
-		log.Infof("some pods failed eviction, force=%v, starting pod deletion: %v", req.Force, err)
-	default:
-		// Expected to be errors where we can't continue at all; e.g. missing permissions or lack of connectivity.
+	if !h.shouldForceDrain(ctx, err, drainTimeout, req.Force) {
 		return fmt.Errorf("evicting node pods: %w", err)
 	}
 
-	// If voluntary eviction fails, and we are told to force drain, start deleting pods.
-	// Try deleting pods gracefully first, then delete with 0 grace period. PDBs are not respected here.
-	options := []metav1.DeleteOptions{
+	nonEvictablePods, drainErr := h.forceDrain(ctx, nodeName)
+	if drainErr == nil {
+		log.Info("node drained forcefully")
+		h.waitForVolumeDetachIfEnabled(ctx, nodeName, req, nonEvictablePods)
+	} else {
+		log.Warnf("node failed to fully force drain: %v", drainErr)
+	}
+
+	return drainErr
+}
+
+func (h *DrainNodeInfomerHandler) validateAction(action *castai.ClusterAction) (*castai.ActionDrainNode, error) {
+	if action == nil {
+		return nil, fmt.Errorf("action is nil %w", k8s.ErrAction)
+	}
+
+	req, ok := action.Data().(*castai.ActionDrainNode)
+	if !ok {
+		return nil, newUnexpectedTypeErr(action.Data(), req)
+	}
+
+	if req.NodeName == "" || (req.NodeID == "" && req.ProviderId == "") {
+		return nil, fmt.Errorf("node name or node ID/provider ID is empty %w", k8s.ErrAction)
+	}
+
+	return req, nil
+}
+
+func (h *DrainNodeInfomerHandler) createDrainNodeLogger(action *castai.ClusterAction, req *castai.ActionDrainNode) logrus.FieldLogger {
+	return h.log.WithFields(logrus.Fields{
+		"node_name":      req.NodeName,
+		"node_id":        req.NodeID,
+		"provider_id":    req.ProviderId,
+		"action":         reflect.TypeOf(action.Data().(*castai.ActionDrainNode)).String(),
+		ActionIDLogField: action.ID,
+	})
+}
+
+func (h *DrainNodeInfomerHandler) getAndValidateNode(ctx context.Context, req *castai.ActionDrainNode) (*v1.Node, error) {
+	log := logger.FromContext(ctx, h.log)
+
+	// Try to get node from informer cache first
+	node, err := h.nodeInformer.Get(req.NodeName)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			// Fallback to API if not in cache
+			return h.getNodeFromAPI(ctx, req)
+		}
+		return nil, err
+	}
+
+	if node == nil {
+		log.Info("node not found, skipping draining")
+		return nil, nil
+	}
+
+	if err := k8s.IsNodeIDProviderIDValid(node, req.NodeID, req.ProviderId); err != nil {
+		if errors.Is(err, k8s.ErrNodeDoesNotMatch) {
+			log.Info("node does not match expected IDs, skipping draining")
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return node, nil
+}
+
+func (h *DrainNodeInfomerHandler) getNodeFromAPI(ctx context.Context, req *castai.ActionDrainNode) (*v1.Node, error) {
+	log := logger.FromContext(ctx, h.log)
+	log.Debug("node not found in cache, fetching directly from API")
+
+	node, err := h.client.GetNodeByIDs(ctx, req.NodeName, req.NodeID, req.ProviderId)
+	if err != nil {
+		if errors.Is(err, k8s.ErrNodeNotFound) {
+			log.Info("node not found in API, skipping draining")
+			return nil, nil
+		}
+		if errors.Is(err, k8s.ErrNodeDoesNotMatch) {
+			log.Info("node does not match expected IDs, skipping draining")
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get node from API: %w", err)
+	}
+
+	return node, nil
+}
+
+func (h *DrainNodeInfomerHandler) cordonNode(ctx context.Context, node *v1.Node) error {
+	log := logger.FromContext(ctx, h.log)
+	log.Info("cordoning node for draining")
+	if err := h.client.CordonNode(ctx, node); err != nil {
+		return fmt.Errorf("cordoning node %q: %w", node.Name, err)
+	}
+	return nil
+}
+
+func (h *DrainNodeInfomerHandler) tryEviction(ctx context.Context, nodeName string, timeout time.Duration) ([]*v1.Pod, error) {
+	evictCtx, evictCancel := context.WithTimeout(ctx, timeout)
+	defer evictCancel()
+
+	return h.nodeManager.Evict(evictCtx, nodes.EvictRequest{
+		Node:                      nodeName,
+		SkipDeletedTimeoutSeconds: h.cfg.skipDeletedTimeoutSeconds,
+		CastNamespace:             h.cfg.castNamespace,
+	})
+}
+
+func (h *DrainNodeInfomerHandler) shouldForceDrain(ctx context.Context, evictionErr error, drainTimeout time.Duration, force bool) bool {
+	log := logger.FromContext(ctx, h.log)
+
+	// Check if error is recoverable through force drain
+	var podsFailedEvictionErr *k8s.PodFailedActionError
+
+	if errors.Is(evictionErr, context.DeadlineExceeded) {
+		log.Infof("eviction timeout=%f exceeded, force=%v, proceeding with force drain", drainTimeout.Seconds(), force)
+		return true
+	}
+
+	if errors.As(evictionErr, &podsFailedEvictionErr) {
+		log.Infof("some pods failed eviction, force=%v, proceeding with force drain: %v", force, evictionErr)
+		return true
+	}
+
+	// Unrecoverable errors (e.g., missing permissions, connectivity issues)
+	return false
+}
+
+func (h *DrainNodeInfomerHandler) forceDrain(ctx context.Context, nodeName string) ([]*v1.Pod, error) {
+	deleteOptions := []metav1.DeleteOptions{
 		{},
 		*metav1.NewDeleteOptions(0),
 	}
 
-	var deleteErr error
-	for _, o := range options {
-		deleteCtx, deleteCancel := context.WithTimeout(ctx, h.cfg.podsDeleteTimeout)
-		defer deleteCancel()
+	var nonEvictablePods []*v1.Pod
+	var lastErr error
 
-		nonEvictablePods, deleteErr = h.nodeManager.Drain(deleteCtx, nodes.DrainRequest{
-			Node:                      node.Name,
+	for _, opts := range deleteOptions {
+		deleteCtx, cancel := context.WithTimeout(ctx, h.cfg.podsDeleteTimeout)
+		defer cancel()
+
+		nonEvictablePods, lastErr = h.nodeManager.Drain(deleteCtx, nodes.DrainRequest{
+			Node:                      nodeName,
 			CastNamespace:             h.cfg.castNamespace,
 			SkipDeletedTimeoutSeconds: h.cfg.skipDeletedTimeoutSeconds,
-			DeleteOptions:             o,
+			DeleteOptions:             opts,
 		})
 
-		if deleteErr == nil {
-			break
+		if lastErr == nil {
+			return nonEvictablePods, nil
 		}
 
 		var podsFailedDeletionErr *k8s.PodFailedActionError
-		if errors.Is(deleteErr, context.DeadlineExceeded) || errors.As(deleteErr, &podsFailedDeletionErr) {
+		if errors.Is(lastErr, context.DeadlineExceeded) || errors.As(lastErr, &podsFailedDeletionErr) {
 			continue
 		}
-		return fmt.Errorf("forcefully deleting pods: %w", deleteErr)
+
+		return nil, fmt.Errorf("forcefully deleting pods: %w", lastErr)
 	}
 
-	// Note: if some pods remained even after forced deletion, we'd get an error from last call here.
-	if deleteErr == nil {
-		log.Info("node drained forcefully")
-		h.waitForVolumeDetachIfEnabled(ctx, log, node.Name, req, nonEvictablePods)
-	} else {
-		log.Warnf("node failed to fully force drain: %v", deleteErr)
-	}
-
-	return deleteErr
+	return nonEvictablePods, lastErr
 }
 
 // waitForVolumeDetachIfEnabled waits for VolumeAttachments to be deleted if the feature is enabled.
 // This is called after successful drain to give CSI drivers time to clean up volumes.
-// nonEvictablePods are pods that won't be evicted (DaemonSet, static) - their was are excluded from waiting.
-func (h *DrainNodeInfomerHandler) waitForVolumeDetachIfEnabled(ctx context.Context, log logrus.FieldLogger, nodeName string, req *castai.ActionDrainNode, nonEvictablePods []*v1.Pod) {
+// nonEvictablePods are pods that won't be evicted (DaemonSet, static) - their volumes are excluded from waiting.
+func (h *DrainNodeInfomerHandler) waitForVolumeDetachIfEnabled(ctx context.Context, nodeName string, req *castai.ActionDrainNode, nonEvictablePods []*v1.Pod) {
 	if !ShouldWaitForVolumeDetach(req) || h.vaWaiter == nil {
 		return
 	}
 
-	// Use per-action timeout if set, otherwise waiter will use its default.
+	log := logger.FromContext(ctx, h.log)
+
 	var timeout time.Duration
 	if req.VolumeDetachTimeoutSeconds != nil && *req.VolumeDetachTimeoutSeconds > 0 {
 		timeout = time.Duration(*req.VolumeDetachTimeoutSeconds) * time.Second
 	}
 
-	if err := h.vaWaiter.Wait(ctx, log, volume.DetachmentWaitOptions{
+	err := h.vaWaiter.Wait(ctx, log, volume.DetachmentWaitOptions{
 		NodeName:      nodeName,
 		Timeout:       timeout,
 		PodsToExclude: nonEvictablePods,
-	}); err != nil {
+	})
+	if err != nil {
 		log.Warnf("error waiting for volume detachment: %v", err)
 	}
 }
