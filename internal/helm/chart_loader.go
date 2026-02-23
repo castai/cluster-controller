@@ -43,7 +43,7 @@ func (cl *remoteChartLoader) Load(ctx context.Context, c *castai.ChartSource) (*
 
 	err := waitext.Retry(
 		ctx,
-		waitext.NewConstantBackoff(1*time.Second),
+		waitext.DefaultExponentialBackoff(),
 		defaultOperationRetries,
 		func(ctx context.Context) (bool, error) {
 			var archiveURL string
