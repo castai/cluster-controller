@@ -30,7 +30,7 @@ func TestNewManager(t *testing.T) {
 	require.NotNil(t, manager.GetFactory())
 	require.NotNil(t, manager.GetNodeInformer())
 	require.NotNil(t, manager.GetPodLister())
-	require.NotNil(t, manager.GetPodInformer())
+	require.NotNil(t, manager.Pods())
 
 	// VA getters return nil before Start() because vaAvailable is false by default
 	require.False(t, manager.IsVAAvailable())
@@ -260,17 +260,17 @@ func TestManager_VAInformer(t *testing.T) {
 	require.True(t, manager.IsVAAvailable())
 
 	// Test lister
-	vas, err := manager.GetVALister().List(labels.Everything())
+	volumeAttachments, err := manager.GetVALister().List(labels.Everything())
 	require.NoError(t, err)
-	require.Len(t, vas, 1)
-	require.Equal(t, "va-1", vas[0].Name)
+	require.Len(t, volumeAttachments, 1)
+	require.Equal(t, "va-1", volumeAttachments[0].Name)
 
 	// Test indexer with node name lookup
 	indexed, err := manager.GetVAIndexer().ByIndex(VANodeNameIndexer, "node-1")
 	require.NoError(t, err)
 	require.Len(t, indexed, 1)
 
-	// Verify no VAs on non-existent node
+	// Verify no volumeAttachments on non-existent node
 	indexed, err = manager.GetVAIndexer().ByIndex(VANodeNameIndexer, "node-2")
 	require.NoError(t, err)
 	require.Len(t, indexed, 0)
@@ -324,7 +324,7 @@ func TestManager_DisabledInformers(t *testing.T) {
 	require.Nil(t, manager.GetNodeLister())
 	require.Nil(t, manager.GetNodeInformer())
 	require.Nil(t, manager.GetPodLister())
-	require.Nil(t, manager.GetPodInformer())
+	require.Nil(t, manager.Pods())
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
@@ -338,7 +338,7 @@ func TestManager_DisabledInformers(t *testing.T) {
 	require.Nil(t, manager.GetNodeLister())
 	require.Nil(t, manager.GetNodeInformer())
 	require.Nil(t, manager.GetPodLister())
-	require.Nil(t, manager.GetPodInformer())
+	require.Nil(t, manager.Pods())
 
 	// VA should still work (always enabled)
 	require.True(t, manager.IsVAAvailable())

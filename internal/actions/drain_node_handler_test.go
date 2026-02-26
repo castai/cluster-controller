@@ -83,7 +83,7 @@ func TestLogCastPodsToEvict(t *testing.T) {
 	t.Run("should log pods to evict", func(t *testing.T) {
 		r := require.New(t)
 		log, hook := test.NewNullLogger()
-		pods := []v1.Pod{
+		pods := []*v1.Pod{
 			{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "ns1"}},
 			{ObjectMeta: metav1.ObjectMeta{Name: "pod2", Namespace: "ns2"}},
 		}
@@ -97,7 +97,7 @@ func TestLogCastPodsToEvict(t *testing.T) {
 		r := require.New(t)
 		log, hook := test.NewNullLogger()
 
-		var pods []v1.Pod
+		var pods []*v1.Pod
 		logCastPodsToEvict(log, pods)
 
 		r.Len(hook.Entries, 0)

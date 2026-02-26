@@ -51,6 +51,7 @@ type DeleteNodeHandler struct {
 	cfg       deleteNodeConfig
 }
 
+// nolint: gocognit
 func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAction) error {
 	if action == nil {
 		return fmt.Errorf("action is nil %w", k8s.ErrAction)
@@ -115,7 +116,7 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 	}
 
 	podsListingBackoff := waitext.NewConstantBackoff(h.cfg.podsTerminationWait)
-	var pods []v1.Pod
+	var pods []*v1.Pod
 	err = waitext.Retry(
 		ctx,
 		podsListingBackoff,
@@ -127,7 +128,10 @@ func (h *DeleteNodeHandler) Handle(ctx context.Context, action *castai.ClusterAc
 			if err != nil {
 				return true, err
 			}
-			pods = podList.Items
+			pods = make([]*v1.Pod, len(podList.Items))
+			for i := range podList.Items {
+				pods[i] = &podList.Items[i]
+			}
 			return false, nil
 		},
 		func(err error) {

@@ -1,3 +1,5 @@
+//go:generate mockgen -destination ./mock/kubernetes.go . Client
+
 package k8s
 
 import (
@@ -33,42 +35,60 @@ const (
 )
 
 var (
-	ErrAction            = errors.New("not valid action")
-	ErrNodeNotFound      = errors.New("node not found")
-	ErrNodeDoesNotMatch  = fmt.Errorf("node does not match")
-	ErrNodeWatcherClosed = fmt.Errorf("node watcher closed, no more events will be received")
+	ErrAction             = errors.New("not valid action")
+	ErrNodeNotFound       = errors.New("node not found")
+	ErrNodeDoesNotMatch   = fmt.Errorf("node does not match")
+	ErrProviderIDMismatch = errors.New("provider ID mismatch")
+	ErrNodeWatcherClosed  = fmt.Errorf("node watcher closed, no more events will be received")
 )
 
 const (
 	DefaultMaxRetriesK8SOperation = 5
 )
 
+type Client interface {
+	PatchNode(ctx context.Context, node *v1.Node, changeFn func(*v1.Node)) error
+	PatchNodeStatus(ctx context.Context, name string, patch []byte) error
+	EvictPod(ctx context.Context, pod v1.Pod, podEvictRetryDelay time.Duration, version schema.GroupVersion) error
+	CordonNode(ctx context.Context, node *v1.Node) error
+	GetNodeByIDs(ctx context.Context, nodeName, nodeID, providerID string) (*v1.Node, error)
+	ExecuteBatchPodActions(
+		ctx context.Context,
+		pods []*v1.Pod,
+		action func(context.Context, v1.Pod) error,
+		actionName string,
+	) ([]*v1.Pod, []PodActionFailure)
+	DeletePod(ctx context.Context, options metav1.DeleteOptions, pod v1.Pod, podDeleteRetries int, podDeleteRetryDelay time.Duration) error
+	Clientset() kubernetes.Interface
+	Log() logrus.FieldLogger
+}
+
 // Client provides Kubernetes operations with common dependencies.
-type Client struct {
+type client struct {
 	clientset kubernetes.Interface
 	log       logrus.FieldLogger
 }
 
 // NewClient creates a new K8s client with the given dependencies.
-func NewClient(clientset kubernetes.Interface, log logrus.FieldLogger) *Client {
-	return &Client{
+func NewClient(clientset kubernetes.Interface, log logrus.FieldLogger) Client {
+	return &client{
 		clientset: clientset,
 		log:       log,
 	}
 }
 
 // Clientset returns the underlying kubernetes.Interface.
-func (c *Client) Clientset() kubernetes.Interface {
+func (c *client) Clientset() kubernetes.Interface {
 	return c.clientset
 }
 
 // Log returns the logger.
-func (c *Client) Log() logrus.FieldLogger {
+func (c *client) Log() logrus.FieldLogger {
 	return c.log
 }
 
 // PatchNode patches a node with the given change function.
-func (c *Client) PatchNode(ctx context.Context, node *v1.Node, changeFn func(*v1.Node)) error {
+func (c *client) PatchNode(ctx context.Context, node *v1.Node, changeFn func(*v1.Node)) error {
 	logger := logger.FromContext(ctx, c.log)
 	oldData, err := json.Marshal(node)
 	if err != nil {
@@ -107,7 +127,7 @@ func (c *Client) PatchNode(ctx context.Context, node *v1.Node, changeFn func(*v1
 }
 
 // PatchNodeStatus patches the status of a node.
-func (c *Client) PatchNodeStatus(ctx context.Context, name string, patch []byte) error {
+func (c *client) PatchNodeStatus(ctx context.Context, name string, patch []byte) error {
 	logger := logger.FromContext(ctx, c.log)
 
 	err := waitext.Retry(
@@ -133,13 +153,27 @@ func (c *Client) PatchNodeStatus(ctx context.Context, name string, patch []byte)
 	return nil
 }
 
-func (c *Client) CordonNode(ctx context.Context, node *v1.Node) error {
+func (c *client) CordonNode(ctx context.Context, node *v1.Node) error {
 	if node.Spec.Unschedulable {
 		return nil
 	}
 
 	err := c.PatchNode(ctx, node, func(n *v1.Node) {
 		n.Spec.Unschedulable = true
+
+		// Add unschedulable taint explicitly to avoid race condition
+		// where Node Lifecycle Controller adds it asynchronously
+		// which can cause pods to be scheduled on the node during that window
+		unschedulableTaint := v1.Taint{
+			Key:    "node.kubernetes.io/unschedulable",
+			Effect: v1.TaintEffectNoSchedule,
+		}
+		for _, t := range n.Spec.Taints {
+			if t.Key == unschedulableTaint.Key {
+				return
+			}
+		}
+		n.Spec.Taints = append(n.Spec.Taints, unschedulableTaint)
 	})
 	if err != nil {
 		return fmt.Errorf("patching node unschedulable: %w", err)
@@ -148,7 +182,7 @@ func (c *Client) CordonNode(ctx context.Context, node *v1.Node) error {
 }
 
 // GetNodeByIDs retrieves a node by name and validates its ID and provider ID.
-func (c *Client) GetNodeByIDs(ctx context.Context, nodeName, nodeID, providerID string) (*v1.Node, error) {
+func (c *client) GetNodeByIDs(ctx context.Context, nodeName, nodeID, providerID string) (*v1.Node, error) {
 	if nodeID == "" && providerID == "" {
 		return nil, fmt.Errorf("node and provider IDs are empty %w", ErrAction)
 	}
@@ -177,9 +211,9 @@ func (c *Client) GetNodeByIDs(ctx context.Context, nodeName, nodeID, providerID 
 // It does internal throttling to avoid spawning a goroutine-per-pod on large lists.
 // Returns two sets of pods - the ones that successfully executed the action and the ones that failed.
 // actionName might be used to distinguish what is the operation (for logs, debugging, etc.) but is optional.
-func (c *Client) ExecuteBatchPodActions(
+func (c *client) ExecuteBatchPodActions(
 	ctx context.Context,
-	pods []v1.Pod,
+	pods []*v1.Pod,
 	action func(context.Context, v1.Pod) error,
 	actionName string,
 ) ([]*v1.Pod, []PodActionFailure) {
@@ -201,7 +235,7 @@ func (c *Client) ExecuteBatchPodActions(
 		wg                 sync.WaitGroup
 	)
 
-	logger.Debugf("Starting %d parallel tasks for %d pods: [%v]", parallelTasks, len(pods), lo.Map(pods, func(t v1.Pod, i int) string {
+	logger.Debugf("Starting %d parallel tasks for %d pods: [%v]", parallelTasks, len(pods), lo.Map(pods, func(t *v1.Pod, i int) string {
 		return fmt.Sprintf("%s/%s", t.Namespace, t.Name)
 	}))
 
@@ -226,7 +260,7 @@ func (c *Client) ExecuteBatchPodActions(
 	}
 
 	for _, pod := range pods {
-		taskChan <- pod
+		taskChan <- *pod
 	}
 
 	close(taskChan)
@@ -249,14 +283,13 @@ func (c *Client) ExecuteBatchPodActions(
 
 // EvictPod evicts a pod from a k8s node. Error handling is based on eviction api documentation:
 // https://kubernetes.io/docs/tasks/administer-cluster/safely-drain-node/#the-eviction-api
-func (c *Client) EvictPod(ctx context.Context, pod v1.Pod, podEvictRetryDelay time.Duration, version schema.GroupVersion) error {
+func (c *client) EvictPod(ctx context.Context, pod v1.Pod, podEvictRetryDelay time.Duration, version schema.GroupVersion) error {
 	logger := logger.FromContext(ctx, c.log)
 
 	b := waitext.NewConstantBackoff(podEvictRetryDelay)
 	action := func(ctx context.Context) (bool, error) {
 		var err error
 
-		c.log.Debugf("requesting eviction for pod %s/%s", pod.Namespace, pod.Name)
 		if version == policyv1.SchemeGroupVersion {
 			err = c.clientset.PolicyV1().Evictions(pod.Namespace).Evict(ctx, &policyv1.Eviction{
 				ObjectMeta: metav1.ObjectMeta{
@@ -306,7 +339,7 @@ func (c *Client) EvictPod(ctx context.Context, pod v1.Pod, podEvictRetryDelay ti
 }
 
 // DeletePod deletes a pod from the cluster.
-func (c *Client) DeletePod(ctx context.Context, options metav1.DeleteOptions, pod v1.Pod, podDeleteRetries int, podDeleteRetryDelay time.Duration) error {
+func (c *client) DeletePod(ctx context.Context, options metav1.DeleteOptions, pod v1.Pod, podDeleteRetries int, podDeleteRetryDelay time.Duration) error {
 	logger := logger.FromContext(ctx, c.log)
 
 	b := waitext.NewConstantBackoff(podDeleteRetryDelay)
@@ -402,15 +435,15 @@ type PodActionFailure struct {
 }
 
 type PartitionResult struct {
-	Evictable    []v1.Pod
-	NonEvictable []v1.Pod
-	CastPods     []v1.Pod
+	Evictable    []*v1.Pod
+	NonEvictable []*v1.Pod
+	CastPods     []*v1.Pod
 }
 
-func PartitionPodsForEviction(pods []v1.Pod, castNamespace string, skipDeletedTimeoutSeconds int) *PartitionResult {
-	castPods := make([]v1.Pod, 0)
-	evictable := make([]v1.Pod, 0)
-	nonEvictable := make([]v1.Pod, 0)
+func PartitionPodsForEviction(pods []*v1.Pod, castNamespace string, skipDeletedTimeoutSeconds int) *PartitionResult {
+	castPods := make([]*v1.Pod, 0)
+	evictable := make([]*v1.Pod, 0)
+	nonEvictable := make([]*v1.Pod, 0)
 
 	for _, p := range pods {
 		// Skip pods that have been recently removed.
@@ -424,7 +457,7 @@ func PartitionPodsForEviction(pods []v1.Pod, castNamespace string, skipDeletedTi
 			continue
 		}
 
-		if IsDaemonSetPod(&p) || IsStaticPod(&p) {
+		if IsDaemonSetPod(p) || IsStaticPod(p) {
 			nonEvictable = append(nonEvictable, p)
 			continue
 		}
@@ -457,6 +490,10 @@ func IsControlledBy(p *v1.Pod, kind string) bool {
 	ctrl := metav1.GetControllerOf(p)
 
 	return ctrl != nil && ctrl.Kind == kind
+}
+
+func IsNonEvictible(p *v1.Pod) bool {
+	return IsDaemonSetPod(p) || IsStaticPod(p)
 }
 
 // PatchNode patches a node with the given change function.
@@ -502,7 +539,7 @@ func GetNodeByIDs(ctx context.Context, clientSet corev1client.NodeInterface, nod
 func ExecuteBatchPodActions(
 	ctx context.Context,
 	log logrus.FieldLogger,
-	pods []v1.Pod,
+	pods []*v1.Pod,
 	action func(context.Context, v1.Pod) error,
 	actionName string,
 ) ([]*v1.Pod, []PodActionFailure) {

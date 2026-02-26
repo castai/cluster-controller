@@ -7,6 +7,7 @@ datasources:
     isDefault: true
   - name: Loki
     type: loki
+    uid: P8E80F9AEF21F6940
     access: proxy
     url: http://localhost:3100
     jsonData:
