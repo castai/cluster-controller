@@ -3,6 +3,7 @@ package actions
 import (
 	"context"
 	"math"
+	"sync"
 	"testing"
 	"time"
 
@@ -105,6 +106,8 @@ func TestLogCastPodsToEvict(t *testing.T) {
 }
 
 func prependEvictionReaction(t testing.TB, c *fake.Clientset, success, retryableFailure bool) {
+	var wg sync.WaitGroup
+	t.Cleanup(wg.Wait)
 	prependPodEvictionReaction(c, func(namespace, name string) error {
 		if !success {
 			if retryableFailure {
@@ -113,7 +116,9 @@ func prependEvictionReaction(t testing.TB, c *fake.Clientset, success, retryable
 			}
 			return &apierrors.StatusError{ErrStatus: metav1.Status{Reason: metav1.StatusReasonInternalError, Message: "internal"}}
 		}
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			err := c.CoreV1().Pods(namespace).Delete(context.Background(), name, metav1.DeleteOptions{})
 			require.NoError(t, err)
 		}()
