@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	ktest "k8s.io/client-go/testing"
+	"k8s.io/kubectl/pkg/drain"
 
 	"github.com/castai/cluster-controller/internal/k8s"
 )
@@ -275,11 +276,22 @@ func TestDrainer_Evict(t *testing.T) {
 	tests := []struct {
 		name                   string
 		setupPods              func(*fakePodInformer)
+		disableEviction        bool
 		skipDeletedTimeoutSecs int
 		wantErr                bool
 		wantIgnoredPodsLen     int
 		terminatesImmediately  bool
 	}{
+		{
+			name: "returns error when eviction not supported",
+			setupPods: func(f *fakePodInformer) {
+				f.addPodToNode(testNodeName, &v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"},
+				})
+			},
+			disableEviction: true,
+			wantErr:         true,
+		},
 		{
 			name: "returns empty when no pods to evict",
 			setupPods: func(f *fakePodInformer) {
@@ -395,6 +407,9 @@ func TestDrainer_Evict(t *testing.T) {
 			}
 
 			clientset := fake.NewClientset()
+			if !tt.disableEviction {
+				addEvictionSupport(clientset)
+			}
 			client := k8s.NewClient(clientset, logrus.New())
 			log := logrus.New()
 
@@ -523,6 +538,7 @@ func TestDrainer_WaitTermination(t *testing.T) {
 		name              string
 		setupPods         func(*fakePodInformer)
 		simulateTerminate func(*fakePodInformer)
+		successfulPods    []*v1.Pod
 		ignoredPods       []*v1.Pod
 		contextTimeout    time.Duration
 		wantErr           bool
@@ -578,6 +594,9 @@ func TestDrainer_WaitTermination(t *testing.T) {
 					f.clearPodsFromNode(testNodeName)
 				}()
 			},
+			successfulPods: []*v1.Pod{
+				{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"}},
+			},
 			contextTimeout: 500 * time.Millisecond,
 			wantErr:        false,
 		},
@@ -608,6 +627,11 @@ func TestDrainer_WaitTermination(t *testing.T) {
 					f.clearPodsFromNode(testNodeName)
 				}()
 			},
+			successfulPods: []*v1.Pod{
+				{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "pod2", Namespace: "default"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "pod3", Namespace: "default"}},
+			},
 			contextTimeout: 500 * time.Millisecond,
 			wantErr:        false,
 		},
@@ -617,6 +641,9 @@ func TestDrainer_WaitTermination(t *testing.T) {
 				f.addPodToNode(testNodeName, &v1.Pod{
 					ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"},
 				})
+			},
+			successfulPods: []*v1.Pod{
+				{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"}},
 			},
 			contextTimeout: 50 * time.Millisecond,
 			wantErr:        true,
@@ -660,7 +687,7 @@ func TestDrainer_WaitTermination(t *testing.T) {
 					tt.simulateTerminate(podInformer)
 				}
 
-				err := m.waitTerminaition(ctx, testNodeName, tt.ignoredPods)
+				err := m.waitTerminaition(ctx, testNodeName, tt.successfulPods, tt.ignoredPods, nil)
 
 				if tt.wantErr {
 					require.Error(t, err)
@@ -768,7 +795,7 @@ func TestDrainer_PrioritizePods(t *testing.T) {
 			pods, err := m.list(context.Background(), testNodeName)
 			require.NoError(t, err)
 
-			result := m.prioritizePods(pods, testCastNamespace, tt.skipDeletedTimeoutSecs)
+			result, _ := m.prioritizePods(pods, testCastNamespace, tt.skipDeletedTimeoutSecs)
 
 			require.Len(t, result, tt.wantLen)
 			if len(tt.wantContains) > 0 {
@@ -867,22 +894,20 @@ func TestDrainer_TryEvict(t *testing.T) {
 		name           string
 		pods           []*v1.Pod
 		existingPods   []*v1.Pod
-		enableEviction bool
 		shouldSucceed  func(namespace, name string) bool
 		wantSuccessful int
 		wantFailed     int
-		wantError      bool
 		contextTimeout time.Duration
 	}{
 		{
 			name:           "returns empty when no pods",
 			pods:           []*v1.Pod{},
 			existingPods:   []*v1.Pod{},
-			enableEviction: false,
-			wantError:      true,
+			wantSuccessful: 0,
+			wantFailed:     0,
 		},
 		{
-			name: "eviction not supported - multiple pods",
+			name: "successfully evicts all pods",
 			pods: []*v1.Pod{
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"}},
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod2", Namespace: "default"}},
@@ -891,28 +916,11 @@ func TestDrainer_TryEvict(t *testing.T) {
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"}},
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod2", Namespace: "default"}},
 			},
-			enableEviction: false,
-			wantError:      true,
-		},
-		{
-			name:           "successfully evicts all pods",
-			enableEviction: true,
-			pods: []*v1.Pod{
-				{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"}},
-				{ObjectMeta: metav1.ObjectMeta{Name: "pod2", Namespace: "default"}},
-			},
-			existingPods: []*v1.Pod{
-				{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"}},
-				{ObjectMeta: metav1.ObjectMeta{Name: "pod2", Namespace: "default"}},
-			},
-			shouldSucceed:  nil,
 			wantSuccessful: 2,
 			wantFailed:     0,
-			wantError:      false,
 		},
 		{
-			name:           "handles partial eviction failures",
-			enableEviction: true,
+			name: "handles partial eviction failures",
 			pods: []*v1.Pod{
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"}},
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod2", Namespace: "default"}},
@@ -930,7 +938,6 @@ func TestDrainer_TryEvict(t *testing.T) {
 			},
 			wantSuccessful: 2,
 			wantFailed:     2,
-			wantError:      false,
 			contextTimeout: 500 * time.Millisecond,
 		},
 	}
@@ -948,11 +955,9 @@ func TestDrainer_TryEvict(t *testing.T) {
 					require.NoError(t, err)
 				}
 
-				if tt.enableEviction {
-					addEvictionSupport(clientset)
-					if tt.shouldSucceed != nil {
-						addEvictionReactor(clientset, tt.shouldSucceed)
-					}
+				addEvictionSupport(clientset)
+				if tt.shouldSucceed != nil {
+					addEvictionReactor(clientset, tt.shouldSucceed)
 				}
 
 				client := k8s.NewClient(clientset, logrus.New())
@@ -973,13 +978,10 @@ func TestDrainer_TryEvict(t *testing.T) {
 					defer cancel()
 				}
 
-				successful, failed, err := m.tryEvict(ctx, tt.pods)
+				groupVersion, err := drain.CheckEvictionSupport(clientset)
+				require.NoError(t, err)
 
-				if tt.wantError {
-					require.Error(t, err)
-					require.Contains(t, err.Error(), "could not find the requested resource")
-					return
-				}
+				successful, failed, err := m.tryEvict(ctx, tt.pods, groupVersion)
 
 				require.Equal(t, tt.wantSuccessful, len(successful),
 					"Expected %d successful evictions, got %d", tt.wantSuccessful, len(successful))

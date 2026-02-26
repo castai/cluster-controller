@@ -54,7 +54,7 @@ func run(ctx context.Context) error {
 	// Choose scenarios below by adding/removing/etc. instances of scenarios.XXX()
 	// All scenarios in the list run in parallel (but not necessarily at the same time if preparation takes different time).
 	testScenarios := []scenarios.TestScenario{
-		scenarios.DrainNode(1, 10, logger),
+		scenarios.DrainNode(5000, 10, logger),
 	}
 
 	logger.Info("Starting continuous test scenario execution")
@@ -97,9 +97,9 @@ func run(ctx context.Context) error {
 			loadtest.IncrementTestRunSuccess()
 		}
 
-		logger.Info("Waiting 1 minute before next iteration")
+		logger.Info("Waiting 10 minutes before next iteration")
 		select {
-		case <-time.After(5 * time.Minute):
+		case <-time.After(10 * time.Minute):
 		case <-ctx.Done():
 			logger.Info("Context canceled, stopping test scenarios")
 			return ctx.Err()

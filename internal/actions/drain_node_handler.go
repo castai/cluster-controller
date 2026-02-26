@@ -353,6 +353,7 @@ func (h *DrainNodeHandler) listNodePods(ctx context.Context, log logrus.FieldLog
 	logCastPodsToEvict(log, partitioned.CastPods)
 	result.toEvict = append(result.toEvict, partitioned.Evictable...)
 	result.toEvict = append(result.toEvict, partitioned.CastPods...)
+	result.nonEvictable = append(result.nonEvictable, partitioned.NonEvictable...)
 	return result, nil
 }
 

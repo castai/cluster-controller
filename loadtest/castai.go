@@ -74,7 +74,6 @@ func (c *CastAITestServer) ExecuteActions(ctx context.Context, actions []castai.
 /* Start Cluster-hub mock implementation */
 
 func (c *CastAITestServer) GetActions(ctx context.Context, _ string) ([]*castai.ClusterAction, error) {
-	c.log.Info("GetActions called")
 	c.logMx.Lock()
 	actions := lo.MapToSlice(c.actions, func(_ string, value *castai.ClusterAction) *castai.ClusterAction {
 		return value

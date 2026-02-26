@@ -186,6 +186,41 @@ func Pod(name string) *corev1.Pod {
 	}
 }
 
+// KwokDaemonSet creates a DaemonSet that targets kwok fake nodes.
+func KwokDaemonSet(name, namespace string) *appsv1.DaemonSet {
+	kwokAffinity, kwokToleration := kwokNodeAffinityAndToleration()
+	labelValue := fmt.Sprintf("%s-ds-pod", name)
+
+	return &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": labelValue},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": labelValue},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "fake-container",
+							Image: "does-not-exist",
+						},
+					},
+					Affinity: &corev1.Affinity{
+						NodeAffinity: kwokAffinity,
+					},
+					Tolerations: []corev1.Toleration{kwokToleration},
+				},
+			},
+		},
+	}
+}
+
 // WoopCRD is a stub CRD similar to workload autoscaler's one.
 func WoopCRD() *apiextensionsv1.CustomResourceDefinition {
 	return &apiextensionsv1.CustomResourceDefinition{

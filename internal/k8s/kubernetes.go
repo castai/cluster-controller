@@ -160,6 +160,20 @@ func (c *client) CordonNode(ctx context.Context, node *v1.Node) error {
 
 	err := c.PatchNode(ctx, node, func(n *v1.Node) {
 		n.Spec.Unschedulable = true
+
+		// Add unschedulable taint explicitly to avoid race condition
+		// where Node Lifecycle Controller adds it asynchronously
+		// which can cause pods to be scheduled on the node during that window
+		unschedulableTaint := v1.Taint{
+			Key:    "node.kubernetes.io/unschedulable",
+			Effect: v1.TaintEffectNoSchedule,
+		}
+		for _, t := range n.Spec.Taints {
+			if t.Key == unschedulableTaint.Key {
+				return
+			}
+		}
+		n.Spec.Taints = append(n.Spec.Taints, unschedulableTaint)
 	})
 	if err != nil {
 		return fmt.Errorf("patching node unschedulable: %w", err)
@@ -476,6 +490,10 @@ func IsControlledBy(p *v1.Pod, kind string) bool {
 	ctrl := metav1.GetControllerOf(p)
 
 	return ctrl != nil && ctrl.Kind == kind
+}
+
+func IsNonEvictible(p *v1.Pod) bool {
+	return IsDaemonSetPod(p) || IsStaticPod(p)
 }
 
 // PatchNode patches a node with the given change function.
