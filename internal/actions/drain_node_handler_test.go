@@ -117,6 +117,7 @@ func prependEvictionReaction(t testing.TB, c *fake.Clientset, success, retryable
 			return &apierrors.StatusError{ErrStatus: metav1.Status{Reason: metav1.StatusReasonInternalError, Message: "internal"}}
 		}
 		wg.Add(1)
+		// nolint: modernize
 		go func() {
 			defer wg.Done()
 			err := c.CoreV1().Pods(namespace).Delete(context.Background(), name, metav1.DeleteOptions{})
