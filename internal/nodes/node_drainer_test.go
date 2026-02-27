@@ -15,8 +15,10 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/kubernetes/fake"
 	ktest "k8s.io/client-go/testing"
+	"k8s.io/kubectl/pkg/drain"
 
 	"github.com/castai/cluster-controller/internal/k8s"
 )
@@ -114,6 +116,7 @@ func (f *fakePodInformer) addPodToNode(nodeName string, pod *v1.Pod) {
 	f.pods[nodeName] = append(f.pods[nodeName], pod)
 }
 
+// nolint: unparam
 func (f *fakePodInformer) clearPodsFromNode(nodeName string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -275,17 +278,29 @@ func TestDrainer_Evict(t *testing.T) {
 	tests := []struct {
 		name                   string
 		setupPods              func(*fakePodInformer)
+		existingPods           []*v1.Pod
+		simulateTerminate      func(*fakePodInformer)
+		contextTimeout         time.Duration
+		disableEviction        bool
 		skipDeletedTimeoutSecs int
 		wantErr                bool
 		wantIgnoredPodsLen     int
-		terminatesImmediately  bool
 	}{
+		{
+			name: "returns error when eviction not supported",
+			setupPods: func(f *fakePodInformer) {
+				f.addPodToNode(testNodeName, &v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"},
+				})
+			},
+			disableEviction: true,
+			wantErr:         true,
+		},
 		{
 			name: "returns empty when no pods to evict",
 			setupPods: func(f *fakePodInformer) {
 			},
-			wantIgnoredPodsLen:    0,
-			terminatesImmediately: true,
+			wantIgnoredPodsLen: 0,
 		},
 		{
 			name: "returns empty when only daemonset pods",
@@ -303,8 +318,7 @@ func TestDrainer_Evict(t *testing.T) {
 					},
 				})
 			},
-			wantIgnoredPodsLen:    0,
-			terminatesImmediately: true,
+			wantIgnoredPodsLen: 0,
 		},
 		{
 			name: "returns empty when only static pods",
@@ -322,8 +336,7 @@ func TestDrainer_Evict(t *testing.T) {
 					},
 				})
 			},
-			wantIgnoredPodsLen:    0,
-			terminatesImmediately: true,
+			wantIgnoredPodsLen: 0,
 		},
 		{
 			name: "returns empty when only completed pods",
@@ -338,8 +351,7 @@ func TestDrainer_Evict(t *testing.T) {
 					},
 				})
 			},
-			wantIgnoredPodsLen:    0,
-			terminatesImmediately: true,
+			wantIgnoredPodsLen: 0,
 		},
 		{
 			name: "returns empty when only failed pods",
@@ -354,8 +366,7 @@ func TestDrainer_Evict(t *testing.T) {
 					},
 				})
 			},
-			wantIgnoredPodsLen:    0,
-			terminatesImmediately: true,
+			wantIgnoredPodsLen: 0,
 		},
 		{
 			name: "skips pods deleted longer than timeout",
@@ -374,7 +385,6 @@ func TestDrainer_Evict(t *testing.T) {
 			},
 			skipDeletedTimeoutSecs: 60,
 			wantIgnoredPodsLen:     0,
-			terminatesImmediately:  true,
 		},
 		{
 			name: "returns error when list fails",
@@ -383,46 +393,112 @@ func TestDrainer_Evict(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "successfully evicts pod that terminates",
+			setupPods: func(f *fakePodInformer) {
+				f.addPodToNode(testNodeName, &v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"},
+					Status:     v1.PodStatus{Phase: v1.PodRunning},
+				})
+			},
+			existingPods: []*v1.Pod{
+				{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"}},
+			},
+			simulateTerminate: func(f *fakePodInformer) {
+				go func() {
+					time.Sleep(100 * time.Millisecond)
+					f.clearPodsFromNode(testNodeName)
+				}()
+			},
+			wantIgnoredPodsLen: 0,
+			contextTimeout:     2 * time.Second,
+		},
+		{
+			name: "non-evictable daemonset pods returned in ignored, evictable pod terminates",
+			setupPods: func(f *fakePodInformer) {
+				f.addPodToNode(testNodeName, &v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "evict-pod", Namespace: "default"},
+					Status:     v1.PodStatus{Phase: v1.PodRunning},
+				})
+				f.addPodToNode(testNodeName, &v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "ds-pod",
+						Namespace: "default",
+						OwnerReferences: []metav1.OwnerReference{
+							{Kind: "DaemonSet", Controller: boolPtr(true)},
+						},
+					},
+				})
+			},
+			existingPods: []*v1.Pod{
+				{ObjectMeta: metav1.ObjectMeta{Name: "evict-pod", Namespace: "default"}},
+			},
+			simulateTerminate: func(f *fakePodInformer) {
+				go func() {
+					time.Sleep(100 * time.Millisecond)
+					f.clearPodsFromNode(testNodeName)
+				}()
+			},
+			wantIgnoredPodsLen: 1, // ds-pod is non-evictable
+			contextTimeout:     2 * time.Second,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+			synctest.Test(t, func(t *testing.T) {
+				podInformer := newFakePodInformer()
+				if tt.setupPods != nil {
+					tt.setupPods(podInformer)
+				}
 
-			podInformer := newFakePodInformer()
-			if tt.setupPods != nil {
-				tt.setupPods(podInformer)
-			}
+				clientset := fake.NewClientset()
+				if !tt.disableEviction {
+					addEvictionSupport(clientset)
+				}
+				for _, pod := range tt.existingPods {
+					_, err := clientset.CoreV1().Pods(pod.Namespace).Create(
+						context.Background(), pod, metav1.CreateOptions{},
+					)
+					require.NoError(t, err)
+				}
+				client := k8s.NewClient(clientset, logrus.New())
+				log := logrus.New()
 
-			clientset := fake.NewClientset()
-			client := k8s.NewClient(clientset, logrus.New())
-			log := logrus.New()
+				m := &drainer{
+					pods:   podInformer,
+					client: client,
+					log:    log,
+					cfg: DrainerConfig{
+						PodEvictRetryDelay:            10 * time.Millisecond,
+						PodsTerminationWaitRetryDelay: 10 * time.Millisecond,
+					},
+				}
 
-			m := &drainer{
-				pods:   podInformer,
-				client: client,
-				log:    log,
-				cfg: DrainerConfig{
-					PodEvictRetryDelay:            10 * time.Millisecond,
-					PodsTerminationWaitRetryDelay: 10 * time.Millisecond,
-				},
-			}
+				timeout := 100 * time.Millisecond
+				if tt.contextTimeout > 0 {
+					timeout = tt.contextTimeout
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), timeout)
+				defer cancel()
 
-			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-			defer cancel()
+				if tt.simulateTerminate != nil {
+					tt.simulateTerminate(podInformer)
+				}
 
-			ignored, err := m.Evict(ctx, EvictRequest{
-				Node:                      testNodeName,
-				CastNamespace:             testCastNamespace,
-				SkipDeletedTimeoutSeconds: tt.skipDeletedTimeoutSecs,
+				ignored, err := m.Evict(ctx, EvictRequest{
+					Node:                      testNodeName,
+					CastNamespace:             testCastNamespace,
+					SkipDeletedTimeoutSeconds: tt.skipDeletedTimeoutSecs,
+				})
+
+				if tt.wantErr {
+					require.Error(t, err)
+				} else {
+					require.NoError(t, err)
+					require.Len(t, ignored, tt.wantIgnoredPodsLen)
+				}
 			})
-
-			if tt.wantErr {
-				require.Error(t, err)
-			} else if tt.terminatesImmediately {
-				require.NoError(t, err)
-				require.Len(t, ignored, tt.wantIgnoredPodsLen)
-			}
 		})
 	}
 }
@@ -433,17 +509,18 @@ func TestDrainer_Drain(t *testing.T) {
 	tests := []struct {
 		name                   string
 		setupPods              func(*fakePodInformer)
+		existingPods           []*v1.Pod
+		simulateTerminate      func(*fakePodInformer)
+		contextTimeout         time.Duration
 		skipDeletedTimeoutSecs int
 		wantErr                bool
 		wantIgnoredPodsLen     int
-		terminatesImmediately  bool
 	}{
 		{
 			name: "returns empty when no pods to drain",
 			setupPods: func(f *fakePodInformer) {
 			},
-			wantIgnoredPodsLen:    0,
-			terminatesImmediately: true,
+			wantIgnoredPodsLen: 0,
 		},
 		{
 			name: "returns empty when only daemonset pods",
@@ -461,8 +538,7 @@ func TestDrainer_Drain(t *testing.T) {
 					},
 				})
 			},
-			wantIgnoredPodsLen:    0,
-			terminatesImmediately: true,
+			wantIgnoredPodsLen: 0,
 		},
 		{
 			name: "returns error when list fails",
@@ -471,47 +547,111 @@ func TestDrainer_Drain(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "successfully drains evictable pod that terminates",
+			setupPods: func(f *fakePodInformer) {
+				f.addPodToNode(testNodeName, &v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"},
+					Status:     v1.PodStatus{Phase: v1.PodRunning},
+				})
+			},
+			existingPods: []*v1.Pod{
+				{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"}},
+			},
+			simulateTerminate: func(f *fakePodInformer) {
+				go func() {
+					time.Sleep(100 * time.Millisecond)
+					f.clearPodsFromNode(testNodeName)
+				}()
+			},
+			wantIgnoredPodsLen: 0,
+			contextTimeout:     2 * time.Second,
+		},
+		{
+			name: "non-evictable daemonset pods returned in ignored, evictable pod terminates",
+			setupPods: func(f *fakePodInformer) {
+				f.addPodToNode(testNodeName, &v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "evict-pod", Namespace: "default"},
+					Status:     v1.PodStatus{Phase: v1.PodRunning},
+				})
+				f.addPodToNode(testNodeName, &v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "ds-pod",
+						Namespace: "default",
+						OwnerReferences: []metav1.OwnerReference{
+							{Kind: "DaemonSet", Controller: boolPtr(true)},
+						},
+					},
+				})
+			},
+			existingPods: []*v1.Pod{
+				{ObjectMeta: metav1.ObjectMeta{Name: "evict-pod", Namespace: "default"}},
+			},
+			simulateTerminate: func(f *fakePodInformer) {
+				go func() {
+					time.Sleep(100 * time.Millisecond)
+					f.clearPodsFromNode(testNodeName)
+				}()
+			},
+			wantIgnoredPodsLen: 1, // ds-pod is non-evictable
+			contextTimeout:     2 * time.Second,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+			synctest.Test(t, func(t *testing.T) {
+				podInformer := newFakePodInformer()
+				if tt.setupPods != nil {
+					tt.setupPods(podInformer)
+				}
 
-			podInformer := newFakePodInformer()
-			if tt.setupPods != nil {
-				tt.setupPods(podInformer)
-			}
+				clientset := fake.NewClientset()
+				for _, pod := range tt.existingPods {
+					_, err := clientset.CoreV1().Pods(pod.Namespace).Create(
+						context.Background(), pod, metav1.CreateOptions{},
+					)
+					require.NoError(t, err)
+				}
+				client := k8s.NewClient(clientset, logrus.New())
+				log := logrus.New()
 
-			clientset := fake.NewClientset()
-			client := k8s.NewClient(clientset, logrus.New())
-			log := logrus.New()
+				m := &drainer{
+					pods:   podInformer,
+					client: client,
+					log:    log,
+					cfg: DrainerConfig{
+						PodEvictRetryDelay:            10 * time.Millisecond,
+						PodsTerminationWaitRetryDelay: 10 * time.Millisecond,
+						PodDeleteRetries:              3,
+					},
+				}
 
-			m := &drainer{
-				pods:   podInformer,
-				client: client,
-				log:    log,
-				cfg: DrainerConfig{
-					PodEvictRetryDelay:            10 * time.Millisecond,
-					PodsTerminationWaitRetryDelay: 10 * time.Millisecond,
-				},
-			}
+				timeout := 100 * time.Millisecond
+				if tt.contextTimeout > 0 {
+					timeout = tt.contextTimeout
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), timeout)
+				defer cancel()
 
-			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-			defer cancel()
+				if tt.simulateTerminate != nil {
+					tt.simulateTerminate(podInformer)
+				}
 
-			ignored, err := m.Drain(ctx, DrainRequest{
-				Node:                      testNodeName,
-				CastNamespace:             testCastNamespace,
-				SkipDeletedTimeoutSeconds: tt.skipDeletedTimeoutSecs,
-				DeleteOptions:             metav1.DeleteOptions{},
+				ignored, err := m.Drain(ctx, DrainRequest{
+					Node:                      testNodeName,
+					CastNamespace:             testCastNamespace,
+					SkipDeletedTimeoutSeconds: tt.skipDeletedTimeoutSecs,
+					DeleteOptions:             metav1.DeleteOptions{},
+				})
+
+				if tt.wantErr {
+					require.Error(t, err)
+				} else {
+					require.NoError(t, err)
+					require.Len(t, ignored, tt.wantIgnoredPodsLen)
+				}
 			})
-
-			if tt.wantErr {
-				require.Error(t, err)
-			} else if tt.terminatesImmediately {
-				require.NoError(t, err)
-				require.Len(t, ignored, tt.wantIgnoredPodsLen)
-			}
 		})
 	}
 }
@@ -523,7 +663,9 @@ func TestDrainer_WaitTermination(t *testing.T) {
 		name              string
 		setupPods         func(*fakePodInformer)
 		simulateTerminate func(*fakePodInformer)
+		successfulPods    []*v1.Pod
 		ignoredPods       []*v1.Pod
+		retryFn           func(context.Context, *v1.Pod) error
 		contextTimeout    time.Duration
 		wantErr           bool
 		wantErrText       string
@@ -578,6 +720,9 @@ func TestDrainer_WaitTermination(t *testing.T) {
 					f.clearPodsFromNode(testNodeName)
 				}()
 			},
+			successfulPods: []*v1.Pod{
+				{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"}},
+			},
 			contextTimeout: 500 * time.Millisecond,
 			wantErr:        false,
 		},
@@ -608,6 +753,11 @@ func TestDrainer_WaitTermination(t *testing.T) {
 					f.clearPodsFromNode(testNodeName)
 				}()
 			},
+			successfulPods: []*v1.Pod{
+				{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "pod2", Namespace: "default"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "pod3", Namespace: "default"}},
+			},
 			contextTimeout: 500 * time.Millisecond,
 			wantErr:        false,
 		},
@@ -618,9 +768,43 @@ func TestDrainer_WaitTermination(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"},
 				})
 			},
+			successfulPods: []*v1.Pod{
+				{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"}},
+			},
 			contextTimeout: 50 * time.Millisecond,
 			wantErr:        true,
 			wantErrText:    "context",
+		},
+		{
+			name: "retryFn succeeds for stale pod, pod later terminates",
+			setupPods: func(f *fakePodInformer) {
+				f.addPodToNode(testNodeName, &v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "stale-pod", Namespace: "default"},
+				})
+			},
+			simulateTerminate: func(f *fakePodInformer) {
+				go func() {
+					time.Sleep(50 * time.Millisecond)
+					f.clearPodsFromNode(testNodeName)
+				}()
+			},
+			// stale-pod is intentionally absent from successfulPods so retryFn is triggered
+			retryFn:        func(_ context.Context, _ *v1.Pod) error { return nil },
+			contextTimeout: 500 * time.Millisecond,
+			wantErr:        false,
+		},
+		{
+			name: "retryFn fails for stale pod, pod gets added to ignored and wait completes",
+			setupPods: func(f *fakePodInformer) {
+				f.addPodToNode(testNodeName, &v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "stale-pod", Namespace: "default"},
+				})
+			},
+			// pod stays in informer but retryFn failure causes it to be added to ignored set,
+			// so the next checkTermination iteration finds an empty remaining list
+			retryFn:        func(_ context.Context, _ *v1.Pod) error { return errors.New("retry failed") },
+			contextTimeout: 500 * time.Millisecond,
+			wantErr:        false,
 		},
 	}
 
@@ -660,7 +844,7 @@ func TestDrainer_WaitTermination(t *testing.T) {
 					tt.simulateTerminate(podInformer)
 				}
 
-				err := m.waitTerminaition(ctx, testNodeName, tt.ignoredPods)
+				err := m.waitTerminaition(ctx, testNodeName, tt.successfulPods, tt.ignoredPods, tt.retryFn)
 
 				if tt.wantErr {
 					require.Error(t, err)
@@ -768,7 +952,7 @@ func TestDrainer_PrioritizePods(t *testing.T) {
 			pods, err := m.list(context.Background(), testNodeName)
 			require.NoError(t, err)
 
-			result := m.prioritizePods(pods, testCastNamespace, tt.skipDeletedTimeoutSecs)
+			result, _ := m.prioritizePods(pods, testCastNamespace, tt.skipDeletedTimeoutSecs)
 
 			require.Len(t, result, tt.wantLen)
 			if len(tt.wantContains) > 0 {
@@ -867,22 +1051,20 @@ func TestDrainer_TryEvict(t *testing.T) {
 		name           string
 		pods           []*v1.Pod
 		existingPods   []*v1.Pod
-		enableEviction bool
 		shouldSucceed  func(namespace, name string) bool
 		wantSuccessful int
 		wantFailed     int
-		wantError      bool
 		contextTimeout time.Duration
 	}{
 		{
 			name:           "returns empty when no pods",
 			pods:           []*v1.Pod{},
 			existingPods:   []*v1.Pod{},
-			enableEviction: false,
-			wantError:      true,
+			wantSuccessful: 0,
+			wantFailed:     0,
 		},
 		{
-			name: "eviction not supported - multiple pods",
+			name: "successfully evicts all pods",
 			pods: []*v1.Pod{
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"}},
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod2", Namespace: "default"}},
@@ -891,28 +1073,11 @@ func TestDrainer_TryEvict(t *testing.T) {
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"}},
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod2", Namespace: "default"}},
 			},
-			enableEviction: false,
-			wantError:      true,
-		},
-		{
-			name:           "successfully evicts all pods",
-			enableEviction: true,
-			pods: []*v1.Pod{
-				{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"}},
-				{ObjectMeta: metav1.ObjectMeta{Name: "pod2", Namespace: "default"}},
-			},
-			existingPods: []*v1.Pod{
-				{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"}},
-				{ObjectMeta: metav1.ObjectMeta{Name: "pod2", Namespace: "default"}},
-			},
-			shouldSucceed:  nil,
 			wantSuccessful: 2,
 			wantFailed:     0,
-			wantError:      false,
 		},
 		{
-			name:           "handles partial eviction failures",
-			enableEviction: true,
+			name: "handles partial eviction failures",
 			pods: []*v1.Pod{
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"}},
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod2", Namespace: "default"}},
@@ -930,7 +1095,6 @@ func TestDrainer_TryEvict(t *testing.T) {
 			},
 			wantSuccessful: 2,
 			wantFailed:     2,
-			wantError:      false,
 			contextTimeout: 500 * time.Millisecond,
 		},
 	}
@@ -948,11 +1112,9 @@ func TestDrainer_TryEvict(t *testing.T) {
 					require.NoError(t, err)
 				}
 
-				if tt.enableEviction {
-					addEvictionSupport(clientset)
-					if tt.shouldSucceed != nil {
-						addEvictionReactor(clientset, tt.shouldSucceed)
-					}
+				addEvictionSupport(clientset)
+				if tt.shouldSucceed != nil {
+					addEvictionReactor(clientset, tt.shouldSucceed)
 				}
 
 				client := k8s.NewClient(clientset, logrus.New())
@@ -973,13 +1135,10 @@ func TestDrainer_TryEvict(t *testing.T) {
 					defer cancel()
 				}
 
-				successful, failed, err := m.tryEvict(ctx, tt.pods)
+				groupVersion, err := drain.CheckEvictionSupport(clientset)
+				require.NoError(t, err)
 
-				if tt.wantError {
-					require.Error(t, err)
-					require.Contains(t, err.Error(), "could not find the requested resource")
-					return
-				}
+				successful, failed, err := m.tryEvict(ctx, tt.pods, groupVersion)
 
 				require.Equal(t, tt.wantSuccessful, len(successful),
 					"Expected %d successful evictions, got %d", tt.wantSuccessful, len(successful))
@@ -1209,4 +1368,122 @@ func addEvictionReactor(c *fake.Clientset, shouldSucceed func(namespace, name st
 			},
 		}
 	})
+}
+
+func TestDrainer_RetryStale(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		pods           []*v1.Pod
+		preSuccessful  []string // pod keys pre-populated into successful set
+		preIgnored     []string // pod keys pre-populated into ignored set
+		retryFn        func(context.Context, *v1.Pod) error
+		wantSuccessful []string
+		wantIgnored    []string
+	}{
+		{
+			name: "pod already in successful set is not retried",
+			pods: []*v1.Pod{
+				{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"}},
+			},
+			preSuccessful:  []string{"default/pod1"},
+			wantSuccessful: []string{"default/pod1"},
+			wantIgnored:    []string{},
+		},
+		{
+			name: "retryFn nil, stale pod not in successful set, no action taken",
+			pods: []*v1.Pod{
+				{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"}},
+			},
+			retryFn:        nil,
+			wantSuccessful: []string{},
+			wantIgnored:    []string{},
+		},
+		{
+			name: "non-evictible daemonset pod added to ignored without calling retryFn",
+			pods: []*v1.Pod{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "ds-pod",
+						Namespace: "default",
+						OwnerReferences: []metav1.OwnerReference{
+							{Kind: "DaemonSet", Controller: boolPtr(true)},
+						},
+					},
+				},
+			},
+			retryFn:        func(_ context.Context, _ *v1.Pod) error { return nil },
+			wantSuccessful: []string{},
+			wantIgnored:    []string{"default/ds-pod"},
+		},
+		{
+			name: "non-evictible static pod added to ignored without calling retryFn",
+			pods: []*v1.Pod{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "static-pod",
+						Namespace: "default",
+						OwnerReferences: []metav1.OwnerReference{
+							{Kind: "Node", Controller: boolPtr(true)},
+						},
+					},
+				},
+			},
+			retryFn:        func(_ context.Context, _ *v1.Pod) error { return nil },
+			wantSuccessful: []string{},
+			wantIgnored:    []string{"default/static-pod"},
+		},
+		{
+			name: "retryFn succeeds, pod added to successful",
+			pods: []*v1.Pod{
+				{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"}},
+			},
+			retryFn:        func(_ context.Context, _ *v1.Pod) error { return nil },
+			wantSuccessful: []string{"default/pod1"},
+			wantIgnored:    []string{},
+		},
+		{
+			name: "retryFn fails, pod added to ignored",
+			pods: []*v1.Pod{
+				{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default"}},
+			},
+			retryFn:        func(_ context.Context, _ *v1.Pod) error { return errors.New("eviction failed") },
+			wantSuccessful: []string{},
+			wantIgnored:    []string{"default/pod1"},
+		},
+		{
+			name: "mixed pods: already successful, retry succeeds, retry fails",
+			pods: []*v1.Pod{
+				{ObjectMeta: metav1.ObjectMeta{Name: "done-pod", Namespace: "default"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "retry-ok", Namespace: "default"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "retry-fail", Namespace: "default"}},
+			},
+			preSuccessful: []string{"default/done-pod"},
+			retryFn: func(_ context.Context, pod *v1.Pod) error {
+				if pod.Name == "retry-ok" {
+					return nil
+				}
+				return errors.New("failed")
+			},
+			wantSuccessful: []string{"default/done-pod", "default/retry-ok"},
+			wantIgnored:    []string{"default/retry-fail"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			m := &drainer{log: logrus.New()}
+
+			successful := sets.New[string](tt.preSuccessful...)
+			ignored := sets.New[string](tt.preIgnored...)
+
+			m.retryStale(context.Background(), tt.pods, successful, ignored, tt.retryFn)
+
+			require.Equal(t, sets.New[string](tt.wantSuccessful...), successful)
+			require.Equal(t, sets.New[string](tt.wantIgnored...), ignored)
+		})
+	}
 }

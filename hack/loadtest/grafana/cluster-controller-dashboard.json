@@ -23,114 +23,6 @@
   "panels": [
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "showValues": false,
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 0
-      },
-      "id": 36,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.3.2",
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum by (verb, resource, subresource) (rate(apiserver_request_total{verb=\"GET\"}[5m]))",
-          "hide": false,
-          "legendFormat": "__auto",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate(rest_client_requests_total{job=\"cluster-controller\", method=\"GET\"}[1m])) by (method, code)",
-          "hide": false,
-          "instant": false,
-          "legendFormat": "__auto",
-          "range": true,
-          "refId": "B"
-        }
-      ],
-      "title": "New panel",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
         "uid": "PBFA97CFB590B2093"
       },
       "fieldConfig": {
@@ -159,7 +51,7 @@
         "h": 5,
         "w": 3,
         "x": 0,
-        "y": 8
+        "y": 0
       },
       "id": 33,
       "options": {
@@ -179,7 +71,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.3.2",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "editorMode": "code",
@@ -257,7 +149,7 @@
         "h": 5,
         "w": 3,
         "x": 3,
-        "y": 8
+        "y": 0
       },
       "id": 34,
       "options": {
@@ -273,7 +165,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.2",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "editorMode": "code",
@@ -317,7 +209,7 @@
         "h": 5,
         "w": 3,
         "x": 6,
-        "y": 8
+        "y": 0
       },
       "id": 35,
       "options": {
@@ -337,7 +229,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.3.2",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "editorMode": "code",
@@ -356,7 +248,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 13
+        "y": 5
       },
       "id": 27,
       "panels": [],
@@ -424,7 +316,7 @@
         "h": 6,
         "w": 8,
         "x": 0,
-        "y": 14
+        "y": 6
       },
       "id": 1,
       "options": {
@@ -440,7 +332,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.2",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -534,7 +426,7 @@
         "h": 6,
         "w": 8,
         "x": 8,
-        "y": 14
+        "y": 6
       },
       "id": 28,
       "options": {
@@ -550,7 +442,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.2",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "editorMode": "code",
@@ -628,7 +520,7 @@
         "h": 6,
         "w": 8,
         "x": 16,
-        "y": 14
+        "y": 6
       },
       "id": 12,
       "options": {
@@ -644,7 +536,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.2",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "editorMode": "code",
@@ -722,7 +614,7 @@
         "h": 6,
         "w": 8,
         "x": 0,
-        "y": 20
+        "y": 12
       },
       "id": 31,
       "options": {
@@ -738,7 +630,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.2",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -820,7 +712,7 @@
         "h": 6,
         "w": 8,
         "x": 8,
-        "y": 20
+        "y": 12
       },
       "id": 30,
       "options": {
@@ -836,7 +728,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.2",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "editorMode": "code",
@@ -914,7 +806,7 @@
         "h": 6,
         "w": 8,
         "x": 16,
-        "y": 20
+        "y": 12
       },
       "id": 29,
       "options": {
@@ -930,7 +822,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.2",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "editorMode": "code",
@@ -1008,7 +900,7 @@
         "h": 6,
         "w": 8,
         "x": 0,
-        "y": 26
+        "y": 18
       },
       "id": 6,
       "options": {
@@ -1024,7 +916,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.2",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "editorMode": "code",
@@ -1102,7 +994,7 @@
         "h": 6,
         "w": 8,
         "x": 8,
-        "y": 26
+        "y": 18
       },
       "id": 3,
       "options": {
@@ -1118,7 +1010,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.2",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "editorMode": "code",
@@ -1196,7 +1088,7 @@
         "h": 6,
         "w": 8,
         "x": 16,
-        "y": 26
+        "y": 18
       },
       "id": 5,
       "options": {
@@ -1212,7 +1104,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.2",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "editorMode": "code",
@@ -1290,7 +1182,7 @@
         "h": 6,
         "w": 8,
         "x": 0,
-        "y": 32
+        "y": 24
       },
       "id": 2,
       "options": {
@@ -1306,7 +1198,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.2",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "editorMode": "code",
@@ -1384,7 +1276,7 @@
         "h": 6,
         "w": 8,
         "x": 8,
-        "y": 32
+        "y": 24
       },
       "id": 14,
       "options": {
@@ -1400,7 +1292,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.2",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "editorMode": "code",
@@ -1419,7 +1311,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 38
+        "y": 30
       },
       "id": 26,
       "panels": [],
@@ -1491,7 +1383,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 39
+        "y": 31
       },
       "id": 25,
       "options": {
@@ -1598,7 +1490,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 39
+        "y": 31
       },
       "id": 32,
       "options": {
@@ -1646,7 +1538,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 47
+        "y": 39
       },
       "id": 22,
       "panels": [],
@@ -1718,7 +1610,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 48
+        "y": 40
       },
       "id": 19,
       "options": {
@@ -1845,7 +1737,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 48
+        "y": 40
       },
       "id": 21,
       "options": {
@@ -1939,7 +1831,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 56
+        "y": 48
       },
       "id": 24,
       "options": {
@@ -2033,7 +1925,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 56
+        "y": 48
       },
       "id": 18,
       "options": {
@@ -2154,7 +2046,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 64
+        "y": 56
       },
       "id": 17,
       "options": {
@@ -2189,7 +2081,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 72
+        "y": 64
       },
       "id": 9,
       "panels": [],

@@ -190,7 +190,7 @@ data:
           # Scrape cluster-controller and loadtest-agent pods
           - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name, __meta_kubernetes_pod_label_app]
             action: keep
-            regex: castai-cluster-controller|castai-loadtest-agent
+            regex: .*(castai-cluster-controller|castai-loadtest-agent).*
           # Add namespace label
           - source_labels: [__meta_kubernetes_namespace]
             target_label: namespace
@@ -262,7 +262,7 @@ spec:
             - containerPort: 9090
           resources:
             requests:
-              memory: "8Gi"
+              memory: "12Gi"
               cpu: "4"
           volumeMounts:
             - name: prometheus-config-volume
@@ -273,8 +273,8 @@ spec:
             - containerPort: 3000
           resources:
             requests:
-              memory: "4Gi"
-              cpu: "2"
+              memory: "12Gi"
+              cpu: "4"
           volumeMounts:
             # Mount the datasource provisioning
             - name: grafana-config
@@ -303,8 +303,8 @@ spec:
               name: grpc
           resources:
             requests:
-              memory: "2Gi"
-              cpu: "1"
+              memory: "12Gi"
+              cpu: "4"
           volumeMounts:
             - name: loki-config-volume
               mountPath: /etc/loki
@@ -355,11 +355,13 @@ spec:
           ports:
             - containerPort: 8080
               name: http
-            - containerPort: 8080
-              name: metrics
           command:
             - "castai-cluster-controller"
             - "test-server"
+          resources:
+            requests:
+              memory: "6Gi"
+              cpu: "6"
           env:
             - name: PORT
               value: "8080"
@@ -374,9 +376,6 @@ spec:
     app: castai-loadtest-agent
   ports:
     - name: http
-      port: 8080
-      targetPort: 8080
-    - name: metrics
       port: 8080
       targetPort: 8080
 ---

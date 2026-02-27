@@ -12,6 +12,8 @@ import (
 	"github.com/sirupsen/logrus"
 	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/kubectl/pkg/drain"
 
 	"github.com/castai/cluster-controller/internal/informer"
@@ -67,32 +69,13 @@ func NewDrainer(
 }
 
 func (d *drainer) Drain(ctx context.Context, data DrainRequest) ([]*core.Pod, error) {
-	logger := logger.FromContext(ctx, d.log)
-
-	logger.Info("starting drain")
-	pods, err := d.list(ctx, data.Node)
-	if err != nil {
-		return nil, err
+	tryFn := func(ctx context.Context, pods []*core.Pod) ([]*core.Pod, []*core.Pod, error) {
+		return d.tryDrain(ctx, pods, data.DeleteOptions)
 	}
-
-	toEvict := d.prioritizePods(pods, data.CastNamespace, data.SkipDeletedTimeoutSeconds)
-	if len(toEvict) == 0 {
-		return nil, nil
+	retryFn := func(ctx context.Context, pod *core.Pod) error {
+		return d.client.DeletePod(ctx, data.DeleteOptions, *pod, d.cfg.PodDeleteRetries, d.cfg.PodEvictRetryDelay)
 	}
-
-	_, failed, err := d.tryDrain(ctx, toEvict, data.DeleteOptions)
-	if err != nil && !errors.Is(err, &k8s.PodFailedActionError{}) {
-		return nil, err
-	}
-
-	err = d.waitTerminaition(ctx, data.Node, failed)
-	if err != nil {
-		return nil, err
-	}
-
-	logger.Info("drain finished")
-
-	return failed, nil
+	return d.execute(ctx, data.Node, data.CastNamespace, "drain", data.SkipDeletedTimeoutSeconds, tryFn, retryFn)
 }
 
 func (d *drainer) tryDrain(ctx context.Context, toEvict []*core.Pod, options meta.DeleteOptions) ([]*core.Pod, []*core.Pod, error) {
@@ -106,40 +89,20 @@ func (d *drainer) tryDrain(ctx context.Context, toEvict []*core.Pod, options met
 }
 
 func (d *drainer) Evict(ctx context.Context, data EvictRequest) ([]*core.Pod, error) {
-	logger := logger.FromContext(ctx, d.log)
-
-	logger.Info("starting eviction")
-
-	pods, err := d.list(ctx, data.Node)
-	if err != nil {
-		return nil, err
-	}
-
-	toEvict := d.prioritizePods(pods, data.CastNamespace, data.SkipDeletedTimeoutSeconds)
-	if len(toEvict) == 0 {
-		return nil, nil
-	}
-
-	_, ignored, err := d.tryEvict(ctx, toEvict)
-	if err != nil && !errors.Is(err, &k8s.PodFailedActionError{}) {
-		return nil, err
-	}
-
-	err = d.waitTerminaition(ctx, data.Node, ignored)
-	if err != nil {
-		return nil, err
-	}
-
-	logger.Info("eviction finished")
-
-	return ignored, nil
-}
-
-func (d *drainer) tryEvict(ctx context.Context, toEvict []*core.Pod) ([]*core.Pod, []*core.Pod, error) {
 	groupVersion, err := drain.CheckEvictionSupport(d.client.Clientset())
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
+	tryFn := func(ctx context.Context, pods []*core.Pod) ([]*core.Pod, []*core.Pod, error) {
+		return d.tryEvict(ctx, pods, groupVersion)
+	}
+	retryFn := func(ctx context.Context, pod *core.Pod) error {
+		return d.client.EvictPod(ctx, *pod, d.cfg.PodEvictRetryDelay, groupVersion)
+	}
+	return d.execute(ctx, data.Node, data.CastNamespace, "eviction", data.SkipDeletedTimeoutSeconds, tryFn, retryFn)
+}
+
+func (d *drainer) tryEvict(ctx context.Context, toEvict []*core.Pod, groupVersion schema.GroupVersion) ([]*core.Pod, []*core.Pod, error) {
 	evictPod := func(ctx context.Context, pod core.Pod) error {
 		return d.client.EvictPod(ctx, pod, d.cfg.PodEvictRetryDelay, groupVersion)
 	}
@@ -147,6 +110,43 @@ func (d *drainer) tryEvict(ctx context.Context, toEvict []*core.Pod) ([]*core.Po
 	successful, podsWithFailedAction := d.client.ExecuteBatchPodActions(ctx, toEvict, evictPod, "evict-pod")
 	failed, err := d.handleFailures(ctx, "eviction", podsWithFailedAction)
 	return successful, failed, err
+}
+
+func (d *drainer) execute(
+	ctx context.Context,
+	node, castNamespace, actionName string,
+	skipDeletedTimeoutSeconds int,
+	tryFn func(ctx context.Context, pods []*core.Pod) ([]*core.Pod, []*core.Pod, error),
+	retryFn func(ctx context.Context, pod *core.Pod) error,
+) ([]*core.Pod, error) {
+	logger := logger.FromContext(ctx, d.log)
+	logger.Infof("starting %s", actionName)
+
+	pods, err := d.list(ctx, node)
+	if err != nil {
+		return nil, err
+	}
+
+	toEvict, toIgnore := d.prioritizePods(pods, castNamespace, skipDeletedTimeoutSeconds)
+	if len(toEvict) == 0 {
+		return nil, nil
+	}
+
+	successful, failed, err := tryFn(ctx, toEvict)
+	if err != nil && !errors.Is(err, &k8s.PodFailedActionError{}) {
+		return nil, err
+	}
+
+	ignored := make([]*core.Pod, len(toIgnore)+len(failed))
+	copy(ignored, toIgnore)
+	copy(ignored[len(toIgnore):], failed)
+
+	if err = d.waitTerminaition(ctx, node, successful, ignored, retryFn); err != nil {
+		return nil, err
+	}
+
+	logger.Infof("%s finished", actionName)
+	return ignored, nil
 }
 
 func (d *drainer) list(_ context.Context, fromNode string) ([]*core.Pod, error) {
@@ -160,17 +160,14 @@ func (d *drainer) list(_ context.Context, fromNode string) ([]*core.Pod, error) 
 	return pods, nil
 }
 
-func (d *drainer) prioritizePods(pods []*core.Pod, castNamespace string, skipDeletedTimeoutSeconds int) []*core.Pod {
+func (d *drainer) prioritizePods(pods []*core.Pod, castNamespace string, skipDeletedTimeoutSeconds int) ([]*core.Pod, []*core.Pod) {
 	partitioned := k8s.PartitionPodsForEviction(pods, castNamespace, skipDeletedTimeoutSeconds)
 
 	if len(partitioned.CastPods) == 0 && len(partitioned.Evictable) == 0 {
-		return []*core.Pod{}
+		return nil, nil
 	}
 
-	toRemove := make([]*core.Pod, 0, len(partitioned.Evictable))
-	toRemove = append(toRemove, partitioned.Evictable...)
-
-	return toRemove
+	return partitioned.Evictable, partitioned.NonEvictable
 }
 
 func (d *drainer) handleFailures(ctx context.Context, action string, failures []k8s.PodActionFailure) ([]*core.Pod, error) {
@@ -196,7 +193,7 @@ func (d *drainer) handleFailures(ctx context.Context, action string, failures []
 	return failed, failedPodsError
 }
 
-func (d *drainer) waitTerminaition(ctx context.Context, fromNode string, ignored []*core.Pod) error {
+func (d *drainer) waitTerminaition(ctx context.Context, fromNode string, successful, ignored []*core.Pod, retryFn func(ctx context.Context, pod *core.Pod) error) error {
 	logger := logger.FromContext(ctx, d.log)
 	select {
 	case <-ctx.Done():
@@ -204,39 +201,90 @@ func (d *drainer) waitTerminaition(ctx context.Context, fromNode string, ignored
 	default:
 	}
 
-	ignoredMap := make(map[string]struct{})
-	for _, pod := range ignored {
-		ignoredMap[fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)] = struct{}{}
-	}
+	ignoredSet := podKeySet(ignored)
+	successfulSet := podKeySet(successful)
 
-	logger.Infof("starting wait for pod termination from informer, %d pods in ignore list", len(ignored))
+	logger.Infof("starting wait for pod termination from informer")
+	logger.Infof("ignored: %v", ignoredSet)
 	return waitext.Retry(
 		ctx,
 		waitext.NewConstantBackoff(d.cfg.PodsTerminationWaitRetryDelay),
 		waitext.Forever,
 		func(ctx context.Context) (bool, error) {
-			pods, err := d.list(ctx, fromNode)
-			if err != nil {
-				return true, fmt.Errorf("listing %q pods to be terminated: %w", fromNode, err)
-			}
-
-			remaining := lo.Map(pods, func(p *core.Pod, _ int) string {
-				return fmt.Sprintf("%s/%s", p.Namespace, p.Name)
-			})
-
-			if len(ignored) > 0 {
-				remaining = lo.Filter(remaining, func(podName string, _ int) bool {
-					_, ok := ignoredMap[podName]
-					return !ok
-				})
-			}
-			if remainingPods := len(remaining); remainingPods > 0 {
-				return true, fmt.Errorf("waiting for %d pods (%v) to be terminated on node %v", remainingPods, remaining, fromNode)
-			}
-			return false, nil
+			return d.checkTermination(ctx, fromNode, ignoredSet, successfulSet, retryFn)
 		},
 		func(err error) {
 			logger.Warnf("waiting for pod termination on node %v, will retry: %v", fromNode, err)
 		},
 	)
+}
+
+func (d *drainer) checkTermination(
+	ctx context.Context,
+	fromNode string,
+	ignored sets.Set[string],
+	successful sets.Set[string],
+	retryFn func(ctx context.Context, pod *core.Pod) error,
+) (bool, error) {
+	pods, err := d.list(ctx, fromNode)
+	if err != nil {
+		return true, fmt.Errorf("listing %q pods to be terminated: %w", fromNode, err)
+	}
+
+	remaining := filterRemaining(pods, ignored)
+
+	d.retryStale(ctx, remaining, successful, ignored, retryFn)
+
+	if remainingCount := len(remaining); remainingCount > 0 {
+		remainingNames := lo.Map(remaining, func(p *core.Pod, _ int) string { return podKey(p) })
+		return true, fmt.Errorf("waiting for %d pods (%v) to be terminated on node %v", remainingCount, remainingNames, fromNode)
+	}
+	return false, nil
+}
+
+func (d *drainer) retryStale(ctx context.Context, pods []*core.Pod, successful, ignored sets.Set[string], retryFn func(ctx context.Context, pod *core.Pod) error) {
+	logger := logger.FromContext(ctx, d.log)
+
+	for _, pod := range pods {
+		key := podKey(pod)
+		if !successful.Has(key) {
+			logger.Warnf("pod eviction was not initiated: %v", key)
+			if retryFn == nil {
+				continue
+			}
+			if k8s.IsNonEvictible(pod) {
+				ignored.Insert(key)
+				continue
+			}
+			if err := retryFn(ctx, pod); err != nil {
+				logger.Warnf("re-eviction of stale pod %s failed: %v, will ignore pod", key, err)
+				ignored.Insert(key)
+			} else {
+				successful.Insert(key)
+				logger.Infof("re-eviction triggered for stale pod %s", key)
+			}
+		}
+	}
+}
+
+func filterRemaining(pods []*core.Pod, ignored sets.Set[string]) []*core.Pod {
+	var remaining []*core.Pod
+	for _, pod := range pods {
+		if !ignored.Has(podKey(pod)) {
+			remaining = append(remaining, pod)
+		}
+	}
+	return remaining
+}
+
+func podKey(pod *core.Pod) string {
+	return fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
+}
+
+func podKeySet(pods []*core.Pod) sets.Set[string] {
+	s := sets.New[string]()
+	for _, pod := range pods {
+		s.Insert(podKey(pod))
+	}
+	return s
 }
