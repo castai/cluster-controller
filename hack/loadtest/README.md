@@ -52,11 +52,11 @@ From this directory:
 # Deploy with defaults
 ./deploy-helm.sh
 
-# Deploy with custom values
-./deploy-helm.sh my-values.yaml
+# Deploy with custom loadtest values
+./deploy-helm.sh --loadtest-values my-values.yaml
 
 # Deploy with separate cluster-controller values
-CC_VALUES_FILE=cc-values.yaml ./deploy-helm.sh loadtest-values.yaml
+./deploy-helm.sh --cc-values cc-values.yaml --loadtest-values loadtest-values.yaml
 ```
 
 See [USAGE.md](USAGE.md) for complete shell script usage.
@@ -273,14 +273,6 @@ helm install castai-loadtest ./chart --dry-run --debug
 # See all resources that will be created
 helm template castai-loadtest ./chart | kubectl apply --dry-run=client -f -
 ```
-
-## Migration from Old Setup
-
-The new Helm-based setup replaces:
-- `loadtest-components.yaml` → Helm templates in `chart/templates/`
-- `kustomization.yaml` → No longer needed (Helm handles templating)
-- `deploy.sh` → `deploy-helm.sh` (uses Helm instead of kubectl apply)
-- Grafana config files → Integrated into Helm values
 
 ## Development
 

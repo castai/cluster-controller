@@ -2,21 +2,48 @@
 
 set -e
 
-# Optional values files can be passed as arguments or environment variables
 # Usage:
-#   ./deploy-helm.sh                                    # Use defaults
-#   ./deploy-helm.sh loadtest-values.yaml               # Single values file for loadtest only
-#   CC_VALUES_FILE=cc.yaml ./deploy-helm.sh             # Cluster controller values via env var
-#   CC_VALUES_FILE=cc.yaml ./deploy-helm.sh lt.yaml     # Separate values for both
-LOADTEST_VALUES_FILE="${1:-}"
+#   ./deploy-helm.sh [--kwok-values FILE] [--cc-values FILE] [--loadtest-values FILE]
+#
+# Flags:
+#   --kwok-values FILE       Path to kwok Helm values file (default: ./kwok-values.yaml)
+#   --cc-values FILE         Path to cluster-controller Helm values file
+#   --loadtest-values FILE   Path to loadtest Helm values file
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+KWOK_VALUES_FILE="$SCRIPT_DIR/kwok-values.yaml"
+CC_VALUES_FILE=""
+LOADTEST_VALUES_FILE=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --kwok-values)
+      KWOK_VALUES_FILE="$2"
+      shift 2
+      ;;
+    --cc-values)
+      CC_VALUES_FILE="$2"
+      shift 2
+      ;;
+    --loadtest-values)
+      LOADTEST_VALUES_FILE="$2"
+      shift 2
+      ;;
+    *)
+      echo "Unknown argument: $1"
+      echo "Usage: $0 [--kwok-values FILE] [--cc-values FILE] [--loadtest-values FILE]"
+      exit 1
+      ;;
+  esac
+done
 
 # Configuration
-LOADTEST_CHART_PATH="${LOADTEST_CHART_PATH:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/chart}"
+LOADTEST_CHART_PATH="${LOADTEST_CHART_PATH:-$SCRIPT_DIR/chart}"
 LOADTEST_IMAGE_REPOSITORY="${LOADTEST_IMAGE_REPOSITORY:-us-docker.pkg.dev/castai-hub/library/cluster-controller}"
 LOADTEST_IMAGE_TAG="${LOADTEST_IMAGE_TAG:-latest}"
 CC_IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-$LOADTEST_IMAGE_REPOSITORY}"
 CC_IMAGE_TAG="${IMAGE_TAG:-$LOADTEST_IMAGE_TAG}"
-CC_VALUES_FILE="${CC_VALUES_FILE:-}"  # Cluster controller values file
 DEPLOY_CLUSTER_CONTROLLER="${DEPLOY_CLUSTER_CONTROLLER:-true}"
 NAMESPACE="${NAMESPACE:-castai-agent}"
 RELEASE_NAME="${RELEASE_NAME:-castai-loadtest}"
@@ -29,14 +56,12 @@ helm repo add castai-helm https://castai.github.io/helm-charts || true
 helm repo update
 
 echo "==> Deploying kwok (fake nodes)"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-KWOK_VALUES_PATH="$SCRIPT_DIR/kwok-values.yaml"
 KWOK_FILTER="$SCRIPT_DIR/kwok-filter.sh"
 
 # Deploy kwok with post-renderer to filter out FlowSchema and PriorityClass
 echo "  Filtering out FlowSchema and PriorityClass resources..."
 helm upgrade --namespace "$NAMESPACE" --create-namespace --install kwok kwok/kwok \
-  --values "$KWOK_VALUES_PATH" \
+  --values "$KWOK_VALUES_FILE" \
   --post-renderer "$KWOK_FILTER"
 
 helm upgrade --namespace "$NAMESPACE" --create-namespace --install kwok-stages kwok/stage-fast

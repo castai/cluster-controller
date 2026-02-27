@@ -1,58 +1,41 @@
-# Usage Guide: Passing Values to Cluster Controller
+# Usage Guide: deploy-helm.sh
 
-## Overview
+## Synopsis
 
-The `deploy-helm.sh` script supports multiple ways to configure the cluster-controller deployment.
-
-## Methods
-
-### 1. Environment Variable (Recommended for Separate Values Files)
-
-```bash
-# Pass cluster-controller values via environment variable
-CC_VALUES_FILE=cluster-controller-values.yaml ./deploy-helm.sh
-
-# Pass both cluster-controller and loadtest values
-CC_VALUES_FILE=cc-values.yaml ./deploy-helm.sh loadtest-values.yaml
+```
+./deploy-helm.sh [--kwok-values FILE] [--cc-values FILE] [--loadtest-values FILE]
 ```
 
-### 2. Command Line Argument (Loadtest Only)
+## Flags
 
-```bash
-# Pass loadtest values as first argument
-./deploy-helm.sh loadtest-values.yaml
-```
-
-### 3. Environment Variables for Specific Settings
-
-```bash
-# Image configuration
-export IMAGE_REPOSITORY="us-docker.pkg.dev/castai-hub/library/cluster-controller"
-export IMAGE_TAG="v1.2.3"
-
-# Deployment options
-export DEPLOY_CLUSTER_CONTROLLER="true"
-export KWOK_REPLICAS="50"
-export NAMESPACE="castai-agent"
-
-./deploy-helm.sh
-```
-
-### 4. Direct Helm Commands (Advanced)
-
-```bash
-# Deploy loadtest stack first
-./deploy-helm.sh
-
-# Then manually upgrade cluster-controller with custom values
-helm upgrade cluster-controller castai-helm/castai-cluster-controller \
-  -n castai-agent \
-  -f my-cluster-controller-values.yaml
-```
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--kwok-values FILE` | `./kwok-values.yaml` | Path to kwok Helm values file |
+| `--cc-values FILE` | (none) | Path to cluster-controller Helm values file |
+| `--loadtest-values FILE` | (none) | Path to loadtest Helm values file |
 
 ## Examples
 
-### Example 1: Custom Cluster Controller Resources
+### Deploy with defaults
+
+```bash
+./deploy-helm.sh
+```
+
+### Custom kwok node count
+
+Create `my-kwok-values.yaml`:
+```yaml
+replicas: 100
+priorityClass:
+  enabled: false
+```
+
+```bash
+./deploy-helm.sh --kwok-values my-kwok-values.yaml
+```
+
+### Custom cluster controller values
 
 Create `cc-values.yaml`:
 ```yaml
@@ -65,26 +48,13 @@ resources:
     cpu: "2000m"
 
 replicaCount: 2
-
-podLabels:
-  environment: loadtest
-  team: platform
 ```
 
-Deploy:
 ```bash
-CC_VALUES_FILE=cc-values.yaml ./deploy-helm.sh
+./deploy-helm.sh --cc-values cc-values.yaml
 ```
 
-### Example 2: Custom Images for Both
-
-Create `cc-values.yaml`:
-```yaml
-image:
-  repository: "my-registry/cluster-controller"
-  tag: "feature-branch"
-  pullPolicy: Always
-```
+### Custom loadtest agent / observability values
 
 Create `loadtest-values.yaml`:
 ```yaml
@@ -92,102 +62,6 @@ loadtestAgent:
   image:
     repository: "my-registry/cluster-controller"
     tag: "feature-branch"
-```
-
-Deploy:
-```bash
-CC_VALUES_FILE=cc-values.yaml ./deploy-helm.sh loadtest-values.yaml
-```
-
-### Example 3: Environment Variables Only
-
-```bash
-# Quick image update without values files
-export IMAGE_TAG="v1.2.3"
-export LOADTEST_IMAGE_TAG="v1.2.3"
-./deploy-helm.sh
-```
-
-### Example 4: Disable Cluster Controller
-
-```bash
-# Deploy only the loadtest observability stack
-export DEPLOY_CLUSTER_CONTROLLER="false"
-./deploy-helm.sh
-```
-
-### Example 5: Scale Up KWOK Nodes
-
-```bash
-# Create more fake nodes for heavier load testing
-export KWOK_REPLICAS="100"
-./deploy-helm.sh
-```
-
-### Example 6: Custom Prometheus Resources in Loadtest Stack
-
-Create `loadtest-values.yaml`:
-```yaml
-prometheus:
-  server:
-    resources:
-      requests:
-        memory: "16Gi"
-        cpu: "8"
-
-grafana:
-  resources:
-    requests:
-      memory: "8Gi"
-      cpu: "4"
-
-loadtestAgent:
-  enabled: true
-```
-
-Deploy:
-```bash
-./deploy-helm.sh loadtest-values.yaml
-```
-
-## Complete Example: Production-like Setup
-
-```bash
-# 1. Create cluster-controller values
-cat > cc-prod.yaml <<EOF
-image:
-  repository: "us-docker.pkg.dev/castai-hub/library/cluster-controller"
-  tag: "v2.1.0"
-  pullPolicy: Always
-
-resources:
-  requests:
-    memory: "4Gi"
-    cpu: "2000m"
-  limits:
-    memory: "8Gi"
-    cpu: "4000m"
-
-replicaCount: 3
-
-autoscaling:
-  enabled: true
-
-podLabels:
-  environment: loadtest
-  version: v2.1.0
-EOF
-
-# 2. Create loadtest values
-cat > loadtest-prod.yaml <<EOF
-loadtestAgent:
-  image:
-    repository: "us-docker.pkg.dev/castai-hub/library/cluster-controller"
-    tag: "v2.1.0"
-  resources:
-    requests:
-      memory: "2Gi"
-      cpu: "1000m"
 
 prometheus:
   server:
@@ -195,40 +69,44 @@ prometheus:
       requests:
         memory: "16Gi"
         cpu: "8"
-    retention: "30d"
-
-grafana:
-  resources:
-    requests:
-      memory: "8Gi"
-      cpu: "4"
-
-loki:
-  loki:
-    limits_config:
-      retention_period: 720h  # 30 days
-EOF
-
-# 3. Deploy with custom KWOK scale
-export KWOK_REPLICAS="200"
-CC_VALUES_FILE=cc-prod.yaml ./deploy-helm.sh loadtest-prod.yaml
 ```
 
-## Environment Variables Reference
+```bash
+./deploy-helm.sh --loadtest-values loadtest-values.yaml
+```
+
+### All three at once
+
+```bash
+./deploy-helm.sh \
+  --kwok-values my-kwok-values.yaml \
+  --cc-values cc-values.yaml \
+  --loadtest-values loadtest-values.yaml
+```
+
+### Production-like setup
+
+```bash
+./deploy-helm.sh \
+  --kwok-values kwok-prod.yaml \
+  --cc-values cc-prod.yaml \
+  --loadtest-values loadtest-prod.yaml
+```
+
+## Environment Variables
+
+The following variables are still used for configuration that does not correspond to a values file:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CC_VALUES_FILE` | (none) | Path to cluster-controller values file |
-| `LOADTEST_VALUES_FILE` | $1 | Path to loadtest values file (or first argument) |
-| `IMAGE_REPOSITORY` | us-docker.pkg.dev/castai-hub/library/cluster-controller | Cluster controller image repository |
-| `IMAGE_TAG` | latest | Cluster controller image tag |
-| `LOADTEST_IMAGE_REPOSITORY` | $IMAGE_REPOSITORY | Loadtest agent image repository |
-| `LOADTEST_IMAGE_TAG` | $IMAGE_TAG | Loadtest agent image tag |
-| `DEPLOY_CLUSTER_CONTROLLER` | true | Whether to deploy cluster controller |
-| `KWOK_REPLICAS` | 10 | Number of fake nodes to create |
-| `NAMESPACE` | castai-agent | Kubernetes namespace |
-| `RELEASE_NAME` | castai-loadtest | Helm release name for loadtest stack |
-| `LOADTEST_CHART_PATH` | ./chart | Path to loadtest Helm chart |
+| `IMAGE_REPOSITORY` | `us-docker.pkg.dev/castai-hub/library/cluster-controller` | Cluster controller image repository |
+| `IMAGE_TAG` | `latest` | Cluster controller image tag |
+| `LOADTEST_IMAGE_REPOSITORY` | `$IMAGE_REPOSITORY` | Loadtest agent image repository |
+| `LOADTEST_IMAGE_TAG` | `$IMAGE_TAG` | Loadtest agent image tag |
+| `DEPLOY_CLUSTER_CONTROLLER` | `true` | Whether to deploy cluster controller |
+| `NAMESPACE` | `castai-agent` | Kubernetes namespace |
+| `RELEASE_NAME` | `castai-loadtest` | Helm release name for loadtest stack |
+| `LOADTEST_CHART_PATH` | `./chart` | Path to loadtest Helm chart |
 
 ## Verification
 
@@ -243,58 +121,27 @@ helm get values castai-loadtest -n castai-agent
 
 # Check running pods
 kubectl get pods -n castai-agent
-
-# Check cluster-controller logs
-kubectl logs -n castai-agent -l app.kubernetes.io/name=castai-cluster-controller --tail=50
 ```
 
 ## Upgrade Existing Deployment
 
-### Upgrade Cluster Controller Only
-
 ```bash
-helm upgrade cluster-controller castai-helm/castai-cluster-controller \
-  -n castai-agent \
-  -f cc-updated-values.yaml
-```
-
-### Upgrade Loadtest Stack Only
-
-```bash
-helm upgrade castai-loadtest ./chart \
-  -n castai-agent \
-  -f loadtest-updated-values.yaml
-```
-
-### Upgrade Both
-
-```bash
-CC_VALUES_FILE=cc-updated.yaml ./deploy-helm.sh loadtest-updated.yaml
+# Upgrade with updated values
+./deploy-helm.sh \
+  --cc-values cc-updated.yaml \
+  --loadtest-values loadtest-updated.yaml
 ```
 
 ## Troubleshooting
 
-### Check what values are being used:
-
 ```bash
-# Dry-run to see what would be deployed
+# Dry-run to preview what would be deployed
 helm upgrade cluster-controller castai-helm/castai-cluster-controller \
   -n castai-agent \
-  -f my-values.yaml \
+  -f cc-values.yaml \
   --dry-run --debug
-```
 
-### See current configuration:
-
-```bash
+# See current configuration
 helm get values cluster-controller -n castai-agent --all
-```
-
-### Reset to defaults:
-
-```bash
-# Redeploy without custom values
-export DEPLOY_CLUSTER_CONTROLLER="true"
-unset CC_VALUES_FILE
-./deploy-helm.sh
+helm get values castai-loadtest -n castai-agent --all
 ```

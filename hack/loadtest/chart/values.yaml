@@ -19,7 +19,10 @@ loadtestAgent:
     type: ClusterIP
     port: 8080
 
-  resources: {}
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "1"
 
   # Node affinity to avoid kwok nodes
   affinity:
@@ -39,12 +42,12 @@ prometheus:
   server:
     image:
       repository: prom/prometheus
-      tag: latest
+      tag: v2.55.1
 
     resources:
       requests:
-        memory: "8Gi"
-        cpu: "4"
+        memory: "6Gi"
+        cpu: "2"
 
     affinity:
       nodeAffinity:
@@ -64,39 +67,52 @@ prometheus:
     persistentVolume:
       enabled: false
 
-    # Custom scrape configs
-    extraScrapeConfigs: |
-      - job_name: 'cluster-controller'
-        scrape_interval: 5s
-        kubernetes_sd_configs:
-        - role: pod
-          namespaces:
-            names:
-              - castai-agent
-        relabel_configs:
-          - source_labels: [ __meta_kubernetes_pod_label_app_kubernetes_io_name ]
-            action: keep
-            regex: castai-cluster-controller
-          - source_labels: [ __address__ ]
-            regex: ([^:]+)(?::\d+)?
-            target_label: __address__
-            replacement: $1:9090
+    global:
+      scrape_interval: 5s
+      scrape_timeout: 4s
 
-      - job_name: 'loadtest-agent'
-        scrape_interval: 5s
-        kubernetes_sd_configs:
-        - role: pod
-          namespaces:
-            names:
-              - castai-agent
-        relabel_configs:
-          - source_labels: [ __meta_kubernetes_pod_label_app ]
-            action: keep
-            regex: castai-loadtest-agent
-          - source_labels: [ __address__ ]
-            regex: ([^:]+)(?::\d+)?
-            target_label: __address__
-            replacement: $1:8080
+  # extraScrapeConfigs must be at chart root level (not under server:)
+  extraScrapeConfigs: |
+    - job_name: 'cluster-controller'
+      kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - castai-agent
+      relabel_configs:
+        - source_labels: [ __meta_kubernetes_pod_label_app_kubernetes_io_name ]
+          action: keep
+          regex: castai-cluster-controller
+        - source_labels: [ __address__ ]
+          regex: ([^:]+)(?::\d+)?
+          target_label: __address__
+          replacement: $1:9090
+
+    - job_name: 'loadtest-agent'
+      kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - castai-agent
+      relabel_configs:
+        - source_labels: [ __meta_kubernetes_pod_label_app ]
+          action: keep
+          regex: castai-loadtest-agent
+        - source_labels: [ __address__ ]
+          regex: ([^:]+)(?::\d+)?
+          target_label: __address__
+          replacement: $1:8080
+
+    - job_name: 'kube-state-metrics'
+      kubernetes_sd_configs:
+      - role: service
+        namespaces:
+          names:
+            - castai-agent
+      relabel_configs:
+        - source_labels: [__meta_kubernetes_service_label_app_kubernetes_io_name]
+          action: keep
+          regex: kube-state-metrics
 
   # Disable components we don't need
   alertmanager:
@@ -117,11 +133,11 @@ grafana:
 
   image:
     repository: grafana/grafana
-    tag: latest
+    tag: "11.4.0"
 
   resources:
     requests:
-      memory: "4Gi"
+      memory: "6Gi"
       cpu: "2"
 
   affinity:
@@ -151,17 +167,20 @@ grafana:
       org_role: Admin
 
   # Configure datasources
+  # UIDs must match the hardcoded UIDs in cluster-controller-dashboard.json
   datasources:
     datasources.yaml:
       apiVersion: 1
       datasources:
         - name: Prometheus
           type: prometheus
+          uid: PBFA97CFB590B2093
           access: proxy
           url: http://castai-loadtest-prometheus-server:9090
           isDefault: true
         - name: Loki
           type: loki
+          uid: P8E80F9AEF21F6940
           access: proxy
           url: http://castai-loadtest-loki:3100
           jsonData:
@@ -191,27 +210,29 @@ grafana:
 loki:
   enabled: true
 
-  # Use single binary deployment mode for simplicity
   deploymentMode: SingleBinary
 
   image:
     repository: grafana/loki
-    tag: latest
+    tag: "3.3.1"
 
   loki:
     auth_enabled: false
 
     commonConfig:
       replication_factor: 1
+      ring:
+        kvstore:
+          store: inmemory
 
     storage:
-      type: inmemory
+      type: filesystem
 
     schemaConfig:
       configs:
-        - from: 2020-10-24
+        - from: 2024-01-01
           store: tsdb
-          object_store: inmemory
+          object_store: filesystem
           schema: v13
           index:
             prefix: index_
@@ -222,22 +243,21 @@ loki:
       max_query_series: 10000
       max_query_lookback: 168h
 
-    # Disable ruler storage requirement
-    ruler:
-      enable_api: false
-      enable_alertmanager_v2: false
+    rulerConfig:
+      wal:
+        dir: /var/loki/ruler-wal
       storage:
         type: local
         local:
-          directory: /tmp/rules
+          directory: /var/loki/rules
 
   singleBinary:
     replicas: 1
 
     resources:
       requests:
-        memory: "2Gi"
-        cpu: "1"
+        memory: "6Gi"
+        cpu: "2"
 
     affinity:
       nodeAffinity:
@@ -249,11 +269,23 @@ loki:
                   values:
                     - kwok
 
-    # Disable persistence for load testing
+    # No PVC — use an emptyDir so /var/loki is writable despite readOnlyRootFilesystem
     persistence:
       enabled: false
 
-  # Disable unnecessary components for load testing
+    extraVolumes:
+      - name: loki-data
+        emptyDir: {}
+
+    extraVolumeMounts:
+      - name: loki-data
+        mountPath: /var/loki
+
+  # Disable sidecar rules (no alerting needed)
+  sidecar:
+    rules:
+      enabled: false
+
   gateway:
     enabled: false
 
@@ -266,7 +298,6 @@ loki:
   backend:
     replicas: 0
 
-  # Disable monitoring canary (not needed for load testing)
   monitoring:
     lokiCanary:
       enabled: false
@@ -283,7 +314,7 @@ promtail:
 
   image:
     repository: grafana/promtail
-    tag: latest
+    tag: "3.0.0"
 
   resources:
     requests:
@@ -308,20 +339,24 @@ promtail:
           pipeline_stages:
             - cri: {}
           relabel_configs:
-            - source_labels: [__meta_kubernetes_pod_node_name]
-              target_label: node_name
+            # Scrape cluster-controller and loadtest-agent pods
+            - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name, __meta_kubernetes_pod_label_app]
+              action: keep
+              regex: .*(castai-cluster-controller|castai-loadtest-agent).*
+            # Add namespace label
             - source_labels: [__meta_kubernetes_namespace]
               target_label: namespace
+            # Add pod name label
             - source_labels: [__meta_kubernetes_pod_name]
               target_label: pod
+            # Add container name label
             - source_labels: [__meta_kubernetes_pod_container_name]
               target_label: container
-            - replacement: /var/log/pods/*$1/*.log
-              separator: /
-              source_labels:
-                - __meta_kubernetes_pod_uid
-                - __meta_kubernetes_pod_container_name
+            # Set the log path matching Kubernetes pod log structure
+            # Use pod UID to construct path: /var/log/pods/*<uid>/<container>/*.log
+            - source_labels: [__meta_kubernetes_pod_uid]
               target_label: __path__
+              replacement: /var/log/pods/*$1/*/*.log
 
 # kube-state-metrics configuration
 kube-state-metrics:

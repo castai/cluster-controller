@@ -54,8 +54,10 @@ deploy-loadtest: release
 	IMAGE_TAG=$(VERSION) \
 	LOADTEST_IMAGE_REPOSITORY=$(DOCKER_REPOSITORY) \
 	LOADTEST_IMAGE_TAG=$(VERSION) \
-	CC_VALUES_FILE=$(CC_VALUES_FILE) \
-	./hack/loadtest/deploy-helm.sh $(LOADTEST_VALUES_FILE)
+	./hack/loadtest/deploy-helm.sh \
+	$(if $(KWOK_VALUES_FILE),--kwok-values $(KWOK_VALUES_FILE)) \
+	$(if $(CC_VALUES_FILE),--cc-values $(CC_VALUES_FILE)) \
+	$(if $(LOADTEST_VALUES_FILE),--loadtest-values $(LOADTEST_VALUES_FILE))
 .PHONY: deploy-loadtest
 
 ## deploy-loadtest-only: Deploy loadtest environment without building (uses existing image)
@@ -64,8 +66,10 @@ deploy-loadtest-only:
 	IMAGE_TAG=$(VERSION) \
 	LOADTEST_IMAGE_REPOSITORY=$(DOCKER_REPOSITORY) \
 	LOADTEST_IMAGE_TAG=$(VERSION) \
-	CC_VALUES_FILE=$(CC_VALUES_FILE) \
-	./hack/loadtest/deploy-helm.sh $(LOADTEST_VALUES_FILE)
+	./hack/loadtest/deploy-helm.sh \
+	$(if $(KWOK_VALUES_FILE),--kwok-values $(KWOK_VALUES_FILE)) \
+	$(if $(CC_VALUES_FILE),--cc-values $(CC_VALUES_FILE)) \
+	$(if $(LOADTEST_VALUES_FILE),--loadtest-values $(LOADTEST_VALUES_FILE))
 .PHONY: deploy-loadtest-only
 
 ## undeploy-loadtest: Remove the loadtest environment

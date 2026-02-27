@@ -39,8 +39,9 @@ Build, push Docker image, and deploy the complete loadtest environment.
 
 **Optional variables:**
 - `DOCKER_REPOSITORY` - Docker repository (default: `us-docker.pkg.dev/castai-hub/library/cluster-controller`)
-- `LOADTEST_VALUES_FILE` - Path to loadtest values file
-- `CC_VALUES_FILE` - Path to cluster-controller values file
+- `KWOK_VALUES_FILE` - Path to kwok Helm values file
+- `CC_VALUES_FILE` - Path to cluster-controller Helm values file
+- `LOADTEST_VALUES_FILE` - Path to loadtest Helm values file
 - `ARCH` - Architecture to build for (default: auto-detected)
 
 **Example:**
@@ -48,11 +49,11 @@ Build, push Docker image, and deploy the complete loadtest environment.
 # Basic deployment
 make deploy-loadtest VERSION=v1.2.3
 
-# With custom values
+# With custom loadtest values
 make deploy-loadtest VERSION=v1.2.3 LOADTEST_VALUES_FILE=my-values.yaml
 
-# With separate cluster-controller values
-make deploy-loadtest VERSION=v1.2.3 CC_VALUES_FILE=cc.yaml LOADTEST_VALUES_FILE=lt.yaml
+# With all three values files
+make deploy-loadtest VERSION=v1.2.3 KWOK_VALUES_FILE=kwok.yaml CC_VALUES_FILE=cc.yaml LOADTEST_VALUES_FILE=lt.yaml
 
 # With custom repository
 make deploy-loadtest VERSION=latest DOCKER_REPOSITORY=my-registry/cluster-controller
@@ -204,6 +205,7 @@ prometheus:
 EOF
 
 make deploy-loadtest-only VERSION=v1.0.0 LOADTEST_VALUES_FILE=test-config-v2.yaml
+
 ```
 
 ### Example 3: Production-like Load Test
@@ -237,7 +239,8 @@ EOF
 make deploy-loadtest \
   VERSION=v2.1.0 \
   CC_VALUES_FILE=cc-prod.yaml \
-  LOADTEST_VALUES_FILE=loadtest-prod.yaml
+  LOADTEST_VALUES_FILE=loadtest-prod.yaml \
+  KWOK_VALUES_FILE=kwok-prod.yaml
 
 # 3. Monitor in Grafana
 make loadtest-forward-grafana
@@ -273,19 +276,13 @@ make loadtest-logs
 These can be set in your shell or passed to make:
 
 ```bash
-# Set defaults in shell
-export VERSION=v1.2.3
-export DOCKER_REPOSITORY=my-registry/cluster-controller
-export LOADTEST_VALUES_FILE=my-values.yaml
-export CC_VALUES_FILE=cc-values.yaml
-
-# Then just run
-make deploy-loadtest
-```
-
-Or pass inline:
-```bash
-VERSION=v1.2.3 LOADTEST_VALUES_FILE=my-values.yaml make deploy-loadtest
+# Pass inline
+make deploy-loadtest \
+  VERSION=v1.2.3 \
+  DOCKER_REPOSITORY=my-registry/cluster-controller \
+  KWOK_VALUES_FILE=kwok-values.yaml \
+  CC_VALUES_FILE=cc-values.yaml \
+  LOADTEST_VALUES_FILE=my-values.yaml
 ```
 
 ## Common Issues
@@ -387,4 +384,3 @@ deploy-loadtest:
 
 - [README.md](README.md) - General loadtest documentation
 - [USAGE.md](USAGE.md) - Detailed deploy-helm.sh usage
-- [MIGRATION.md](MIGRATION.md) - Migration from old setup
