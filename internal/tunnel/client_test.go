@@ -66,9 +66,10 @@ func TestProxyRequest(t *testing.T) {
 		assert.Contains(t, string(resp.body), "not allowed")
 	})
 
-	t.Run("multi-value headers are preserved", func(t *testing.T) {
+	t.Run("allowed headers are forwarded", func(t *testing.T) {
 		kubeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			assert.Equal(t, []string{"val1", "val2"}, r.Header.Values("X-Custom"))
+			assert.Equal(t, "application/json", r.Header.Get("Accept"))
+			assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 			w.Header().Add("X-Response", "r1")
 			w.Header().Add("X-Response", "r2")
 			w.WriteHeader(http.StatusOK)
@@ -80,13 +81,38 @@ func TestProxyRequest(t *testing.T) {
 			Method:    http.MethodGet,
 			Path:      "/test",
 			Headers: []*pb.Header{
-				{Key: "X-Custom", Value: "val1"},
-				{Key: "X-Custom", Value: "val2"},
+				{Key: "Accept", Value: "application/json"},
+				{Key: "Content-Type", Value: "application/json"},
 			},
 		})
 
 		assert.Equal(t, int32(http.StatusOK), resp.statusCode)
 		assert.ElementsMatch(t, []string{"r1", "r2"}, resp.headers["X-Response"])
+	})
+
+	t.Run("sensitive headers are stripped", func(t *testing.T) {
+		kubeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Empty(t, r.Header.Get("Authorization"))
+			assert.Empty(t, r.Header.Get("Impersonate-User"))
+			assert.Empty(t, r.Header.Get("Impersonate-Group"))
+			assert.Equal(t, "application/json", r.Header.Get("Accept"))
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer kubeServer.Close()
+
+		resp := proxyViaTestServer(t, kubeServer, &pb.HttpRequest{
+			RequestId: "req-stripped",
+			Method:    http.MethodGet,
+			Path:      "/test",
+			Headers: []*pb.Header{
+				{Key: "Authorization", Value: "Bearer stolen-token"},
+				{Key: "Impersonate-User", Value: "cluster-admin"},
+				{Key: "Impersonate-Group", Value: "system:masters"},
+				{Key: "Accept", Value: "application/json"},
+			},
+		})
+
+		assert.Equal(t, int32(http.StatusOK), resp.statusCode)
 	})
 
 	t.Run("kube server error returns 502", func(t *testing.T) {
@@ -213,54 +239,6 @@ func TestRequestValidation(t *testing.T) {
 		assert.Contains(t, string(resp.body), "not allowed")
 	})
 
-	t.Run("path with /exec rejected with 403", func(t *testing.T) {
-		kubeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			t.Fatal("should not reach kube server")
-		}))
-		defer kubeServer.Close()
-
-		resp := proxyViaTestServer(t, kubeServer, &pb.HttpRequest{
-			RequestId: "req-exec",
-			Method:    http.MethodGet,
-			Path:      "/api/v1/namespaces/default/pods/foo/exec",
-		})
-
-		assert.Equal(t, int32(http.StatusForbidden), resp.statusCode)
-		assert.Contains(t, string(resp.body), "not allowed")
-	})
-
-	t.Run("path with /attach rejected with 403", func(t *testing.T) {
-		kubeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			t.Fatal("should not reach kube server")
-		}))
-		defer kubeServer.Close()
-
-		resp := proxyViaTestServer(t, kubeServer, &pb.HttpRequest{
-			RequestId: "req-attach",
-			Method:    http.MethodGet,
-			Path:      "/api/v1/namespaces/default/pods/foo/attach",
-		})
-
-		assert.Equal(t, int32(http.StatusForbidden), resp.statusCode)
-		assert.Contains(t, string(resp.body), "not allowed")
-	})
-
-	t.Run("path with /portforward rejected with 403", func(t *testing.T) {
-		kubeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			t.Fatal("should not reach kube server")
-		}))
-		defer kubeServer.Close()
-
-		resp := proxyViaTestServer(t, kubeServer, &pb.HttpRequest{
-			RequestId: "req-pf",
-			Method:    http.MethodGet,
-			Path:      "/api/v1/namespaces/default/pods/foo/portforward",
-		})
-
-		assert.Equal(t, int32(http.StatusForbidden), resp.statusCode)
-		assert.Contains(t, string(resp.body), "not allowed")
-	})
-
 	t.Run("path without leading slash rejected with 403", func(t *testing.T) {
 		kubeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			t.Fatal("should not reach kube server")
@@ -275,6 +253,86 @@ func TestRequestValidation(t *testing.T) {
 
 		assert.Equal(t, int32(http.StatusForbidden), resp.statusCode)
 		assert.Contains(t, string(resp.body), "must start with /")
+	})
+
+	t.Run("blocked subresources rejected with 403", func(t *testing.T) {
+		kubeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Fatal("should not reach kube server")
+		}))
+		defer kubeServer.Close()
+
+		for _, sub := range []string{"exec", "attach", "portforward", "proxy", "token", "ephemeralcontainers"} {
+			resp := proxyViaTestServer(t, kubeServer, &pb.HttpRequest{
+				RequestId: "req-" + sub,
+				Method:    http.MethodGet,
+				Path:      "/api/v1/namespaces/default/pods/foo/" + sub,
+			})
+
+			assert.Equal(t, int32(http.StatusForbidden), resp.statusCode, "subresource %s should be blocked", sub)
+			assert.Contains(t, string(resp.body), "not allowed", "subresource %s should be blocked", sub)
+		}
+	})
+
+	t.Run("blocked subresources on cluster-scoped resources", func(t *testing.T) {
+		kubeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Fatal("should not reach kube server")
+		}))
+		defer kubeServer.Close()
+
+		resp := proxyViaTestServer(t, kubeServer, &pb.HttpRequest{
+			RequestId: "req-node-proxy",
+			Method:    http.MethodGet,
+			Path:      "/api/v1/nodes/my-node/proxy",
+		})
+
+		assert.Equal(t, int32(http.StatusForbidden), resp.statusCode)
+	})
+
+	t.Run("blocked subresources on named API groups", func(t *testing.T) {
+		kubeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Fatal("should not reach kube server")
+		}))
+		defer kubeServer.Close()
+
+		resp := proxyViaTestServer(t, kubeServer, &pb.HttpRequest{
+			RequestId: "req-apis-exec",
+			Method:    http.MethodGet,
+			Path:      "/apis/apps/v1/namespaces/default/deployments/foo/exec",
+		})
+
+		assert.Equal(t, int32(http.StatusForbidden), resp.statusCode)
+	})
+
+	t.Run("URL-encoded subresource rejected with 403", func(t *testing.T) {
+		kubeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Fatal("should not reach kube server")
+		}))
+		defer kubeServer.Close()
+
+		resp := proxyViaTestServer(t, kubeServer, &pb.HttpRequest{
+			RequestId: "req-encoded-exec",
+			Method:    http.MethodGet,
+			Path:      "/api/v1/namespaces/default/pods/foo/%65xec",
+		})
+
+		assert.Equal(t, int32(http.StatusForbidden), resp.statusCode)
+		assert.Contains(t, string(resp.body), "not allowed")
+	})
+
+	t.Run("resource named 'exec' is allowed - not a subresource", func(t *testing.T) {
+		kubeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{"kind":"Pod"}`)
+		}))
+		defer kubeServer.Close()
+
+		resp := proxyViaTestServer(t, kubeServer, &pb.HttpRequest{
+			RequestId: "req-pod-named-exec",
+			Method:    http.MethodGet,
+			Path:      "/api/v1/namespaces/default/pods/exec",
+		})
+
+		assert.Equal(t, int32(http.StatusOK), resp.statusCode)
 	})
 
 	t.Run("pod name containing exec substring is allowed", func(t *testing.T) {
@@ -292,6 +350,55 @@ func TestRequestValidation(t *testing.T) {
 
 		assert.Equal(t, int32(http.StatusOK), resp.statusCode)
 	})
+
+	t.Run("regular resource paths are allowed", func(t *testing.T) {
+		kubeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer kubeServer.Close()
+
+		for _, path := range []string{
+			"/api/v1/namespaces",
+			"/api/v1/namespaces/default/pods",
+			"/api/v1/namespaces/default/pods/my-pod",
+			"/api/v1/namespaces/default/pods/my-pod/log",
+			"/api/v1/nodes",
+			"/api/v1/nodes/my-node",
+			"/apis/apps/v1/namespaces/default/deployments",
+		} {
+			resp := proxyViaTestServer(t, kubeServer, &pb.HttpRequest{
+				RequestId: "req-ok",
+				Method:    http.MethodGet,
+				Path:      path,
+			})
+
+			assert.Equal(t, int32(http.StatusOK), resp.statusCode, "path %s should be allowed", path)
+		}
+	})
+}
+
+func TestExtractSubresource(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{"namespaced subresource", "/api/v1/namespaces/default/pods/foo/exec", "exec"},
+		{"namespaced get - no subresource", "/api/v1/namespaces/default/pods/exec", ""},
+		{"namespaced list - no subresource", "/api/v1/namespaces/default/pods", ""},
+		{"cluster-scoped subresource", "/api/v1/nodes/my-node/proxy", "proxy"},
+		{"cluster-scoped get - no subresource", "/api/v1/nodes/my-node", ""},
+		{"named API group subresource", "/apis/apps/v1/namespaces/default/deployments/foo/status", "status"},
+		{"named API group get - no subresource", "/apis/apps/v1/namespaces/default/deployments/foo", ""},
+		{"non-API path - no subresource", "/healthz", ""},
+		{"root path - no subresource", "/", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, extractSubresource(tt.path))
+		})
+	}
 }
 
 func TestAuthMetadata(t *testing.T) {

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -191,9 +192,14 @@ func (c *Client) subscribe(ctx context.Context, client pb.ClusterTunnelClient) e
 }
 
 func (c *Client) proxyRequest(ctx context.Context, client pb.ClusterTunnelClient, req *pb.HttpRequest) {
-	log := c.log.WithField("request_id", req.GetRequestId())
+	log := c.log.WithFields(logrus.Fields{
+		"request_id": req.GetRequestId(),
+		"method":     req.GetMethod(),
+		"path":       req.GetPath(),
+	})
 
 	if err := c.validateRequest(req); err != nil {
+		log.WithError(err).Warn("request rejected")
 		c.sendErrorResponse(client, req.GetRequestId(), http.StatusForbidden, err.Error())
 		return
 	}
@@ -210,6 +216,9 @@ func (c *Client) proxyRequest(ctx context.Context, client pb.ClusterTunnelClient
 	}
 
 	for _, h := range req.GetHeaders() {
+		if !isAllowedHeader(h.GetKey()) {
+			continue
+		}
 		httpReq.Header.Add(h.GetKey(), h.GetValue())
 	}
 
@@ -219,6 +228,8 @@ func (c *Client) proxyRequest(ctx context.Context, client pb.ClusterTunnelClient
 		return
 	}
 	defer resp.Body.Close()
+
+	log.WithField("status", resp.StatusCode).Info("proxied request")
 
 	md := metadata.Pairs(metadataKeyRequestID, req.GetRequestId())
 	streamCtx := metadata.NewOutgoingContext(ctx, md)
@@ -269,23 +280,81 @@ func (c *Client) proxyRequest(ctx context.Context, client pb.ClusterTunnelClient
 	}
 }
 
+var blockedSubresources = map[string]bool{
+	"exec":                true,
+	"attach":              true,
+	"portforward":         true,
+	"proxy":               true,
+	"token":               true,
+	"ephemeralcontainers": true,
+}
+
 func (c *Client) validateRequest(req *pb.HttpRequest) error {
 	if req.GetMethod() != http.MethodGet {
 		return fmt.Errorf("method %s not allowed", req.GetMethod())
 	}
 
-	path := req.GetPath()
+	path, err := url.PathUnescape(req.GetPath())
+	if err != nil {
+		return fmt.Errorf("invalid path encoding: %w", err)
+	}
 	if !strings.HasPrefix(path, "/") {
 		return fmt.Errorf("path must start with /")
 	}
-	for seg := range strings.SplitSeq(path, "/") {
-		switch seg {
-		case "exec", "attach", "portforward":
-			return fmt.Errorf("path %s not allowed", path)
-		}
+
+	if sub := extractSubresource(path); blockedSubresources[sub] {
+		return fmt.Errorf("subresource %q not allowed", sub)
 	}
 
 	return nil
+}
+
+// extractSubresource parses a K8s API path and returns the subresource segment
+// if present. The K8s API path structure after stripping the prefix is:
+//
+//	/api/v1/{resource}                                          → list (cluster-scoped)
+//	/api/v1/{resource}/{name}                                   → get (cluster-scoped)
+//	/api/v1/{resource}/{name}/{subresource}                     → subresource (cluster-scoped)
+//	/api/v1/namespaces/{ns}/{resource}                          → list (namespaced)
+//	/api/v1/namespaces/{ns}/{resource}/{name}                   → get (namespaced)
+//	/api/v1/namespaces/{ns}/{resource}/{name}/{subresource}     → subresource (namespaced)
+//	/apis/{group}/{version}/... same patterns                   → named API groups
+func extractSubresource(path string) string {
+	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
+
+	// Strip API prefix: "api/v1/..." or "apis/{group}/{version}/..."
+	switch {
+	case len(parts) >= 2 && parts[0] == "api":
+		parts = parts[2:] // skip "api", version
+	case len(parts) >= 3 && parts[0] == "apis":
+		parts = parts[3:] // skip "apis", group, version
+	default:
+		return ""
+	}
+
+	// Strip "namespaces/{ns}" if present.
+	if len(parts) >= 2 && parts[0] == "namespaces" {
+		parts = parts[2:]
+	}
+
+	// parts is now: [resource], [resource, name], or [resource, name, subresource, ...]
+	if len(parts) >= 3 {
+		return parts[2]
+	}
+	return ""
+}
+
+var allowedForwardHeaders = map[string]bool{
+	"Accept":          true,
+	"Accept-Encoding": true,
+	"Content-Type":    true,
+	"Content-Length":  true,
+	"X-Request-Id":    true,
+	"Cache-Control":   true,
+}
+
+func isAllowedHeader(key string) bool {
+	return allowedForwardHeaders[http.CanonicalHeaderKey(key)]
 }
 
 func (c *Client) sendErrorResponse(client pb.ClusterTunnelClient, requestID string, statusCode int32, errMsg string) {
