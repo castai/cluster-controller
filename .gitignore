@@ -3,6 +3,7 @@
 .run
 *.iml
 bin
+tunnel
 .env
 e2e/**/castai-*.json
 

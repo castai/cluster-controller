@@ -194,13 +194,13 @@ func (c *Client) proxyRequest(ctx context.Context, client pb.ClusterTunnelClient
 	log := c.log.WithField("request_id", req.GetRequestId())
 
 	if err := c.validateRequest(req); err != nil {
-		c.sendErrorResponse(ctx, client, req.GetRequestId(), http.StatusForbidden, err.Error())
+		c.sendErrorResponse(client, req.GetRequestId(), http.StatusForbidden, err.Error())
 		return
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, req.GetMethod(), c.kubeURL+req.GetPath(), nil)
 	if err != nil {
-		c.sendErrorResponse(ctx, client, req.GetRequestId(), http.StatusBadGateway, fmt.Sprintf("creating request: %v", err))
+		c.sendErrorResponse(client, req.GetRequestId(), http.StatusBadGateway, fmt.Sprintf("creating request: %v", err))
 		return
 	}
 
@@ -215,7 +215,7 @@ func (c *Client) proxyRequest(ctx context.Context, client pb.ClusterTunnelClient
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		c.sendErrorResponse(ctx, client, req.GetRequestId(), http.StatusBadGateway, fmt.Sprintf("executing request: %v", err))
+		c.sendErrorResponse(client, req.GetRequestId(), http.StatusBadGateway, fmt.Sprintf("executing request: %v", err))
 		return
 	}
 	defer resp.Body.Close()
@@ -288,7 +288,7 @@ func (c *Client) validateRequest(req *pb.HttpRequest) error {
 	return nil
 }
 
-func (c *Client) sendErrorResponse(_ context.Context, client pb.ClusterTunnelClient, requestID string, statusCode int32, errMsg string) {
+func (c *Client) sendErrorResponse(client pb.ClusterTunnelClient, requestID string, statusCode int32, errMsg string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 

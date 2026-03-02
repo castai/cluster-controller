@@ -12,7 +12,6 @@ GOLANGCI_LINT_BIN := golangci-lint
 GOLANGCI_LINT := $(TOOLS_GOBIN_DIR)/$(GOLANGCI_LINT_BIN)-$(GOLANGCI_LINT_VER)
 
 DOCKER_REPOSITORY ?= us-docker.pkg.dev/castai-hub/library/cluster-controller
-SIDECAR_DOCKER_REPOSITORY ?= us-docker.pkg.dev/castai-hub/library/cluster-controller-sidecar
 TUNNEL_DOCKER_REPOSITORY ?= us-docker.pkg.dev/castai-hub/library/cluster-controller-tunnel
 
 ARCH ?= $(shell uname -m)
@@ -31,10 +30,6 @@ build:
 
 push:
 	docker push $(DOCKER_REPOSITORY):$(VERSION)
-
-build-sidecar:
-	CGO_ENABLED=0 GOOS=linux GOARCH=$(ARCH) go build -ldflags "-s -w" -o bin/castai-sidecar-$(ARCH) ./cmd/sidecar
-	docker build --platform=linux/$(ARCH) --build-arg TARGETARCH=$(ARCH) -f Dockerfile.sidecar -t $(SIDECAR_DOCKER_REPOSITORY):$(VERSION) .
 
 build-tunnel:
 	CGO_ENABLED=0 GOOS=linux GOARCH=$(ARCH) go build -ldflags "-s -w" -o bin/castai-tunnel-$(ARCH) ./cmd/tunnel
