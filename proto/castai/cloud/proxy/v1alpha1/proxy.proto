@@ -1,0 +1,43 @@
+syntax = "proto3";
+package clustertunnel.v1alpha1;
+option go_package = "github.com/castai/cluster-controller/internal/tunnel/pb";
+
+service ClusterTunnel {
+  rpc Connect(stream TunnelMessage) returns (stream TunnelMessage);
+}
+
+message TunnelMessage {
+  oneof payload {
+    HttpRequest       http_request        = 1;
+    HttpResponseStart http_response_start = 4;
+    HttpResponseBody  http_response_body  = 5;
+    HttpResponseEnd   http_response_end   = 6;
+    Heartbeat         heartbeat           = 3;
+  }
+}
+
+message HttpRequest {
+  string request_id = 1;
+  string method = 2;
+  string path = 3;
+  repeated Header headers = 4;
+  bytes body = 5;
+}
+
+message HttpResponseStart {
+  string request_id = 1;
+  int32 status_code = 2;
+  repeated Header headers = 3;
+}
+
+message HttpResponseBody {
+  string request_id = 1;
+  bytes data = 2;
+}
+
+message HttpResponseEnd {
+  string request_id = 1;
+}
+
+message Heartbeat { int64 timestamp_ms = 1; }
+message Header { string key = 1; string value = 2; }

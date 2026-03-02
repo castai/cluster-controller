@@ -1,0 +1,12 @@
+FROM debian:bookworm-slim AS build
+ARG TARGETARCH
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+    && curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/${TARGETARCH}/kubectl" \
+    && chmod +x kubectl \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM gcr.io/distroless/static-debian12:nonroot
+ARG TARGETARCH
+COPY --from=build /kubectl /usr/local/bin/kubectl
+COPY bin/castai-sidecar-$TARGETARCH /usr/local/bin/castai-sidecar
+CMD ["castai-sidecar"]

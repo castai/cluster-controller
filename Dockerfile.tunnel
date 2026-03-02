@@ -1,0 +1,4 @@
+FROM gcr.io/distroless/static-debian12:nonroot
+ARG TARGETARCH
+COPY bin/castai-tunnel-$TARGETARCH /usr/local/bin/castai-tunnel
+CMD ["castai-tunnel"]
