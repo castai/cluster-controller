@@ -84,7 +84,9 @@ func (c *Client) Run(ctx context.Context) error {
 		boff := waitext.DefaultExponentialBackoff()
 		err := waitext.Retry(ctx, boff, waitext.Forever, func(ctx context.Context) (bool, error) {
 			if err := c.subscribe(ctx, client); err != nil {
-				c.log.WithError(err).Warn("tunnel subscription failed, retrying")
+				if ctx.Err() == nil {
+					c.log.WithError(err).Warn("tunnel subscription failed, retrying")
+				}
 				return true, err
 			}
 			return false, nil
@@ -162,9 +164,11 @@ func (c *Client) subscribe(ctx context.Context, client pb.ClusterTunnelClient) e
 
 	g, ctx := errgroup.WithContext(ctx)
 
+	var recvErr error
 	for {
 		req, err := stream.Recv()
 		if err != nil {
+			recvErr = err
 			break
 		}
 
@@ -176,6 +180,9 @@ func (c *Client) subscribe(ctx context.Context, client pb.ClusterTunnelClient) e
 
 	_ = g.Wait()
 
+	if recvErr != nil {
+		return fmt.Errorf("subscribe stream ended: %w", recvErr)
+	}
 	return fmt.Errorf("subscribe stream ended")
 }
 

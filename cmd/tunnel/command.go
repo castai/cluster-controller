@@ -31,6 +31,15 @@ func newCommand() *cobra.Command {
 
 func run(ctx context.Context) error {
 	log := logrus.New()
+	if v := os.Getenv("LOG_LEVEL"); v != "" {
+		lvl, err := logrus.ParseLevel(v)
+		if err != nil {
+			return fmt.Errorf("invalid LOG_LEVEL: %w", err)
+		}
+		log.SetLevel(lvl)
+	}
+
+	log.Infof("starting castai-tunnel version %s", Version)
 
 	apiURL := os.Getenv("API_URL")
 	if apiURL == "" {
@@ -103,7 +112,11 @@ func run(ctx context.Context) error {
 
 	go func() {
 		<-ctx.Done()
-		healthSrv.Close()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := healthSrv.Shutdown(shutdownCtx); err != nil {
+			log.WithError(err).Error("health server shutdown")
+		}
 	}()
 
 	log.WithField("address", tunnelAddr).Info("starting tunnel client")

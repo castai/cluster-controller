@@ -7,6 +7,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 )
 
+var Version = "local"
+
 func main() {
 	ctx := signals.SetupSignalHandler()
 	if err := newCommand().ExecuteContext(ctx); err != nil {

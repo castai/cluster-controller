@@ -33,6 +33,15 @@ func newCommand() *cobra.Command {
 
 func run(ctx context.Context) error {
 	log := logrus.New()
+	if v := os.Getenv("LOG_LEVEL"); v != "" {
+		lvl, err := logrus.ParseLevel(v)
+		if err != nil {
+			return fmt.Errorf("invalid LOG_LEVEL: %w", err)
+		}
+		log.SetLevel(lvl)
+	}
+
+	log.Infof("starting castai-sidecar version %s", Version)
 
 	port := defaultPort
 	if v := os.Getenv("KUBECTL_PORT"); v != "" {
@@ -74,7 +83,11 @@ func run(ctx context.Context) error {
 	go func() {
 		<-ctx.Done()
 		log.Info("shutting down")
-		httpSrv.Close()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := httpSrv.Shutdown(shutdownCtx); err != nil {
+			log.WithError(err).Error("http server shutdown")
+		}
 	}()
 
 	if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
