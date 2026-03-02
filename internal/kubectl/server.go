@@ -5,12 +5,19 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
 )
+
+var blockedResourceTypes = map[string]struct{}{
+	"secrets": {},
+	"secret":  {},
+}
 
 type Server struct {
 	log             logrus.FieldLogger
@@ -75,6 +82,11 @@ func (s *Server) handleKubectl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := validateArgs(req.Args); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(r.Context(), s.commandTimeout)
 	defer cancel()
 
@@ -111,6 +123,16 @@ func (s *Server) handleKubectl(w http.ResponseWriter, r *http.Request) {
 		Stderr:   stderr.String(),
 		ExitCode: exitCode,
 	})
+}
+
+func validateArgs(args []string) error {
+	for _, arg := range args[1:] {
+		lower := strings.ToLower(arg)
+		if _, blocked := blockedResourceTypes[lower]; blocked {
+			return fmt.Errorf("resource type %q not allowed", arg)
+		}
+	}
+	return nil
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

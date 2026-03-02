@@ -260,6 +260,38 @@ func TestRequestValidation(t *testing.T) {
 		assert.Equal(t, int32(http.StatusForbidden), resp.statusCode)
 		assert.Contains(t, string(resp.body), "not allowed")
 	})
+
+	t.Run("path without leading slash rejected with 403", func(t *testing.T) {
+		kubeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Fatal("should not reach kube server")
+		}))
+		defer kubeServer.Close()
+
+		resp := proxyViaTestServer(t, kubeServer, &pb.HttpRequest{
+			RequestId: "req-no-slash",
+			Method:    http.MethodGet,
+			Path:      "api/v1/pods",
+		})
+
+		assert.Equal(t, int32(http.StatusForbidden), resp.statusCode)
+		assert.Contains(t, string(resp.body), "must start with /")
+	})
+
+	t.Run("pod name containing exec substring is allowed", func(t *testing.T) {
+		kubeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{"kind":"Pod"}`)
+		}))
+		defer kubeServer.Close()
+
+		resp := proxyViaTestServer(t, kubeServer, &pb.HttpRequest{
+			RequestId: "req-exec-pod",
+			Method:    http.MethodGet,
+			Path:      "/api/v1/namespaces/default/pods/exec-worker/logs",
+		})
+
+		assert.Equal(t, int32(http.StatusOK), resp.statusCode)
+	})
 }
 
 func TestAuthMetadata(t *testing.T) {

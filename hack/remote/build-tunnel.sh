@@ -14,7 +14,7 @@ set -e
 
 cd "$(git rev-parse --show-toplevel)"
 
-DOCKER_IMAGE_REPO="${TUNNEL_DOCKER_REPOSITORY:-docker.io/krystiancast/castai-tunnel}"
+DOCKER_IMAGE_REPO="${TUNNEL_DOCKER_REPOSITORY:-us-docker.pkg.dev/castai-hub/library/cluster-controller-tunnel}"
 ARCH="${ARCH:-amd64}"
 
 if [ -z "$IMAGE_TAG" ]; then

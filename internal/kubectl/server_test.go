@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"runtime"
 	"testing"
 	"time"
 
@@ -77,6 +76,23 @@ func TestHandleKubectl_Validation(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
 	})
 
+	t.Run("blocked resource type secrets returns 400", func(t *testing.T) {
+		rec := postKubectl(h, `{"args": ["get", "secrets"]}`)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+		var resp errorResponse
+		require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
+		assert.Contains(t, resp.Error, "not allowed")
+	})
+
+	t.Run("configmaps are allowed", func(t *testing.T) {
+		srv := newTestServer(func(s *Server) {
+			s.kubectlBin = echoCmd()
+		})
+		rec := postKubectl(srv.Handler(), `{"args": ["get", "cm", "-n", "kube-system"]}`)
+		assert.Equal(t, http.StatusOK, rec.Code)
+	})
+
 	t.Run("wrong HTTP method returns 405", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/kubectl", nil)
@@ -139,23 +155,6 @@ func TestHandleKubectl_BinaryNotFound(t *testing.T) {
 	assert.Contains(t, resp.Error, "failed to execute command")
 }
 
-func echoCmd() string {
-	if runtime.GOOS == "windows" {
-		return "cmd /c echo"
-	}
-	return "echo"
-}
-
-func falseCmd() string {
-	if runtime.GOOS == "windows" {
-		return "cmd /c exit 1"
-	}
-	return "false"
-}
-
-func sleepCmd() string {
-	if runtime.GOOS == "windows" {
-		return "timeout"
-	}
-	return "sleep"
-}
+func echoCmd() string  { return "echo" }
+func falseCmd() string { return "false" }
+func sleepCmd() string { return "sleep" }

@@ -27,8 +27,9 @@ import (
 )
 
 const (
-	defaultKubeURL  = "https://kubernetes.default.svc"
-	streamChunkSize = 32 * 1024
+	defaultKubeURL      = "https://kubernetes.default.svc"
+	streamChunkSize     = 32 * 1024
+	maxConcurrentProxy  = 50
 
 	metadataKeyClusterID  = "x-cluster-id"
 	metadataKeyRequestID  = "x-request-id"
@@ -96,7 +97,12 @@ func (c *Client) Run(ctx context.Context) error {
 			return ctx.Err()
 		}
 		if err != nil {
-			c.log.WithError(err).Error("tunnel retry loop exited unexpectedly")
+			c.log.WithError(err).Error("tunnel retry loop exited unexpectedly, restarting in 5s")
+			select {
+			case <-time.After(5 * time.Second):
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 		}
 	}
 }
@@ -163,6 +169,7 @@ func (c *Client) subscribe(ctx context.Context, client pb.ClusterTunnelClient) e
 	c.log.Info("tunnel connected")
 
 	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(maxConcurrentProxy)
 
 	var recvErr error
 	for {
@@ -180,10 +187,7 @@ func (c *Client) subscribe(ctx context.Context, client pb.ClusterTunnelClient) e
 
 	_ = g.Wait()
 
-	if recvErr != nil {
-		return fmt.Errorf("subscribe stream ended: %w", recvErr)
-	}
-	return fmt.Errorf("subscribe stream ended")
+	return fmt.Errorf("subscribe stream ended: %w", recvErr)
 }
 
 func (c *Client) proxyRequest(ctx context.Context, client pb.ClusterTunnelClient, req *pb.HttpRequest) {
@@ -271,8 +275,12 @@ func (c *Client) validateRequest(req *pb.HttpRequest) error {
 	}
 
 	path := req.GetPath()
-	for _, blocked := range []string{"/exec", "/attach", "/portforward"} {
-		if strings.Contains(path, blocked) {
+	if !strings.HasPrefix(path, "/") {
+		return fmt.Errorf("path must start with /")
+	}
+	for seg := range strings.SplitSeq(path, "/") {
+		switch seg {
+		case "exec", "attach", "portforward":
 			return fmt.Errorf("path %s not allowed", path)
 		}
 	}
@@ -280,7 +288,10 @@ func (c *Client) validateRequest(req *pb.HttpRequest) error {
 	return nil
 }
 
-func (c *Client) sendErrorResponse(ctx context.Context, client pb.ClusterTunnelClient, requestID string, statusCode int32, errMsg string) {
+func (c *Client) sendErrorResponse(_ context.Context, client pb.ClusterTunnelClient, requestID string, statusCode int32, errMsg string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	md := metadata.Pairs(metadataKeyRequestID, requestID)
 	streamCtx := metadata.NewOutgoingContext(ctx, md)
 

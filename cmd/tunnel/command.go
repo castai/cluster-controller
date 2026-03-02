@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -91,21 +92,23 @@ func run(ctx context.Context) error {
 	}
 
 	healthAddr := fmt.Sprintf(":%d", healthPort)
+	healthMux := http.NewServeMux()
+	healthMux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		if client.IsConnected() {
+			w.WriteHeader(http.StatusOK)
+		} else {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+	})
 	healthSrv := &http.Server{
 		Addr:              healthAddr,
 		ReadHeaderTimeout: 5 * time.Second,
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if client.IsConnected() {
-				w.WriteHeader(http.StatusOK)
-			} else {
-				w.WriteHeader(http.StatusServiceUnavailable)
-			}
-		}),
+		Handler:           healthMux,
 	}
 
 	go func() {
 		log.Infof("health server listening on %s", healthAddr)
-		if err := healthSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := healthSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.WithError(err).Error("health server failed")
 		}
 	}()
