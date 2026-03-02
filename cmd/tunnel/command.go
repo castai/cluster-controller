@@ -18,10 +18,7 @@ import (
 	"github.com/castai/cluster-controller/internal/tunnel"
 )
 
-const (
-	defaultHealthPort        = 8091
-	defaultHeartbeatInterval = 30 * time.Second
-)
+const defaultHealthPort = 8091
 
 func newCommand() *cobra.Command {
 	return &cobra.Command{
@@ -44,6 +41,11 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("CLUSTER_ID is required")
 	}
 
+	apiKey := os.Getenv("API_KEY")
+	if apiKey == "" {
+		return fmt.Errorf("API_KEY is required")
+	}
+
 	tunnelAddr := os.Getenv("TUNNEL_ADDRESS")
 	if tunnelAddr == "" {
 		addr, err := deriveTunnelAddress(apiURL)
@@ -51,15 +53,6 @@ func run(ctx context.Context) error {
 			return fmt.Errorf("deriving tunnel address from API_URL: %w", err)
 		}
 		tunnelAddr = addr
-	}
-
-	heartbeatInterval := defaultHeartbeatInterval
-	if v := os.Getenv("TUNNEL_HEARTBEAT_INTERVAL"); v != "" {
-		d, err := time.ParseDuration(v)
-		if err != nil {
-			return fmt.Errorf("invalid TUNNEL_HEARTBEAT_INTERVAL: %w", err)
-		}
-		heartbeatInterval = d
 	}
 
 	healthPort := defaultHealthPort
@@ -77,10 +70,10 @@ func run(ctx context.Context) error {
 	}
 
 	cfg := tunnel.Config{
-		Address:           tunnelAddr,
-		ClusterID:         clusterID,
-		TLSCACert:         os.Getenv("TLS_CA_CERT"),
-		HeartbeatInterval: heartbeatInterval,
+		Address:   tunnelAddr,
+		ClusterID: clusterID,
+		APIKey:    apiKey,
+		TLSCACert: os.Getenv("TLS_CA_CERT"),
 	}
 
 	client, err := tunnel.NewClient(log, cfg, restCfg)

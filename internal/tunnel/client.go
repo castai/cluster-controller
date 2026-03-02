@@ -8,32 +8,38 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sync"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
 	"k8s.io/client-go/rest"
 
 	"github.com/castai/cluster-controller/internal/tunnel/pb"
 	"github.com/castai/cluster-controller/internal/waitext"
+
+	_ "google.golang.org/grpc/encoding/gzip"
 )
 
 const (
-	defaultHeartbeatInterval = 30 * time.Second
-	defaultKubeURL           = "https://kubernetes.default.svc"
-	streamChunkSize          = 32 * 1024 // 32KB
+	defaultKubeURL  = "https://kubernetes.default.svc"
+	streamChunkSize = 32 * 1024
 
-	metadataKeyClusterID = "x-cluster-id"
+	metadataKeyClusterID  = "x-cluster-id"
+	metadataKeyRequestID  = "x-request-id"
+	metadataKeyAuthHeader = "authorization"
 )
 
 type Config struct {
-	Address           string
-	ClusterID         string
-	TLSCACert         string
-	HeartbeatInterval time.Duration
+	Address   string
+	ClusterID string
+	APIKey    string
+	TLSCACert string
 }
 
 type Client struct {
@@ -41,19 +47,13 @@ type Client struct {
 	cfg        Config
 	httpClient *http.Client
 	kubeURL    string
-
-	mu        sync.Mutex
-	connected bool
+	connected  atomic.Bool
 }
 
 func NewClient(log logrus.FieldLogger, cfg Config, restCfg *rest.Config) (*Client, error) {
 	transport, err := rest.TransportFor(restCfg)
 	if err != nil {
 		return nil, fmt.Errorf("creating kube transport: %w", err)
-	}
-
-	if cfg.HeartbeatInterval == 0 {
-		cfg.HeartbeatInterval = defaultHeartbeatInterval
 	}
 
 	return &Client{
@@ -67,11 +67,24 @@ func NewClient(log logrus.FieldLogger, cfg Config, restCfg *rest.Config) (*Clien
 }
 
 func (c *Client) Run(ctx context.Context) error {
+	dialOpts, err := c.grpcDialOptions()
+	if err != nil {
+		return fmt.Errorf("creating dial options: %w", err)
+	}
+
+	conn, err := grpc.NewClient(c.cfg.Address, dialOpts...)
+	if err != nil {
+		return fmt.Errorf("dialing gRPC server: %w", err)
+	}
+	defer conn.Close()
+
+	client := pb.NewClusterTunnelClient(conn)
+
 	for {
 		boff := waitext.DefaultExponentialBackoff()
 		err := waitext.Retry(ctx, boff, waitext.Forever, func(ctx context.Context) (bool, error) {
-			if err := c.connect(ctx); err != nil {
-				c.log.WithError(err).Warn("tunnel connection failed, retrying")
+			if err := c.subscribe(ctx, client); err != nil {
+				c.log.WithError(err).Warn("tunnel subscription failed, retrying")
 				return true, err
 			}
 			return false, nil
@@ -87,45 +100,7 @@ func (c *Client) Run(ctx context.Context) error {
 }
 
 func (c *Client) IsConnected() bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.connected
-}
-
-func (c *Client) setConnected(v bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.connected = v
-}
-
-func (c *Client) connect(ctx context.Context) error {
-	dialOpts, err := c.grpcDialOptions()
-	if err != nil {
-		return fmt.Errorf("creating dial options: %w", err)
-	}
-
-	conn, err := grpc.NewClient(c.cfg.Address, dialOpts...)
-	if err != nil {
-		return fmt.Errorf("dialing gRPC server: %w", err)
-	}
-	defer conn.Close()
-
-	md := metadata.New(map[string]string{
-		metadataKeyClusterID: c.cfg.ClusterID,
-	})
-	streamCtx := metadata.NewOutgoingContext(ctx, md)
-
-	client := pb.NewClusterTunnelClient(conn)
-	stream, err := client.Connect(streamCtx)
-	if err != nil {
-		return fmt.Errorf("opening stream: %w", err)
-	}
-
-	c.setConnected(true)
-	defer c.setConnected(false)
-
-	c.log.Info("tunnel connected")
-	return c.handleStream(ctx, stream)
+	return c.connected.Load()
 }
 
 func (c *Client) grpcDialOptions() ([]grpc.DialOption, error) {
@@ -143,82 +118,105 @@ func (c *Client) grpcDialOptions() ([]grpc.DialOption, error) {
 	}
 	opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)))
 
+	opts = append(opts, grpc.WithKeepaliveParams(keepalive.ClientParameters{
+		Time:                30 * time.Second,
+		Timeout:             10 * time.Second,
+		PermitWithoutStream: true,
+	}))
+
+	opts = append(opts, grpc.WithDefaultCallOptions(grpc.UseCompressor("gzip")))
+
+	opts = append(opts,
+		grpc.WithUnaryInterceptor(c.authUnaryInterceptor),
+		grpc.WithStreamInterceptor(c.authStreamInterceptor),
+	)
+
 	return opts, nil
 }
 
-func (c *Client) handleStream(ctx context.Context, stream pb.ClusterTunnel_ConnectClient) error {
-	sw := &streamWriter{stream: stream}
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	go c.heartbeatLoop(ctx, sw)
-
-	for {
-		msg, err := stream.Recv()
-		if err != nil {
-			return fmt.Errorf("receiving message: %w", err)
-		}
-
-		req := msg.GetHttpRequest()
-		if req == nil {
-			continue
-		}
-
-		go c.proxyRequest(ctx, sw, req)
-	}
+func (c *Client) withAuth(ctx context.Context) context.Context {
+	return metadata.AppendToOutgoingContext(ctx,
+		metadataKeyClusterID, c.cfg.ClusterID,
+		metadataKeyAuthHeader, "Token "+c.cfg.APIKey,
+	)
 }
 
-func (c *Client) heartbeatLoop(ctx context.Context, sw *streamWriter) {
-	ticker := time.NewTicker(c.cfg.HeartbeatInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			msg := &pb.TunnelMessage{
-				Payload: &pb.TunnelMessage_Heartbeat{
-					Heartbeat: &pb.Heartbeat{TimestampMs: time.Now().UnixMilli()},
-				},
-			}
-			if err := sw.Send(msg); err != nil {
-				c.log.WithError(err).Warn("sending heartbeat")
-				return
-			}
-		}
-	}
+func (c *Client) authUnaryInterceptor(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	return invoker(c.withAuth(ctx), method, req, reply, cc, opts...)
 }
 
-func (c *Client) proxyRequest(ctx context.Context, sw *streamWriter, req *pb.HttpRequest) {
-	c.doProxy(ctx, sw, c.kubeURL, req)
+func (c *Client) authStreamInterceptor(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+	return streamer(c.withAuth(ctx), desc, cc, method, opts...)
 }
 
-func (c *Client) doProxy(ctx context.Context, sw *streamWriter, baseURL string, req *pb.HttpRequest) {
-	log := c.log.WithField("request_id", req.RequestId)
-
-	httpReq, err := http.NewRequestWithContext(ctx, req.Method, baseURL+req.Path, nil)
+func (c *Client) subscribe(ctx context.Context, client pb.ClusterTunnelClient) error {
+	stream, err := client.Subscribe(ctx, &pb.SubscribeRequest{})
 	if err != nil {
-		c.sendErrorResponse(sw, req.RequestId, http.StatusBadGateway, fmt.Sprintf("creating request: %v", err))
+		return fmt.Errorf("opening subscribe stream: %w", err)
+	}
+
+	c.connected.Store(true)
+	defer c.connected.Store(false)
+
+	c.log.Info("tunnel connected")
+
+	g, ctx := errgroup.WithContext(ctx)
+
+	for {
+		req, err := stream.Recv()
+		if err != nil {
+			break
+		}
+
+		g.Go(func() error {
+			c.proxyRequest(ctx, client, req)
+			return nil
+		})
+	}
+
+	_ = g.Wait()
+
+	return fmt.Errorf("subscribe stream ended")
+}
+
+func (c *Client) proxyRequest(ctx context.Context, client pb.ClusterTunnelClient, req *pb.HttpRequest) {
+	log := c.log.WithField("request_id", req.GetRequestId())
+
+	if err := c.validateRequest(req); err != nil {
+		c.sendErrorResponse(ctx, client, req.GetRequestId(), http.StatusForbidden, err.Error())
 		return
 	}
 
-	if len(req.Body) > 0 {
-		httpReq.Body = io.NopCloser(bytes.NewReader(req.Body))
-		httpReq.ContentLength = int64(len(req.Body))
+	httpReq, err := http.NewRequestWithContext(ctx, req.GetMethod(), c.kubeURL+req.GetPath(), nil)
+	if err != nil {
+		c.sendErrorResponse(ctx, client, req.GetRequestId(), http.StatusBadGateway, fmt.Sprintf("creating request: %v", err))
+		return
 	}
 
-	for _, h := range req.Headers {
-		httpReq.Header.Add(h.Key, h.Value)
+	if len(req.GetBody()) > 0 {
+		httpReq.Body = io.NopCloser(bytes.NewReader(req.GetBody()))
+		httpReq.ContentLength = int64(len(req.GetBody()))
+	}
+
+	for _, h := range req.GetHeaders() {
+		httpReq.Header.Add(h.GetKey(), h.GetValue())
 	}
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		c.sendErrorResponse(sw, req.RequestId, http.StatusBadGateway, fmt.Sprintf("executing request: %v", err))
+		c.sendErrorResponse(ctx, client, req.GetRequestId(), http.StatusBadGateway, fmt.Sprintf("executing request: %v", err))
 		return
 	}
 	defer resp.Body.Close()
+
+	md := metadata.Pairs(metadataKeyRequestID, req.GetRequestId())
+	streamCtx := metadata.NewOutgoingContext(ctx, md)
+
+	respStream, err := client.SendResponse(streamCtx)
+	if err != nil {
+		log.WithError(err).Error("opening SendResponse stream")
+		return
+	}
 
 	var headers []*pb.Header
 	for k, vals := range resp.Header {
@@ -227,16 +225,11 @@ func (c *Client) doProxy(ctx context.Context, sw *streamWriter, baseURL string, 
 		}
 	}
 
-	if err := sw.Send(&pb.TunnelMessage{
-		Payload: &pb.TunnelMessage_HttpResponseStart{
-			HttpResponseStart: &pb.HttpResponseStart{
-				RequestId:  req.RequestId,
-				StatusCode: int32(resp.StatusCode),
-				Headers:    headers,
-			},
-		},
+	if err := respStream.Send(&pb.HttpResponse{
+		StatusCode: int32(resp.StatusCode),
+		Headers:    headers,
 	}); err != nil {
-		log.WithError(err).Error("sending response start")
+		log.WithError(err).Error("sending response headers")
 		return
 	}
 
@@ -244,13 +237,8 @@ func (c *Client) doProxy(ctx context.Context, sw *streamWriter, baseURL string, 
 	for {
 		n, readErr := resp.Body.Read(buf)
 		if n > 0 {
-			if err := sw.Send(&pb.TunnelMessage{
-				Payload: &pb.TunnelMessage_HttpResponseBody{
-					HttpResponseBody: &pb.HttpResponseBody{
-						RequestId: req.RequestId,
-						Data:      buf[:n],
-					},
-				},
+			if err := respStream.Send(&pb.HttpResponse{
+				Body: buf[:n],
 			}); err != nil {
 				log.WithError(err).Error("sending response body chunk")
 				return
@@ -265,50 +253,40 @@ func (c *Client) doProxy(ctx context.Context, sw *streamWriter, baseURL string, 
 		}
 	}
 
-	if err := sw.Send(&pb.TunnelMessage{
-		Payload: &pb.TunnelMessage_HttpResponseEnd{
-			HttpResponseEnd: &pb.HttpResponseEnd{
-				RequestId: req.RequestId,
-			},
-		},
-	}); err != nil {
-		log.WithError(err).Error("sending response end")
+	if _, err := respStream.CloseAndRecv(); err != nil {
+		log.WithError(err).Warn("closing SendResponse stream")
 	}
 }
 
-func (c *Client) sendErrorResponse(sw *streamWriter, requestID string, statusCode int32, errMsg string) {
-	_ = sw.Send(&pb.TunnelMessage{
-		Payload: &pb.TunnelMessage_HttpResponseStart{
-			HttpResponseStart: &pb.HttpResponseStart{
-				RequestId:  requestID,
-				StatusCode: statusCode,
-			},
-		},
-	})
-	_ = sw.Send(&pb.TunnelMessage{
-		Payload: &pb.TunnelMessage_HttpResponseBody{
-			HttpResponseBody: &pb.HttpResponseBody{
-				RequestId: requestID,
-				Data:      []byte(errMsg),
-			},
-		},
-	})
-	_ = sw.Send(&pb.TunnelMessage{
-		Payload: &pb.TunnelMessage_HttpResponseEnd{
-			HttpResponseEnd: &pb.HttpResponseEnd{
-				RequestId: requestID,
-			},
-		},
-	})
+func (c *Client) validateRequest(req *pb.HttpRequest) error {
+	if req.GetMethod() != http.MethodGet {
+		return fmt.Errorf("method %s not allowed", req.GetMethod())
+	}
+
+	path := req.GetPath()
+	for _, blocked := range []string{"/exec", "/attach", "/portforward"} {
+		if strings.Contains(path, blocked) {
+			return fmt.Errorf("path %s not allowed", path)
+		}
+	}
+
+	return nil
 }
 
-type streamWriter struct {
-	mu     sync.Mutex
-	stream pb.ClusterTunnel_ConnectClient
-}
+func (c *Client) sendErrorResponse(ctx context.Context, client pb.ClusterTunnelClient, requestID string, statusCode int32, errMsg string) {
+	md := metadata.Pairs(metadataKeyRequestID, requestID)
+	streamCtx := metadata.NewOutgoingContext(ctx, md)
 
-func (sw *streamWriter) Send(msg *pb.TunnelMessage) error {
-	sw.mu.Lock()
-	defer sw.mu.Unlock()
-	return sw.stream.Send(msg)
+	respStream, err := client.SendResponse(streamCtx)
+	if err != nil {
+		c.log.WithError(err).Error("opening SendResponse stream for error")
+		return
+	}
+
+	_ = respStream.Send(&pb.HttpResponse{
+		StatusCode: statusCode,
+		Body:       []byte(errMsg),
+	})
+
+	_, _ = respStream.CloseAndRecv()
 }

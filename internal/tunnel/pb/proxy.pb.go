@@ -21,34 +21,26 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type TunnelMessage struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Payload:
-	//
-	//	*TunnelMessage_HttpRequest
-	//	*TunnelMessage_HttpResponseStart
-	//	*TunnelMessage_HttpResponseBody
-	//	*TunnelMessage_HttpResponseEnd
-	//	*TunnelMessage_Heartbeat
-	Payload       isTunnelMessage_Payload `protobuf_oneof:"payload"`
+type SubscribeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *TunnelMessage) Reset() {
-	*x = TunnelMessage{}
+func (x *SubscribeRequest) Reset() {
+	*x = SubscribeRequest{}
 	mi := &file_proxy_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *TunnelMessage) String() string {
+func (x *SubscribeRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*TunnelMessage) ProtoMessage() {}
+func (*SubscribeRequest) ProtoMessage() {}
 
-func (x *TunnelMessage) ProtoReflect() protoreflect.Message {
+func (x *SubscribeRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_proxy_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -60,96 +52,46 @@ func (x *TunnelMessage) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TunnelMessage.ProtoReflect.Descriptor instead.
-func (*TunnelMessage) Descriptor() ([]byte, []int) {
+// Deprecated: Use SubscribeRequest.ProtoReflect.Descriptor instead.
+func (*SubscribeRequest) Descriptor() ([]byte, []int) {
 	return file_proxy_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *TunnelMessage) GetPayload() isTunnelMessage_Payload {
-	if x != nil {
-		return x.Payload
-	}
-	return nil
+type SendResponseResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
-func (x *TunnelMessage) GetHttpRequest() *HttpRequest {
+func (x *SendResponseResult) Reset() {
+	*x = SendResponseResult{}
+	mi := &file_proxy_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SendResponseResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SendResponseResult) ProtoMessage() {}
+
+func (x *SendResponseResult) ProtoReflect() protoreflect.Message {
+	mi := &file_proxy_proto_msgTypes[1]
 	if x != nil {
-		if x, ok := x.Payload.(*TunnelMessage_HttpRequest); ok {
-			return x.HttpRequest
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
 		}
+		return ms
 	}
-	return nil
+	return mi.MessageOf(x)
 }
 
-func (x *TunnelMessage) GetHttpResponseStart() *HttpResponseStart {
-	if x != nil {
-		if x, ok := x.Payload.(*TunnelMessage_HttpResponseStart); ok {
-			return x.HttpResponseStart
-		}
-	}
-	return nil
+// Deprecated: Use SendResponseResult.ProtoReflect.Descriptor instead.
+func (*SendResponseResult) Descriptor() ([]byte, []int) {
+	return file_proxy_proto_rawDescGZIP(), []int{1}
 }
-
-func (x *TunnelMessage) GetHttpResponseBody() *HttpResponseBody {
-	if x != nil {
-		if x, ok := x.Payload.(*TunnelMessage_HttpResponseBody); ok {
-			return x.HttpResponseBody
-		}
-	}
-	return nil
-}
-
-func (x *TunnelMessage) GetHttpResponseEnd() *HttpResponseEnd {
-	if x != nil {
-		if x, ok := x.Payload.(*TunnelMessage_HttpResponseEnd); ok {
-			return x.HttpResponseEnd
-		}
-	}
-	return nil
-}
-
-func (x *TunnelMessage) GetHeartbeat() *Heartbeat {
-	if x != nil {
-		if x, ok := x.Payload.(*TunnelMessage_Heartbeat); ok {
-			return x.Heartbeat
-		}
-	}
-	return nil
-}
-
-type isTunnelMessage_Payload interface {
-	isTunnelMessage_Payload()
-}
-
-type TunnelMessage_HttpRequest struct {
-	HttpRequest *HttpRequest `protobuf:"bytes,1,opt,name=http_request,json=httpRequest,proto3,oneof"`
-}
-
-type TunnelMessage_HttpResponseStart struct {
-	HttpResponseStart *HttpResponseStart `protobuf:"bytes,4,opt,name=http_response_start,json=httpResponseStart,proto3,oneof"`
-}
-
-type TunnelMessage_HttpResponseBody struct {
-	HttpResponseBody *HttpResponseBody `protobuf:"bytes,5,opt,name=http_response_body,json=httpResponseBody,proto3,oneof"`
-}
-
-type TunnelMessage_HttpResponseEnd struct {
-	HttpResponseEnd *HttpResponseEnd `protobuf:"bytes,6,opt,name=http_response_end,json=httpResponseEnd,proto3,oneof"`
-}
-
-type TunnelMessage_Heartbeat struct {
-	Heartbeat *Heartbeat `protobuf:"bytes,3,opt,name=heartbeat,proto3,oneof"`
-}
-
-func (*TunnelMessage_HttpRequest) isTunnelMessage_Payload() {}
-
-func (*TunnelMessage_HttpResponseStart) isTunnelMessage_Payload() {}
-
-func (*TunnelMessage_HttpResponseBody) isTunnelMessage_Payload() {}
-
-func (*TunnelMessage_HttpResponseEnd) isTunnelMessage_Payload() {}
-
-func (*TunnelMessage_Heartbeat) isTunnelMessage_Payload() {}
 
 type HttpRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -164,7 +106,7 @@ type HttpRequest struct {
 
 func (x *HttpRequest) Reset() {
 	*x = HttpRequest{}
-	mi := &file_proxy_proto_msgTypes[1]
+	mi := &file_proxy_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -176,7 +118,7 @@ func (x *HttpRequest) String() string {
 func (*HttpRequest) ProtoMessage() {}
 
 func (x *HttpRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proxy_proto_msgTypes[1]
+	mi := &file_proxy_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -189,7 +131,7 @@ func (x *HttpRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HttpRequest.ProtoReflect.Descriptor instead.
 func (*HttpRequest) Descriptor() ([]byte, []int) {
-	return file_proxy_proto_rawDescGZIP(), []int{1}
+	return file_proxy_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *HttpRequest) GetRequestId() string {
@@ -227,30 +169,30 @@ func (x *HttpRequest) GetBody() []byte {
 	return nil
 }
 
-type HttpResponseStart struct {
+type HttpResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	StatusCode    int32                  `protobuf:"varint,2,opt,name=status_code,json=statusCode,proto3" json:"status_code,omitempty"`
-	Headers       []*Header              `protobuf:"bytes,3,rep,name=headers,proto3" json:"headers,omitempty"`
+	StatusCode    int32                  `protobuf:"varint,1,opt,name=status_code,json=statusCode,proto3" json:"status_code,omitempty"`
+	Headers       []*Header              `protobuf:"bytes,2,rep,name=headers,proto3" json:"headers,omitempty"`
+	Body          []byte                 `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *HttpResponseStart) Reset() {
-	*x = HttpResponseStart{}
-	mi := &file_proxy_proto_msgTypes[2]
+func (x *HttpResponse) Reset() {
+	*x = HttpResponse{}
+	mi := &file_proxy_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *HttpResponseStart) String() string {
+func (x *HttpResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*HttpResponseStart) ProtoMessage() {}
+func (*HttpResponse) ProtoMessage() {}
 
-func (x *HttpResponseStart) ProtoReflect() protoreflect.Message {
-	mi := &file_proxy_proto_msgTypes[2]
+func (x *HttpResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proxy_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -261,170 +203,30 @@ func (x *HttpResponseStart) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use HttpResponseStart.ProtoReflect.Descriptor instead.
-func (*HttpResponseStart) Descriptor() ([]byte, []int) {
-	return file_proxy_proto_rawDescGZIP(), []int{2}
+// Deprecated: Use HttpResponse.ProtoReflect.Descriptor instead.
+func (*HttpResponse) Descriptor() ([]byte, []int) {
+	return file_proxy_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *HttpResponseStart) GetRequestId() string {
-	if x != nil {
-		return x.RequestId
-	}
-	return ""
-}
-
-func (x *HttpResponseStart) GetStatusCode() int32 {
+func (x *HttpResponse) GetStatusCode() int32 {
 	if x != nil {
 		return x.StatusCode
 	}
 	return 0
 }
 
-func (x *HttpResponseStart) GetHeaders() []*Header {
+func (x *HttpResponse) GetHeaders() []*Header {
 	if x != nil {
 		return x.Headers
 	}
 	return nil
 }
 
-type HttpResponseBody struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	Data          []byte                 `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *HttpResponseBody) Reset() {
-	*x = HttpResponseBody{}
-	mi := &file_proxy_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *HttpResponseBody) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*HttpResponseBody) ProtoMessage() {}
-
-func (x *HttpResponseBody) ProtoReflect() protoreflect.Message {
-	mi := &file_proxy_proto_msgTypes[3]
+func (x *HttpResponse) GetBody() []byte {
 	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use HttpResponseBody.ProtoReflect.Descriptor instead.
-func (*HttpResponseBody) Descriptor() ([]byte, []int) {
-	return file_proxy_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *HttpResponseBody) GetRequestId() string {
-	if x != nil {
-		return x.RequestId
-	}
-	return ""
-}
-
-func (x *HttpResponseBody) GetData() []byte {
-	if x != nil {
-		return x.Data
+		return x.Body
 	}
 	return nil
-}
-
-type HttpResponseEnd struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *HttpResponseEnd) Reset() {
-	*x = HttpResponseEnd{}
-	mi := &file_proxy_proto_msgTypes[4]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *HttpResponseEnd) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*HttpResponseEnd) ProtoMessage() {}
-
-func (x *HttpResponseEnd) ProtoReflect() protoreflect.Message {
-	mi := &file_proxy_proto_msgTypes[4]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use HttpResponseEnd.ProtoReflect.Descriptor instead.
-func (*HttpResponseEnd) Descriptor() ([]byte, []int) {
-	return file_proxy_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *HttpResponseEnd) GetRequestId() string {
-	if x != nil {
-		return x.RequestId
-	}
-	return ""
-}
-
-type Heartbeat struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TimestampMs   int64                  `protobuf:"varint,1,opt,name=timestamp_ms,json=timestampMs,proto3" json:"timestamp_ms,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Heartbeat) Reset() {
-	*x = Heartbeat{}
-	mi := &file_proxy_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Heartbeat) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Heartbeat) ProtoMessage() {}
-
-func (x *Heartbeat) ProtoReflect() protoreflect.Message {
-	mi := &file_proxy_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Heartbeat.ProtoReflect.Descriptor instead.
-func (*Heartbeat) Descriptor() ([]byte, []int) {
-	return file_proxy_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *Heartbeat) GetTimestampMs() int64 {
-	if x != nil {
-		return x.TimestampMs
-	}
-	return 0
 }
 
 type Header struct {
@@ -437,7 +239,7 @@ type Header struct {
 
 func (x *Header) Reset() {
 	*x = Header{}
-	mi := &file_proxy_proto_msgTypes[6]
+	mi := &file_proxy_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -449,7 +251,7 @@ func (x *Header) String() string {
 func (*Header) ProtoMessage() {}
 
 func (x *Header) ProtoReflect() protoreflect.Message {
-	mi := &file_proxy_proto_msgTypes[6]
+	mi := &file_proxy_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -462,7 +264,7 @@ func (x *Header) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Header.ProtoReflect.Descriptor instead.
 func (*Header) Descriptor() ([]byte, []int) {
-	return file_proxy_proto_rawDescGZIP(), []int{6}
+	return file_proxy_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Header) GetKey() string {
@@ -483,41 +285,27 @@ var File_proxy_proto protoreflect.FileDescriptor
 
 const file_proxy_proto_rawDesc = "" +
 	"\n" +
-	"\vproxy.proto\x12\x16clustertunnel.v1alpha1\"\xb5\x03\n" +
-	"\rTunnelMessage\x12H\n" +
-	"\fhttp_request\x18\x01 \x01(\v2#.clustertunnel.v1alpha1.HttpRequestH\x00R\vhttpRequest\x12[\n" +
-	"\x13http_response_start\x18\x04 \x01(\v2).clustertunnel.v1alpha1.HttpResponseStartH\x00R\x11httpResponseStart\x12X\n" +
-	"\x12http_response_body\x18\x05 \x01(\v2(.clustertunnel.v1alpha1.HttpResponseBodyH\x00R\x10httpResponseBody\x12U\n" +
-	"\x11http_response_end\x18\x06 \x01(\v2'.clustertunnel.v1alpha1.HttpResponseEndH\x00R\x0fhttpResponseEnd\x12A\n" +
-	"\theartbeat\x18\x03 \x01(\v2!.clustertunnel.v1alpha1.HeartbeatH\x00R\theartbeatB\t\n" +
-	"\apayload\"\xa6\x01\n" +
+	"\vproxy.proto\x12\x16clustertunnel.v1alpha1\"\x12\n" +
+	"\x10SubscribeRequest\"\x14\n" +
+	"\x12SendResponseResult\"\xa6\x01\n" +
 	"\vHttpRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x16\n" +
 	"\x06method\x18\x02 \x01(\tR\x06method\x12\x12\n" +
 	"\x04path\x18\x03 \x01(\tR\x04path\x128\n" +
 	"\aheaders\x18\x04 \x03(\v2\x1e.clustertunnel.v1alpha1.HeaderR\aheaders\x12\x12\n" +
-	"\x04body\x18\x05 \x01(\fR\x04body\"\x8d\x01\n" +
-	"\x11HttpResponseStart\x12\x1d\n" +
-	"\n" +
-	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1f\n" +
-	"\vstatus_code\x18\x02 \x01(\x05R\n" +
+	"\x04body\x18\x05 \x01(\fR\x04body\"}\n" +
+	"\fHttpResponse\x12\x1f\n" +
+	"\vstatus_code\x18\x01 \x01(\x05R\n" +
 	"statusCode\x128\n" +
-	"\aheaders\x18\x03 \x03(\v2\x1e.clustertunnel.v1alpha1.HeaderR\aheaders\"E\n" +
-	"\x10HttpResponseBody\x12\x1d\n" +
-	"\n" +
-	"request_id\x18\x01 \x01(\tR\trequestId\x12\x12\n" +
-	"\x04data\x18\x02 \x01(\fR\x04data\"0\n" +
-	"\x0fHttpResponseEnd\x12\x1d\n" +
-	"\n" +
-	"request_id\x18\x01 \x01(\tR\trequestId\".\n" +
-	"\tHeartbeat\x12!\n" +
-	"\ftimestamp_ms\x18\x01 \x01(\x03R\vtimestampMs\"0\n" +
+	"\aheaders\x18\x02 \x03(\v2\x1e.clustertunnel.v1alpha1.HeaderR\aheaders\x12\x12\n" +
+	"\x04body\x18\x03 \x01(\fR\x04body\"0\n" +
 	"\x06Header\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value2l\n" +
-	"\rClusterTunnel\x12[\n" +
-	"\aConnect\x12%.clustertunnel.v1alpha1.TunnelMessage\x1a%.clustertunnel.v1alpha1.TunnelMessage(\x010\x01B9Z7github.com/castai/cluster-controller/internal/tunnel/pbb\x06proto3"
+	"\x05value\x18\x02 \x01(\tR\x05value2\xd1\x01\n" +
+	"\rClusterTunnel\x12\\\n" +
+	"\tSubscribe\x12(.clustertunnel.v1alpha1.SubscribeRequest\x1a#.clustertunnel.v1alpha1.HttpRequest0\x01\x12b\n" +
+	"\fSendResponse\x12$.clustertunnel.v1alpha1.HttpResponse\x1a*.clustertunnel.v1alpha1.SendResponseResult(\x01B9Z7github.com/castai/cluster-controller/internal/tunnel/pbb\x06proto3"
 
 var (
 	file_proxy_proto_rawDescOnce sync.Once
@@ -531,31 +319,26 @@ func file_proxy_proto_rawDescGZIP() []byte {
 	return file_proxy_proto_rawDescData
 }
 
-var file_proxy_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_proxy_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_proxy_proto_goTypes = []any{
-	(*TunnelMessage)(nil),     // 0: clustertunnel.v1alpha1.TunnelMessage
-	(*HttpRequest)(nil),       // 1: clustertunnel.v1alpha1.HttpRequest
-	(*HttpResponseStart)(nil), // 2: clustertunnel.v1alpha1.HttpResponseStart
-	(*HttpResponseBody)(nil),  // 3: clustertunnel.v1alpha1.HttpResponseBody
-	(*HttpResponseEnd)(nil),   // 4: clustertunnel.v1alpha1.HttpResponseEnd
-	(*Heartbeat)(nil),         // 5: clustertunnel.v1alpha1.Heartbeat
-	(*Header)(nil),            // 6: clustertunnel.v1alpha1.Header
+	(*SubscribeRequest)(nil),   // 0: clustertunnel.v1alpha1.SubscribeRequest
+	(*SendResponseResult)(nil), // 1: clustertunnel.v1alpha1.SendResponseResult
+	(*HttpRequest)(nil),        // 2: clustertunnel.v1alpha1.HttpRequest
+	(*HttpResponse)(nil),       // 3: clustertunnel.v1alpha1.HttpResponse
+	(*Header)(nil),             // 4: clustertunnel.v1alpha1.Header
 }
 var file_proxy_proto_depIdxs = []int32{
-	1, // 0: clustertunnel.v1alpha1.TunnelMessage.http_request:type_name -> clustertunnel.v1alpha1.HttpRequest
-	2, // 1: clustertunnel.v1alpha1.TunnelMessage.http_response_start:type_name -> clustertunnel.v1alpha1.HttpResponseStart
-	3, // 2: clustertunnel.v1alpha1.TunnelMessage.http_response_body:type_name -> clustertunnel.v1alpha1.HttpResponseBody
-	4, // 3: clustertunnel.v1alpha1.TunnelMessage.http_response_end:type_name -> clustertunnel.v1alpha1.HttpResponseEnd
-	5, // 4: clustertunnel.v1alpha1.TunnelMessage.heartbeat:type_name -> clustertunnel.v1alpha1.Heartbeat
-	6, // 5: clustertunnel.v1alpha1.HttpRequest.headers:type_name -> clustertunnel.v1alpha1.Header
-	6, // 6: clustertunnel.v1alpha1.HttpResponseStart.headers:type_name -> clustertunnel.v1alpha1.Header
-	0, // 7: clustertunnel.v1alpha1.ClusterTunnel.Connect:input_type -> clustertunnel.v1alpha1.TunnelMessage
-	0, // 8: clustertunnel.v1alpha1.ClusterTunnel.Connect:output_type -> clustertunnel.v1alpha1.TunnelMessage
-	8, // [8:9] is the sub-list for method output_type
-	7, // [7:8] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+	4, // 0: clustertunnel.v1alpha1.HttpRequest.headers:type_name -> clustertunnel.v1alpha1.Header
+	4, // 1: clustertunnel.v1alpha1.HttpResponse.headers:type_name -> clustertunnel.v1alpha1.Header
+	0, // 2: clustertunnel.v1alpha1.ClusterTunnel.Subscribe:input_type -> clustertunnel.v1alpha1.SubscribeRequest
+	3, // 3: clustertunnel.v1alpha1.ClusterTunnel.SendResponse:input_type -> clustertunnel.v1alpha1.HttpResponse
+	2, // 4: clustertunnel.v1alpha1.ClusterTunnel.Subscribe:output_type -> clustertunnel.v1alpha1.HttpRequest
+	1, // 5: clustertunnel.v1alpha1.ClusterTunnel.SendResponse:output_type -> clustertunnel.v1alpha1.SendResponseResult
+	4, // [4:6] is the sub-list for method output_type
+	2, // [2:4] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_proxy_proto_init() }
@@ -563,20 +346,13 @@ func file_proxy_proto_init() {
 	if File_proxy_proto != nil {
 		return
 	}
-	file_proxy_proto_msgTypes[0].OneofWrappers = []any{
-		(*TunnelMessage_HttpRequest)(nil),
-		(*TunnelMessage_HttpResponseStart)(nil),
-		(*TunnelMessage_HttpResponseBody)(nil),
-		(*TunnelMessage_HttpResponseEnd)(nil),
-		(*TunnelMessage_Heartbeat)(nil),
-	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proxy_proto_rawDesc), len(file_proxy_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

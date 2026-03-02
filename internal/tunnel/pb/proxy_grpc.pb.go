@@ -19,14 +19,16 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ClusterTunnel_Connect_FullMethodName = "/clustertunnel.v1alpha1.ClusterTunnel/Connect"
+	ClusterTunnel_Subscribe_FullMethodName    = "/clustertunnel.v1alpha1.ClusterTunnel/Subscribe"
+	ClusterTunnel_SendResponse_FullMethodName = "/clustertunnel.v1alpha1.ClusterTunnel/SendResponse"
 )
 
 // ClusterTunnelClient is the client API for ClusterTunnel service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ClusterTunnelClient interface {
-	Connect(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TunnelMessage, TunnelMessage], error)
+	Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[HttpRequest], error)
+	SendResponse(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[HttpResponse, SendResponseResult], error)
 }
 
 type clusterTunnelClient struct {
@@ -37,24 +39,44 @@ func NewClusterTunnelClient(cc grpc.ClientConnInterface) ClusterTunnelClient {
 	return &clusterTunnelClient{cc}
 }
 
-func (c *clusterTunnelClient) Connect(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TunnelMessage, TunnelMessage], error) {
+func (c *clusterTunnelClient) Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[HttpRequest], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &ClusterTunnel_ServiceDesc.Streams[0], ClusterTunnel_Connect_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &ClusterTunnel_ServiceDesc.Streams[0], ClusterTunnel_Subscribe_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &grpc.GenericClientStream[TunnelMessage, TunnelMessage]{ClientStream: stream}
+	x := &grpc.GenericClientStream[SubscribeRequest, HttpRequest]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
 	return x, nil
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type ClusterTunnel_ConnectClient = grpc.BidiStreamingClient[TunnelMessage, TunnelMessage]
+type ClusterTunnel_SubscribeClient = grpc.ServerStreamingClient[HttpRequest]
+
+func (c *clusterTunnelClient) SendResponse(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[HttpResponse, SendResponseResult], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &ClusterTunnel_ServiceDesc.Streams[1], ClusterTunnel_SendResponse_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[HttpResponse, SendResponseResult]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ClusterTunnel_SendResponseClient = grpc.ClientStreamingClient[HttpResponse, SendResponseResult]
 
 // ClusterTunnelServer is the server API for ClusterTunnel service.
 // All implementations must embed UnimplementedClusterTunnelServer
 // for forward compatibility.
 type ClusterTunnelServer interface {
-	Connect(grpc.BidiStreamingServer[TunnelMessage, TunnelMessage]) error
+	Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[HttpRequest]) error
+	SendResponse(grpc.ClientStreamingServer[HttpResponse, SendResponseResult]) error
 	mustEmbedUnimplementedClusterTunnelServer()
 }
 
@@ -65,8 +87,11 @@ type ClusterTunnelServer interface {
 // pointer dereference when methods are called.
 type UnimplementedClusterTunnelServer struct{}
 
-func (UnimplementedClusterTunnelServer) Connect(grpc.BidiStreamingServer[TunnelMessage, TunnelMessage]) error {
-	return status.Errorf(codes.Unimplemented, "method Connect not implemented")
+func (UnimplementedClusterTunnelServer) Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[HttpRequest]) error {
+	return status.Errorf(codes.Unimplemented, "method Subscribe not implemented")
+}
+func (UnimplementedClusterTunnelServer) SendResponse(grpc.ClientStreamingServer[HttpResponse, SendResponseResult]) error {
+	return status.Errorf(codes.Unimplemented, "method SendResponse not implemented")
 }
 func (UnimplementedClusterTunnelServer) mustEmbedUnimplementedClusterTunnelServer() {}
 func (UnimplementedClusterTunnelServer) testEmbeddedByValue()                       {}
@@ -89,12 +114,23 @@ func RegisterClusterTunnelServer(s grpc.ServiceRegistrar, srv ClusterTunnelServe
 	s.RegisterService(&ClusterTunnel_ServiceDesc, srv)
 }
 
-func _ClusterTunnel_Connect_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(ClusterTunnelServer).Connect(&grpc.GenericServerStream[TunnelMessage, TunnelMessage]{ServerStream: stream})
+func _ClusterTunnel_Subscribe_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(SubscribeRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ClusterTunnelServer).Subscribe(m, &grpc.GenericServerStream[SubscribeRequest, HttpRequest]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type ClusterTunnel_ConnectServer = grpc.BidiStreamingServer[TunnelMessage, TunnelMessage]
+type ClusterTunnel_SubscribeServer = grpc.ServerStreamingServer[HttpRequest]
+
+func _ClusterTunnel_SendResponse_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ClusterTunnelServer).SendResponse(&grpc.GenericServerStream[HttpResponse, SendResponseResult]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ClusterTunnel_SendResponseServer = grpc.ClientStreamingServer[HttpResponse, SendResponseResult]
 
 // ClusterTunnel_ServiceDesc is the grpc.ServiceDesc for ClusterTunnel service.
 // It's only intended for direct use with grpc.RegisterService,
@@ -105,9 +141,13 @@ var ClusterTunnel_ServiceDesc = grpc.ServiceDesc{
 	Methods:     []grpc.MethodDesc{},
 	Streams: []grpc.StreamDesc{
 		{
-			StreamName:    "Connect",
-			Handler:       _ClusterTunnel_Connect_Handler,
+			StreamName:    "Subscribe",
+			Handler:       _ClusterTunnel_Subscribe_Handler,
 			ServerStreams: true,
+		},
+		{
+			StreamName:    "SendResponse",
+			Handler:       _ClusterTunnel_SendResponse_Handler,
 			ClientStreams: true,
 		},
 	},

@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -24,7 +23,7 @@ import (
 )
 
 func TestProxyRequest(t *testing.T) {
-	t.Run("GET round-trip streams status, body chunks, and end", func(t *testing.T) {
+	t.Run("GET round-trip", func(t *testing.T) {
 		kubeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "/api/v1/namespaces", r.URL.Path)
 			assert.Equal(t, http.MethodGet, r.Method)
@@ -34,20 +33,15 @@ func TestProxyRequest(t *testing.T) {
 		}))
 		defer kubeServer.Close()
 
-		msgs := proxyViaTestStream(t, kubeServer, &pb.HttpRequest{
+		resp := proxyViaTestServer(t, kubeServer, &pb.HttpRequest{
 			RequestId: "req-1",
 			Method:    http.MethodGet,
 			Path:      "/api/v1/namespaces",
 		})
 
-		start := findStart(msgs, "req-1")
-		require.NotNil(t, start)
-		assert.Equal(t, int32(http.StatusOK), start.StatusCode)
-
-		body := collectBody(msgs, "req-1")
-		assert.Contains(t, string(body), "NamespaceList")
-
-		assert.True(t, hasEnd(msgs, "req-1"))
+		assert.Equal(t, int32(http.StatusOK), resp.statusCode)
+		assert.Contains(t, string(resp.body), "NamespaceList")
+		assert.Equal(t, "req-1", resp.requestID)
 	})
 
 	t.Run("POST with body round-trip", func(t *testing.T) {
@@ -58,7 +52,7 @@ func TestProxyRequest(t *testing.T) {
 		}))
 		defer kubeServer.Close()
 
-		msgs := proxyViaTestStream(t, kubeServer, &pb.HttpRequest{
+		resp := proxyViaTestServer(t, kubeServer, &pb.HttpRequest{
 			RequestId: "req-2",
 			Method:    http.MethodPost,
 			Path:      "/api/v1/namespaces",
@@ -68,13 +62,8 @@ func TestProxyRequest(t *testing.T) {
 			},
 		})
 
-		start := findStart(msgs, "req-2")
-		require.NotNil(t, start)
-		assert.Equal(t, int32(http.StatusCreated), start.StatusCode)
-
-		body := collectBody(msgs, "req-2")
-		assert.JSONEq(t, `{"metadata":{"name":"test"}}`, string(body))
-		assert.True(t, hasEnd(msgs, "req-2"))
+		assert.Equal(t, int32(http.StatusForbidden), resp.statusCode)
+		assert.Contains(t, string(resp.body), "not allowed")
 	})
 
 	t.Run("multi-value headers are preserved", func(t *testing.T) {
@@ -86,7 +75,7 @@ func TestProxyRequest(t *testing.T) {
 		}))
 		defer kubeServer.Close()
 
-		msgs := proxyViaTestStream(t, kubeServer, &pb.HttpRequest{
+		resp := proxyViaTestServer(t, kubeServer, &pb.HttpRequest{
 			RequestId: "req-3",
 			Method:    http.MethodGet,
 			Path:      "/test",
@@ -96,69 +85,21 @@ func TestProxyRequest(t *testing.T) {
 			},
 		})
 
-		start := findStart(msgs, "req-3")
-		require.NotNil(t, start)
-
-		var responseValues []string
-		for _, h := range start.Headers {
-			if h.Key == "X-Response" {
-				responseValues = append(responseValues, h.Value)
-			}
-		}
-		assert.ElementsMatch(t, []string{"r1", "r2"}, responseValues)
+		assert.Equal(t, int32(http.StatusOK), resp.statusCode)
+		assert.ElementsMatch(t, []string{"r1", "r2"}, resp.headers["X-Response"])
 	})
 
-	t.Run("kube server error sends error through stream", func(t *testing.T) {
-		srv, addr := startTestServer(t, func(stream grpc.BidiStreamingServer[pb.TunnelMessage, pb.TunnelMessage]) error {
-			stream.Send(&pb.TunnelMessage{
-				Payload: &pb.TunnelMessage_HttpRequest{
-					HttpRequest: &pb.HttpRequest{
-						RequestId: "req-4",
-						Method:    http.MethodGet,
-						Path:      "/api/v1/pods",
-					},
-				},
-			})
+	t.Run("kube server error returns 502", func(t *testing.T) {
+		kubeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+		kubeServer.Close()
 
-			var msgs []*pb.TunnelMessage
-			for {
-				msg, err := stream.Recv()
-				if err != nil {
-					return err
-				}
-				msgs = append(msgs, msg)
-				if msg.GetHttpResponseEnd() != nil {
-					break
-				}
-			}
-
-			start := findStart(msgs, "req-4")
-			if start == nil || start.StatusCode != http.StatusBadGateway {
-				return fmt.Errorf("expected 502, got %v", start)
-			}
-			return nil
+		resp := proxyViaTestServer(t, kubeServer, &pb.HttpRequest{
+			RequestId: "req-4",
+			Method:    http.MethodGet,
+			Path:      "/api/v1/pods",
 		})
-		defer srv.GracefulStop()
 
-		c := &Client{
-			log:        logrus.New(),
-			cfg:        Config{HeartbeatInterval: time.Hour},
-			httpClient: &http.Client{Transport: &http.Transport{}},
-			kubeURL:    "http://127.0.0.1:1",
-		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-		require.NoError(t, err)
-		defer conn.Close()
-
-		client := pb.NewClusterTunnelClient(conn)
-		stream, err := client.Connect(ctx)
-		require.NoError(t, err)
-
-		_ = c.handleStream(ctx, stream)
+		assert.Equal(t, int32(http.StatusBadGateway), resp.statusCode)
 	})
 
 	t.Run("streaming response sends multiple body chunks", func(t *testing.T) {
@@ -176,85 +117,59 @@ func TestProxyRequest(t *testing.T) {
 		}))
 		defer kubeServer.Close()
 
-		msgs := proxyViaTestStream(t, kubeServer, &pb.HttpRequest{
+		resp := proxyViaTestServer(t, kubeServer, &pb.HttpRequest{
 			RequestId: "req-stream",
 			Method:    http.MethodGet,
 			Path:      "/logs",
 		})
 
-		start := findStart(msgs, "req-stream")
-		require.NotNil(t, start)
-		assert.Equal(t, int32(http.StatusOK), start.StatusCode)
-
-		body := collectBody(msgs, "req-stream")
-		assert.Contains(t, string(body), "chunk-0")
-		assert.Contains(t, string(body), "chunk-1")
-		assert.Contains(t, string(body), "chunk-2")
-		assert.True(t, hasEnd(msgs, "req-stream"))
+		assert.Equal(t, int32(http.StatusOK), resp.statusCode)
+		assert.Contains(t, string(resp.body), "chunk-0")
+		assert.Contains(t, string(resp.body), "chunk-1")
+		assert.Contains(t, string(resp.body), "chunk-2")
 	})
 }
 
 func TestStreamHandling(t *testing.T) {
-	t.Run("concurrent requests with request_id correlation", func(t *testing.T) {
+	t.Run("concurrent requests correlated by x-request-id metadata", func(t *testing.T) {
 		kubeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			fmt.Fprintf(w, "path=%s", r.URL.Path)
 		}))
 		defer kubeServer.Close()
 
-		srv, addr := startTestServer(t, func(stream grpc.BidiStreamingServer[pb.TunnelMessage, pb.TunnelMessage]) error {
-			const numRequests = 10
-			for i := range numRequests {
-				if err := stream.Send(&pb.TunnelMessage{
-					Payload: &pb.TunnelMessage_HttpRequest{
-						HttpRequest: &pb.HttpRequest{
-							RequestId: fmt.Sprintf("req-%d", i),
-							Method:    http.MethodGet,
-							Path:      fmt.Sprintf("/api/v1/ns/%d", i),
-						},
-					},
-				}); err != nil {
-					return err
-				}
-			}
+		const numRequests = 10
 
-			bodies := make(map[string]*bytes.Buffer)
-			ended := make(map[string]bool)
+		var mu sync.Mutex
+		responses := make(map[string]*collectedResponse)
 
-			for len(ended) < numRequests {
-				msg, err := stream.Recv()
-				if err != nil {
-					return err
-				}
-				if s := msg.GetHttpResponseStart(); s != nil {
-					bodies[s.RequestId] = &bytes.Buffer{}
-				}
-				if b := msg.GetHttpResponseBody(); b != nil {
-					if buf, ok := bodies[b.RequestId]; ok {
-						buf.Write(b.Data)
+		srv, addr := startTestServer(t, testServerHandlers{
+			subscribeHandler: func(_ *pb.SubscribeRequest, stream grpc.ServerStreamingServer[pb.HttpRequest]) error {
+				for i := range numRequests {
+					if err := stream.Send(&pb.HttpRequest{
+						RequestId: fmt.Sprintf("req-%d", i),
+						Method:    http.MethodGet,
+						Path:      fmt.Sprintf("/api/v1/ns/%d", i),
+					}); err != nil {
+						return err
 					}
 				}
-				if e := msg.GetHttpResponseEnd(); e != nil {
-					ended[e.RequestId] = true
-				}
-			}
-
-			for i := range numRequests {
-				id := fmt.Sprintf("req-%d", i)
-				expected := fmt.Sprintf("path=/api/v1/ns/%d", i)
-				got := bodies[id].String()
-				if got != expected {
-					return fmt.Errorf("request %s: got %q, want %q", id, got, expected)
-				}
-			}
-
-			return nil
+				<-stream.Context().Done()
+				return nil
+			},
+			sendResponseHandler: func(stream grpc.ClientStreamingServer[pb.HttpResponse, pb.SendResponseResult]) error {
+				resp := collectResponse(t, stream)
+				mu.Lock()
+				responses[resp.requestID] = resp
+				mu.Unlock()
+				return nil
+			},
 		})
 		defer srv.GracefulStop()
 
 		c := &Client{
 			log:        logrus.New(),
-			cfg:        Config{HeartbeatInterval: time.Hour},
+			cfg:        Config{},
 			httpClient: kubeServer.Client(),
 			kubeURL:    kubeServer.URL,
 		}
@@ -267,130 +182,275 @@ func TestStreamHandling(t *testing.T) {
 		defer conn.Close()
 
 		client := pb.NewClusterTunnelClient(conn)
-		stream, err := client.Connect(ctx)
-		require.NoError(t, err)
+		_ = c.subscribe(ctx, client)
 
-		streamErr := make(chan error, 1)
-		go func() {
-			streamErr <- c.handleStream(ctx, stream)
-		}()
-
-		select {
-		case err := <-streamErr:
-			if err != nil && ctx.Err() == nil {
-				require.NoError(t, err)
-			}
-		case <-ctx.Done():
+		mu.Lock()
+		defer mu.Unlock()
+		for i := range numRequests {
+			id := fmt.Sprintf("req-%d", i)
+			expected := fmt.Sprintf("path=/api/v1/ns/%d", i)
+			resp, ok := responses[id]
+			require.True(t, ok, "missing response for %s", id)
+			assert.Equal(t, expected, string(resp.body))
 		}
 	})
+}
 
-	t.Run("heartbeat is sent", func(t *testing.T) {
-		var heartbeatReceived atomic.Bool
+func TestRequestValidation(t *testing.T) {
+	t.Run("non-GET method rejected with 403", func(t *testing.T) {
+		kubeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Fatal("should not reach kube server")
+		}))
+		defer kubeServer.Close()
 
-		srv, addr := startTestServer(t, func(stream grpc.BidiStreamingServer[pb.TunnelMessage, pb.TunnelMessage]) error {
-			for {
-				msg, err := stream.Recv()
-				if err != nil {
+		resp := proxyViaTestServer(t, kubeServer, &pb.HttpRequest{
+			RequestId: "req-post",
+			Method:    http.MethodPost,
+			Path:      "/api/v1/namespaces",
+		})
+
+		assert.Equal(t, int32(http.StatusForbidden), resp.statusCode)
+		assert.Contains(t, string(resp.body), "not allowed")
+	})
+
+	t.Run("path with /exec rejected with 403", func(t *testing.T) {
+		kubeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Fatal("should not reach kube server")
+		}))
+		defer kubeServer.Close()
+
+		resp := proxyViaTestServer(t, kubeServer, &pb.HttpRequest{
+			RequestId: "req-exec",
+			Method:    http.MethodGet,
+			Path:      "/api/v1/namespaces/default/pods/foo/exec",
+		})
+
+		assert.Equal(t, int32(http.StatusForbidden), resp.statusCode)
+		assert.Contains(t, string(resp.body), "not allowed")
+	})
+
+	t.Run("path with /attach rejected with 403", func(t *testing.T) {
+		kubeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Fatal("should not reach kube server")
+		}))
+		defer kubeServer.Close()
+
+		resp := proxyViaTestServer(t, kubeServer, &pb.HttpRequest{
+			RequestId: "req-attach",
+			Method:    http.MethodGet,
+			Path:      "/api/v1/namespaces/default/pods/foo/attach",
+		})
+
+		assert.Equal(t, int32(http.StatusForbidden), resp.statusCode)
+		assert.Contains(t, string(resp.body), "not allowed")
+	})
+
+	t.Run("path with /portforward rejected with 403", func(t *testing.T) {
+		kubeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Fatal("should not reach kube server")
+		}))
+		defer kubeServer.Close()
+
+		resp := proxyViaTestServer(t, kubeServer, &pb.HttpRequest{
+			RequestId: "req-pf",
+			Method:    http.MethodGet,
+			Path:      "/api/v1/namespaces/default/pods/foo/portforward",
+		})
+
+		assert.Equal(t, int32(http.StatusForbidden), resp.statusCode)
+		assert.Contains(t, string(resp.body), "not allowed")
+	})
+}
+
+func TestAuthMetadata(t *testing.T) {
+	t.Run("auth metadata present on Subscribe and SendResponse", func(t *testing.T) {
+		kubeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer kubeServer.Close()
+
+		var subscribeClusterID, subscribeAuth string
+		var sendResponseClusterID, sendResponseAuth string
+		var mu sync.Mutex
+
+		srv, addr := startTestServer(t, testServerHandlers{
+			subscribeHandler: func(_ *pb.SubscribeRequest, stream grpc.ServerStreamingServer[pb.HttpRequest]) error {
+				md, _ := metadata.FromIncomingContext(stream.Context())
+				if vals := md.Get(metadataKeyClusterID); len(vals) > 0 {
+					subscribeClusterID = vals[0]
+				}
+				if vals := md.Get(metadataKeyAuthHeader); len(vals) > 0 {
+					subscribeAuth = vals[0]
+				}
+
+				if err := stream.Send(&pb.HttpRequest{
+					RequestId: "req-auth",
+					Method:    http.MethodGet,
+					Path:      "/healthz",
+				}); err != nil {
 					return err
 				}
-				if msg.GetHeartbeat() != nil {
-					heartbeatReceived.Store(true)
-					return nil
+				<-stream.Context().Done()
+				return nil
+			},
+			sendResponseHandler: func(stream grpc.ClientStreamingServer[pb.HttpResponse, pb.SendResponseResult]) error {
+				md, _ := metadata.FromIncomingContext(stream.Context())
+				mu.Lock()
+				if vals := md.Get(metadataKeyClusterID); len(vals) > 0 {
+					sendResponseClusterID = vals[0]
 				}
-			}
+				if vals := md.Get(metadataKeyAuthHeader); len(vals) > 0 {
+					sendResponseAuth = vals[0]
+				}
+				mu.Unlock()
+
+				for {
+					_, err := stream.Recv()
+					if err != nil {
+						break
+					}
+				}
+				return stream.SendAndClose(&pb.SendResponseResult{})
+			},
 		})
 		defer srv.GracefulStop()
 
 		c := &Client{
 			log: logrus.New(),
 			cfg: Config{
-				HeartbeatInterval: 50 * time.Millisecond,
+				ClusterID: "test-cluster-123",
+				APIKey:    "test-api-key",
 			},
-			httpClient: http.DefaultClient,
+			httpClient: kubeServer.Client(),
+			kubeURL:    kubeServer.URL,
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		conn, err := grpc.NewClient(addr,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithUnaryInterceptor(c.authUnaryInterceptor),
+			grpc.WithStreamInterceptor(c.authStreamInterceptor),
+		)
 		require.NoError(t, err)
 		defer conn.Close()
 
 		client := pb.NewClusterTunnelClient(conn)
-		stream, err := client.Connect(ctx)
-		require.NoError(t, err)
+		_ = c.subscribe(ctx, client)
 
-		_ = c.handleStream(ctx, stream)
-		assert.True(t, heartbeatReceived.Load())
-	})
+		assert.Equal(t, "test-cluster-123", subscribeClusterID)
+		assert.Equal(t, "Token test-api-key", subscribeAuth)
 
-	t.Run("metadata is sent with connect", func(t *testing.T) {
-		var gotClusterID string
-
-		srv, addr := startTestServer(t, func(stream grpc.BidiStreamingServer[pb.TunnelMessage, pb.TunnelMessage]) error {
-			md, ok := metadata.FromIncomingContext(stream.Context())
-			if ok {
-				if vals := md.Get(metadataKeyClusterID); len(vals) > 0 {
-					gotClusterID = vals[0]
-				}
-			}
-			<-stream.Context().Done()
-			return nil
-		})
-		defer srv.GracefulStop()
-
-		c := &Client{
-			log: logrus.New(),
-			cfg: Config{
-				Address:           addr,
-				ClusterID:         "test-cluster-123",
-				HeartbeatInterval: time.Hour,
-			},
-			httpClient: http.DefaultClient,
-		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		defer cancel()
-
-		_ = c.connect(ctx)
-
-		assert.Equal(t, "test-cluster-123", gotClusterID)
+		mu.Lock()
+		defer mu.Unlock()
+		assert.Equal(t, "test-cluster-123", sendResponseClusterID)
+		assert.Equal(t, "Token test-api-key", sendResponseAuth)
 	})
 }
 
 // Test helpers
 
-func proxyViaTestStream(t *testing.T, kubeServer *httptest.Server, req *pb.HttpRequest) []*pb.TunnelMessage {
+type collectedResponse struct {
+	requestID  string
+	statusCode int32
+	headers    map[string][]string
+	body       []byte
+}
+
+type testServerHandlers struct {
+	subscribeHandler    func(*pb.SubscribeRequest, grpc.ServerStreamingServer[pb.HttpRequest]) error
+	sendResponseHandler func(grpc.ClientStreamingServer[pb.HttpResponse, pb.SendResponseResult]) error
+}
+
+type testServer struct {
+	pb.UnimplementedClusterTunnelServer
+	handlers testServerHandlers
+}
+
+func (s *testServer) Subscribe(req *pb.SubscribeRequest, stream grpc.ServerStreamingServer[pb.HttpRequest]) error {
+	if s.handlers.subscribeHandler != nil {
+		return s.handlers.subscribeHandler(req, stream)
+	}
+	return nil
+}
+
+func (s *testServer) SendResponse(stream grpc.ClientStreamingServer[pb.HttpResponse, pb.SendResponseResult]) error {
+	if s.handlers.sendResponseHandler != nil {
+		return s.handlers.sendResponseHandler(stream)
+	}
+	for {
+		_, err := stream.Recv()
+		if err != nil {
+			break
+		}
+	}
+	return stream.SendAndClose(&pb.SendResponseResult{})
+}
+
+func collectResponse(t *testing.T, stream grpc.ClientStreamingServer[pb.HttpResponse, pb.SendResponseResult]) *collectedResponse {
 	t.Helper()
 
-	var result []*pb.TunnelMessage
-	var mu sync.Mutex
+	md, _ := metadata.FromIncomingContext(stream.Context())
+	var requestID string
+	if vals := md.Get(metadataKeyRequestID); len(vals) > 0 {
+		requestID = vals[0]
+	}
 
-	srv, addr := startTestServer(t, func(stream grpc.BidiStreamingServer[pb.TunnelMessage, pb.TunnelMessage]) error {
-		if err := stream.Send(&pb.TunnelMessage{
-			Payload: &pb.TunnelMessage_HttpRequest{HttpRequest: req},
-		}); err != nil {
-			return err
+	resp := &collectedResponse{
+		requestID: requestID,
+		headers:   make(map[string][]string),
+	}
+	var buf bytes.Buffer
+
+	for {
+		msg, err := stream.Recv()
+		if err != nil {
+			break
 		}
+		if msg.GetStatusCode() != 0 {
+			resp.statusCode = msg.GetStatusCode()
+		}
+		for _, h := range msg.GetHeaders() {
+			resp.headers[h.GetKey()] = append(resp.headers[h.GetKey()], h.GetValue())
+		}
+		if len(msg.GetBody()) > 0 {
+			buf.Write(msg.GetBody())
+		}
+	}
 
-		for {
-			msg, err := stream.Recv()
-			if err != nil {
+	resp.body = buf.Bytes()
+	_ = stream.SendAndClose(&pb.SendResponseResult{})
+	return resp
+}
+
+func proxyViaTestServer(t *testing.T, kubeServer *httptest.Server, req *pb.HttpRequest) *collectedResponse {
+	t.Helper()
+
+	var mu sync.Mutex
+	var result *collectedResponse
+
+	srv, addr := startTestServer(t, testServerHandlers{
+		subscribeHandler: func(_ *pb.SubscribeRequest, stream grpc.ServerStreamingServer[pb.HttpRequest]) error {
+			if err := stream.Send(req); err != nil {
 				return err
 			}
+			<-stream.Context().Done()
+			return nil
+		},
+		sendResponseHandler: func(stream grpc.ClientStreamingServer[pb.HttpResponse, pb.SendResponseResult]) error {
+			resp := collectResponse(t, stream)
 			mu.Lock()
-			result = append(result, msg)
+			result = resp
 			mu.Unlock()
-			if msg.GetHttpResponseEnd() != nil {
-				return nil
-			}
-		}
+			return nil
+		},
 	})
 	defer srv.GracefulStop()
 
 	c := &Client{
 		log:        logrus.New(),
-		cfg:        Config{HeartbeatInterval: time.Hour},
+		cfg:        Config{},
 		httpClient: kubeServer.Client(),
 		kubeURL:    kubeServer.URL,
 	}
@@ -403,61 +463,22 @@ func proxyViaTestStream(t *testing.T, kubeServer *httptest.Server, req *pb.HttpR
 	defer conn.Close()
 
 	client := pb.NewClusterTunnelClient(conn)
-	stream, err := client.Connect(ctx)
-	require.NoError(t, err)
-
-	_ = c.handleStream(ctx, stream)
+	_ = c.subscribe(ctx, client)
 
 	mu.Lock()
 	defer mu.Unlock()
+	require.NotNil(t, result, "no response collected")
 	return result
 }
 
-func findStart(msgs []*pb.TunnelMessage, requestID string) *pb.HttpResponseStart {
-	for _, m := range msgs {
-		if s := m.GetHttpResponseStart(); s != nil && s.RequestId == requestID {
-			return s
-		}
-	}
-	return nil
-}
-
-func collectBody(msgs []*pb.TunnelMessage, requestID string) []byte {
-	var buf bytes.Buffer
-	for _, m := range msgs {
-		if b := m.GetHttpResponseBody(); b != nil && b.RequestId == requestID {
-			buf.Write(b.Data)
-		}
-	}
-	return buf.Bytes()
-}
-
-func hasEnd(msgs []*pb.TunnelMessage, requestID string) bool {
-	for _, m := range msgs {
-		if e := m.GetHttpResponseEnd(); e != nil && e.RequestId == requestID {
-			return true
-		}
-	}
-	return false
-}
-
-type testServer struct {
-	pb.UnimplementedClusterTunnelServer
-	handler func(stream grpc.BidiStreamingServer[pb.TunnelMessage, pb.TunnelMessage]) error
-}
-
-func (s *testServer) Connect(stream grpc.BidiStreamingServer[pb.TunnelMessage, pb.TunnelMessage]) error {
-	return s.handler(stream)
-}
-
-func startTestServer(t *testing.T, handler func(stream grpc.BidiStreamingServer[pb.TunnelMessage, pb.TunnelMessage]) error) (*grpc.Server, string) {
+func startTestServer(t *testing.T, handlers testServerHandlers) (*grpc.Server, string) {
 	t.Helper()
 
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 
 	srv := grpc.NewServer()
-	pb.RegisterClusterTunnelServer(srv, &testServer{handler: handler})
+	pb.RegisterClusterTunnelServer(srv, &testServer{handlers: handlers})
 
 	var wg sync.WaitGroup
 	wg.Add(1)
