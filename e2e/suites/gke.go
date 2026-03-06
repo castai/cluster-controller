@@ -83,8 +83,8 @@ func (ts *gkeTestSuite) Run(ctx context.Context, t *testing.T) {
 	helmCmdBuilder.WriteString(" --timeout=1m")
 	helmCmdBuilder.WriteString(" --reset-then-reuse-values")
 	helmCmdBuilder.WriteString(" --set replicas=1")
-	helmCmdBuilder.WriteString(fmt.Sprintf(" --set image.repository=%s", ts.clusterControllerImageRepository))
-	helmCmdBuilder.WriteString(fmt.Sprintf(" --set image.tag=%s", ts.clusterControllerImageTag))
+	fmt.Fprintf(&helmCmdBuilder, " --set image.repository=%s", ts.clusterControllerImageRepository)
+	fmt.Fprintf(&helmCmdBuilder, " --set image.tag=%s", ts.clusterControllerImageTag)
 
 	r.NoError(ExecPretty(helmCmdBuilder.String()))
 
