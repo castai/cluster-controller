@@ -42,6 +42,9 @@ linters:
         - commentFormatting
     godot:
       scope: all
+    gosec:
+      excludes:
+      - G118 # TODO: doesn't detect ctx cancel() call in t.Cleanup()
     govet:
       settings:
         printf:
