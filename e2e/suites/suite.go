@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/samber/lo"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -189,7 +188,7 @@ func (suite *baseSuite) onboardCluster(ctx context.Context, t *testing.T) *clien
 	r := require.New(t)
 
 	agentScriptResp, err := suite.castClient.AutoscalerAPIGetAgentScript(ctx, &client.AutoscalerAPIGetAgentScriptParams{
-		Provider: lo.ToPtr(client.AutoscalerAPIGetAgentScriptParamsProvider(suite.provider)),
+		Provider: new(client.AutoscalerAPIGetAgentScriptParamsProvider(suite.provider)),
 	})
 
 	r.NoError(err)
@@ -249,7 +248,7 @@ func (suite *baseSuite) cleanupCluster(ctx context.Context) error {
 
 	if cluster.CredentialsId != nil {
 		if _, err := suite.castClient.ExternalClusterAPIDisconnectClusterWithResponse(ctx, *cluster.Id, client.ExternalclusterV1DisconnectConfig{
-			DeleteProvisionedNodes: lo.ToPtr(true),
+			DeleteProvisionedNodes: new(true),
 		}); err != nil {
 			return fmt.Errorf("disconnect cluster: %w", err)
 		}
@@ -325,7 +324,7 @@ func getTestDeployment() *appsv1.Deployment {
 			Namespace: "default",
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: lo.ToPtr(int32(1)),
+			Replicas: new(int32(1)),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"app": "nginx",

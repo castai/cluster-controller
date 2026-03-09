@@ -56,10 +56,6 @@ func newTestWaiterVAInformer(t *testing.T, volumeAttachments []*storagev1.Volume
 	return vaInformer.Informer().GetIndexer(), clientset
 }
 
-func vaStrPtr(s string) *string {
-	return &s
-}
-
 func TestDetachmentWaiter_Wait(t *testing.T) {
 	t.Parallel()
 
@@ -88,7 +84,7 @@ func TestDetachmentWaiter_Wait(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "va1"},
 				Spec: storagev1.VolumeAttachmentSpec{
 					NodeName: "node1",
-					Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: vaStrPtr("pv1")},
+					Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: new("pv1")},
 				},
 			}
 			vaIndexer, clientset := newTestWaiterVAInformer(t, []*storagev1.VolumeAttachment{va})
@@ -116,7 +112,7 @@ func TestDetachmentWaiter_Wait(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "va1"},
 				Spec: storagev1.VolumeAttachmentSpec{
 					NodeName: "node1",
-					Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: vaStrPtr("pv1")},
+					Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: new("pv1")},
 				},
 			}
 			vaIndexer, clientset := newTestWaiterVAInformer(t, []*storagev1.VolumeAttachment{va})
@@ -142,7 +138,7 @@ func TestDetachmentWaiter_Wait(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "va1"},
 				Spec: storagev1.VolumeAttachmentSpec{
 					NodeName: "node1",
-					Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: vaStrPtr("pv1")},
+					Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: new("pv1")},
 				},
 			}
 			vaIndexer, clientset := newTestWaiterVAInformer(t, []*storagev1.VolumeAttachment{va})
@@ -172,14 +168,14 @@ func TestDetachmentWaiter_Wait(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "va-node1"},
 				Spec: storagev1.VolumeAttachmentSpec{
 					NodeName: "node1",
-					Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: vaStrPtr("pv1")},
+					Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: new("pv1")},
 				},
 			}
 			vaNode2 := &storagev1.VolumeAttachment{
 				ObjectMeta: metav1.ObjectMeta{Name: "va-node2"},
 				Spec: storagev1.VolumeAttachmentSpec{
 					NodeName: "node2",
-					Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: vaStrPtr("pv2")},
+					Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: new("pv2")},
 				},
 			}
 
@@ -212,14 +208,14 @@ func TestDetachmentWaiter_Wait(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "va-ds"},
 				Spec: storagev1.VolumeAttachmentSpec{
 					NodeName: "node1",
-					Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: vaStrPtr("pv-ds")},
+					Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: new("pv-ds")},
 				},
 			}
 			vaFromRegular := &storagev1.VolumeAttachment{
 				ObjectMeta: metav1.ObjectMeta{Name: "va-regular"},
 				Spec: storagev1.VolumeAttachmentSpec{
 					NodeName: "node1",
-					Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: vaStrPtr("pv-regular")},
+					Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: new("pv-regular")},
 				},
 			}
 
@@ -275,14 +271,14 @@ func TestDetachmentWaiter_Wait(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "va-static"},
 				Spec: storagev1.VolumeAttachmentSpec{
 					NodeName: "node1",
-					Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: vaStrPtr("pv-static")},
+					Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: new("pv-static")},
 				},
 			}
 			vaFromRegular := &storagev1.VolumeAttachment{
 				ObjectMeta: metav1.ObjectMeta{Name: "va-regular"},
 				Spec: storagev1.VolumeAttachmentSpec{
 					NodeName: "node1",
-					Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: vaStrPtr("pv-regular")},
+					Source:   storagev1.VolumeAttachmentSource{PersistentVolumeName: new("pv-regular")},
 				},
 			}
 

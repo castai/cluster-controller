@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/samber/lo"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -97,7 +96,7 @@ func (c *deleteResourceScenario) Run(ctx context.Context, namespace string, clie
 						Resource: woopGRV.Resource,
 					},
 					Name:      fmt.Sprintf("delete-resource-%d", i),
-					Namespace: lo.ToPtr(namespace),
+					Namespace: new(namespace),
 				},
 			},
 		})

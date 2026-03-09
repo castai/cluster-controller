@@ -144,7 +144,7 @@ func TestNewCSR(t *testing.T) {
 		{
 			name: "newCSRFacade() V1Beta1 spec.SignerName=\"\"",
 			csrObj: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
-				v1beta1.Spec.SignerName = lo.ToPtr("")
+				v1beta1.Spec.SignerName = new("")
 				return v1beta1
 			}),
 			notOK: true,
@@ -333,7 +333,7 @@ func TestCSR_SignerName(t *testing.T) {
 		{
 			name: "signerName() V1Beta1",
 			csrObj: modifyValidV1Beta1(t, func(v1beta1 *certv1beta1.CertificateSigningRequest) *certv1beta1.CertificateSigningRequest {
-				v1beta1.Spec.SignerName = lo.ToPtr("test valid v1beta1 signer name")
+				v1beta1.Spec.SignerName = new("test valid v1beta1 signer name")
 				return v1beta1
 			}),
 			result: "test valid v1beta1 signer name",

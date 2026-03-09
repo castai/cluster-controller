@@ -518,7 +518,7 @@ func testIntegration(t *testing.T, csrVersion schema.GroupVersion) {
 								},
 								URIs: testcase.uris,
 							}),
-							SignerName: lo.ToPtr(testcase.signer),
+							SignerName: new(testcase.signer),
 							Usages: lo.Map(testcase.usages, func(u string, _ int) certv1beta1.KeyUsage {
 								return certv1beta1.KeyUsage(u)
 							}),

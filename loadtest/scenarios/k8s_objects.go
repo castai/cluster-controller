@@ -3,7 +3,6 @@ package scenarios
 import (
 	"fmt"
 
-	"github.com/samber/lo"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -111,7 +110,7 @@ func DeploymentWithStuckPDB(deploymentName string) (*appsv1.Deployment, *policyv
 		},
 		Spec: policyv1.PodDisruptionBudgetSpec{
 			Selector:       deployment.Spec.Selector,
-			MaxUnavailable: lo.ToPtr(intstr.FromInt32(0)),
+			MaxUnavailable: new(intstr.FromInt32(0)),
 		},
 	}
 
@@ -131,7 +130,7 @@ func Deployment(name string) *appsv1.Deployment {
 			Namespace: metav1.NamespaceDefault,
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: lo.ToPtr(int32(1)),
+			Replicas: new(int32(1)),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					labelApp: labelValue,

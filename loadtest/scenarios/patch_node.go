@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/samber/lo"
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -116,7 +115,7 @@ func (s *patchNodeScenario) Run(ctx context.Context, _ string, _ kubernetes.Inte
 				NodeID:        "",
 				Labels:        map[string]string{"Test": "label"},
 				Annotations:   map[string]string{"Test": "annotation"},
-				Unschedulable: lo.ToPtr(true),
+				Unschedulable: new(true),
 				Capacity:      nil,
 			},
 		})

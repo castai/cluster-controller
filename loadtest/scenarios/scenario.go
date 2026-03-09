@@ -72,7 +72,7 @@ func RunScenario(
 
 		logger.Info("Deleting namespace for test")
 		err := clientset.CoreV1().Namespaces().Delete(ctxForCleanup, namespaceForTest, metav1.DeleteOptions{
-			GracePeriodSeconds: lo.ToPtr(int64(0)),
+			GracePeriodSeconds: new(int64(0)),
 			PropagationPolicy:  lo.ToPtr(metav1.DeletePropagationBackground),
 		})
 		if err != nil {

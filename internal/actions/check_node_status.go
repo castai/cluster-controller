@@ -7,7 +7,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -85,7 +84,7 @@ func (h *CheckNodeStatusHandler) checkNodeReady(ctx context.Context, _ *logrus.E
 	watchObject := metav1.SingleObject(metav1.ObjectMeta{
 		Name: req.NodeName,
 	})
-	watchObject.TimeoutSeconds = lo.ToPtr(int64(timeout.Seconds()))
+	watchObject.TimeoutSeconds = new(int64(timeout.Seconds()))
 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()

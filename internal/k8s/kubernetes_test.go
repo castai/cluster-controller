@@ -991,7 +991,7 @@ func TestPartitionPodsForEviction(t *testing.T) {
 						Name:      "daemonset-pod",
 						Namespace: "default",
 						OwnerReferences: []metav1.OwnerReference{
-							{Kind: "DaemonSet", Controller: boolPtr(true)},
+							{Kind: "DaemonSet", Controller: new(true)},
 						},
 					},
 					Status: v1.PodStatus{Phase: v1.PodRunning},
@@ -1009,7 +1009,7 @@ func TestPartitionPodsForEviction(t *testing.T) {
 						Name:      "static-pod",
 						Namespace: "default",
 						OwnerReferences: []metav1.OwnerReference{
-							{Kind: "Node", Controller: boolPtr(true)},
+							{Kind: "Node", Controller: new(true)},
 						},
 					},
 					Status: v1.PodStatus{Phase: v1.PodRunning},
@@ -1099,7 +1099,7 @@ func TestPartitionPodsForEviction(t *testing.T) {
 						Name:      "daemonset-pod",
 						Namespace: "default",
 						OwnerReferences: []metav1.OwnerReference{
-							{Kind: "DaemonSet", Controller: boolPtr(true)},
+							{Kind: "DaemonSet", Controller: new(true)},
 						},
 					},
 					Status: v1.PodStatus{Phase: v1.PodRunning},
@@ -1179,7 +1179,7 @@ func TestIsDaemonSetPod(t *testing.T) {
 			pod: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					OwnerReferences: []metav1.OwnerReference{
-						{Kind: "DaemonSet", Controller: boolPtr(true)},
+						{Kind: "DaemonSet", Controller: new(true)},
 					},
 				},
 			},
@@ -1190,7 +1190,7 @@ func TestIsDaemonSetPod(t *testing.T) {
 			pod: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					OwnerReferences: []metav1.OwnerReference{
-						{Kind: "ReplicaSet", Controller: boolPtr(true)},
+						{Kind: "ReplicaSet", Controller: new(true)},
 					},
 				},
 			},
@@ -1210,7 +1210,7 @@ func TestIsDaemonSetPod(t *testing.T) {
 			pod: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					OwnerReferences: []metav1.OwnerReference{
-						{Kind: "DaemonSet", Controller: boolPtr(false)},
+						{Kind: "DaemonSet", Controller: new(false)},
 					},
 				},
 			},
@@ -1241,7 +1241,7 @@ func TestIsStaticPod(t *testing.T) {
 			pod: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					OwnerReferences: []metav1.OwnerReference{
-						{Kind: "Node", Controller: boolPtr(true)},
+						{Kind: "Node", Controller: new(true)},
 					},
 				},
 			},
@@ -1252,7 +1252,7 @@ func TestIsStaticPod(t *testing.T) {
 			pod: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					OwnerReferences: []metav1.OwnerReference{
-						{Kind: "ReplicaSet", Controller: boolPtr(true)},
+						{Kind: "ReplicaSet", Controller: new(true)},
 					},
 				},
 			},
@@ -1277,8 +1277,4 @@ func TestIsStaticPod(t *testing.T) {
 			require.Equal(t, tt.want, got)
 		})
 	}
-}
-
-func boolPtr(b bool) *bool {
-	return &b
 }

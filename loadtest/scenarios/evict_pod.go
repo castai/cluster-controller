@@ -7,7 +7,6 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
-	"github.com/samber/lo"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -75,7 +74,7 @@ func (e *evictPodScenario) Cleanup(ctx context.Context, namespace string, client
 
 	for _, pod := range e.podsToEvict {
 		e.log.Info(fmt.Sprintf("Deleting pod %s", pod.Name))
-		err := clientset.CoreV1().Pods(namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{GracePeriodSeconds: lo.ToPtr(int64(0))})
+		err := clientset.CoreV1().Pods(namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{GracePeriodSeconds: new(int64(0))})
 		if err != nil && !apierrors.IsNotFound(err) {
 			e.log.Warn(fmt.Sprintf("failed to delete pod: %v", err))
 			errs = append(errs, err)
