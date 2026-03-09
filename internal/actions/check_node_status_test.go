@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
@@ -306,14 +305,14 @@ func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
 		{
 			name: "empty node name",
 			args: args{
-				action: newActionCheckNodeStatus("", nodeID, providerID, castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(1))),
+				action: newActionCheckNodeStatus("", nodeID, providerID, castai.ActionCheckNodeStatus_READY, new(int32(1))),
 			},
 			wantErr: k8s.ErrAction,
 		},
 		{
 			name: "return error when ctx timeout",
 			args: args{
-				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(1))),
+				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, new(int32(1))),
 			},
 			wantErr: context.DeadlineExceeded,
 		},
@@ -328,7 +327,7 @@ func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
 				},
 			},
 			args: args{
-				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(2))),
+				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, new(int32(2))),
 			},
 			wantErr: context.DeadlineExceeded,
 		},
@@ -347,7 +346,7 @@ func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
 				},
 			},
 			args: args{
-				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(2))),
+				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, new(int32(2))),
 			},
 			wantErr: context.DeadlineExceeded,
 		},
@@ -366,7 +365,7 @@ func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
 				},
 			},
 			args: args{
-				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(2))),
+				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, new(int32(2))),
 			},
 			wantErr: context.DeadlineExceeded,
 		},
@@ -389,7 +388,7 @@ func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
 				},
 			},
 			args: args{
-				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(10))),
+				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, new(int32(10))),
 			},
 		},
 		{
@@ -411,7 +410,7 @@ func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
 				},
 			},
 			args: args{
-				action: newActionCheckNodeStatus(nodeName, nodeID, "", castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(10))),
+				action: newActionCheckNodeStatus(nodeName, nodeID, "", castai.ActionCheckNodeStatus_READY, new(int32(10))),
 			},
 		},
 		{
@@ -429,7 +428,7 @@ func TestCheckNodeStatusHandler_Handle_Ready(t *testing.T) {
 				},
 			},
 			args: args{
-				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(1))),
+				action: newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, new(int32(1))),
 			},
 		},
 	}

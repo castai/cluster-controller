@@ -239,7 +239,7 @@ func TestManager_VAInformer(t *testing.T) {
 		Spec: storagev1.VolumeAttachmentSpec{
 			Attacher: "test-attacher",
 			Source: storagev1.VolumeAttachmentSource{
-				PersistentVolumeName: strPtr("pv-1"),
+				PersistentVolumeName: new("pv-1"),
 			},
 			NodeName: "node-1",
 		},
@@ -345,10 +345,6 @@ func TestManager_DisabledInformers(t *testing.T) {
 	require.NotNil(t, manager.GetVALister())
 	require.NotNil(t, manager.GetVAInformer())
 	require.NotNil(t, manager.GetVAIndexer())
-}
-
-func strPtr(s string) *string {
-	return &s
 }
 
 // mockVAPermissionsAllowed sets up a reactor to allow all VA permissions (get, list, watch).

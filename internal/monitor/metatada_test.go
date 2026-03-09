@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
@@ -25,7 +24,7 @@ func TestSaveMetadata(t *testing.T) {
 		},
 		"invalid file dir": {
 			file:          "no_such_dir/abc",
-			expectedError: lo.ToPtr("open.*no such file or directory"),
+			expectedError: new("open.*no such file or directory"),
 		},
 		"valid dir": {
 			createDir: "metadata",

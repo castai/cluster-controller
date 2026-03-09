@@ -5,7 +5,6 @@ import (
 	"time"
 
 	dto "github.com/prometheus/client_model/go"
-	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -259,20 +258,20 @@ func TestConvertPrometheusMetricFamilies_Histogram(t *testing.T) {
 	// Create histogram buckets
 	buckets := []*dto.Bucket{
 		{
-			CumulativeCount: lo.ToPtr(uint64(10)),
-			UpperBound:      lo.ToPtr(1.0),
+			CumulativeCount: new(uint64(10)),
+			UpperBound:      new(1.0),
 		},
 		{
-			CumulativeCount: lo.ToPtr(uint64(30)),
-			UpperBound:      lo.ToPtr(5.0),
+			CumulativeCount: new(uint64(30)),
+			UpperBound:      new(5.0),
 		},
 		{
-			CumulativeCount: lo.ToPtr(uint64(80)),
-			UpperBound:      lo.ToPtr(10.0),
+			CumulativeCount: new(uint64(80)),
+			UpperBound:      new(10.0),
 		},
 		{
-			CumulativeCount: lo.ToPtr(uint64(100)),
-			UpperBound:      lo.ToPtr(25.0),
+			CumulativeCount: new(uint64(100)),
+			UpperBound:      new(25.0),
 		},
 	}
 
@@ -406,16 +405,16 @@ func TestConvertPrometheusMetricFamilies_Summary(t *testing.T) {
 	// Create summary quantiles
 	quantiles := []*dto.Quantile{
 		{
-			Quantile: lo.ToPtr(0.5),
-			Value:    lo.ToPtr(2.5),
+			Quantile: new(0.5),
+			Value:    new(2.5),
 		},
 		{
-			Quantile: lo.ToPtr(0.9),
-			Value:    lo.ToPtr(8.1),
+			Quantile: new(0.9),
+			Value:    new(8.1),
 		},
 		{
-			Quantile: lo.ToPtr(0.99),
-			Value:    lo.ToPtr(15.3),
+			Quantile: new(0.99),
+			Value:    new(15.3),
 		},
 	}
 

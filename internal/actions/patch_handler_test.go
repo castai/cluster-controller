@@ -58,7 +58,7 @@ func TestPatchHandler(t *testing.T) {
 							Version:  "v1",
 							Resource: "deployments",
 						},
-						Namespace: lo.ToPtr("default"),
+						Namespace: new("default"),
 						Name:      "existing-deployment",
 					},
 					PatchType: string(apitypes.StrategicMergePatchType),

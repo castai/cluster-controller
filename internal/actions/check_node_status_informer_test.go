@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
@@ -46,17 +45,17 @@ func TestCheckNodeStatusInformerHandler_Handle_Validation(t *testing.T) {
 		},
 		{
 			name:    "empty node name",
-			action:  newActionCheckNodeStatus("", nodeID, providerID, castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(1))),
+			action:  newActionCheckNodeStatus("", nodeID, providerID, castai.ActionCheckNodeStatus_READY, new(int32(1))),
 			wantErr: k8s.ErrAction,
 		},
 		{
 			name:    "empty node ID and provider ID",
-			action:  newActionCheckNodeStatus(nodeName, "", "", castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(1))),
+			action:  newActionCheckNodeStatus(nodeName, "", "", castai.ActionCheckNodeStatus_READY, new(int32(1))),
 			wantErr: k8s.ErrAction,
 		},
 		{
 			name:            "unknown status returns error",
-			action:          newActionCheckNodeStatus(nodeName, nodeID, providerID, "invalid_status", lo.ToPtr(int32(1))),
+			action:          newActionCheckNodeStatus(nodeName, nodeID, providerID, "invalid_status", new(int32(1))),
 			wantErrContains: "unknown status to check provided node",
 		},
 	}
@@ -198,14 +197,14 @@ func TestCheckNodeStatusInformerHandler_Handle_Ready(t *testing.T) {
 	}{
 		{
 			name:         "node already ready in cache",
-			action:       newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(5))),
+			action:       newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, new(int32(5))),
 			initialNodes: []*v1.Node{nodeObjectReady},
 			watchEvents:  nil,
 			wantErr:      nil,
 		},
 		{
 			name:         "node becomes ready via update event",
-			action:       newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(5))),
+			action:       newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, new(int32(5))),
 			initialNodes: nil,
 			watchEvents: []watchEvent{
 				{eventType: watch.Added, object: nodeObjectNotReady},
@@ -215,7 +214,7 @@ func TestCheckNodeStatusInformerHandler_Handle_Ready(t *testing.T) {
 		},
 		{
 			name:         "node becomes ready via add event",
-			action:       newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(5))),
+			action:       newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, new(int32(5))),
 			initialNodes: nil,
 			watchEvents: []watchEvent{
 				{eventType: watch.Added, object: nodeObjectReady},
@@ -224,7 +223,7 @@ func TestCheckNodeStatusInformerHandler_Handle_Ready(t *testing.T) {
 		},
 		{
 			name:         "node becomes ready after taint removed",
-			action:       newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(5))),
+			action:       newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, new(int32(5))),
 			initialNodes: nil,
 			watchEvents: []watchEvent{
 				{eventType: watch.Added, object: nodeObjectReadyTainted},
@@ -234,7 +233,7 @@ func TestCheckNodeStatusInformerHandler_Handle_Ready(t *testing.T) {
 		},
 		{
 			name:         "succeeds with empty provider ID in request",
-			action:       newActionCheckNodeStatus(nodeName, nodeID, "", castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(5))),
+			action:       newActionCheckNodeStatus(nodeName, nodeID, "", castai.ActionCheckNodeStatus_READY, new(int32(5))),
 			initialNodes: nil,
 			watchEvents: []watchEvent{
 				{eventType: watch.Added, object: nodeObjectReady},
@@ -243,7 +242,7 @@ func TestCheckNodeStatusInformerHandler_Handle_Ready(t *testing.T) {
 		},
 		{
 			name:         "timeout when node never becomes ready",
-			action:       newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(1))),
+			action:       newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, new(int32(1))),
 			initialNodes: nil,
 			watchEvents: []watchEvent{
 				{eventType: watch.Added, object: nodeObjectNotReady},
@@ -253,7 +252,7 @@ func TestCheckNodeStatusInformerHandler_Handle_Ready(t *testing.T) {
 		},
 		{
 			name:         "timeout when node is ready but has different ID",
-			action:       newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(1))),
+			action:       newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, new(int32(1))),
 			initialNodes: nil,
 			watchEvents: []watchEvent{
 				{eventType: watch.Added, object: nodeObjectReadyAnotherID},
@@ -263,7 +262,7 @@ func TestCheckNodeStatusInformerHandler_Handle_Ready(t *testing.T) {
 		},
 		{
 			name:         "timeout when node stays tainted",
-			action:       newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(1))),
+			action:       newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, new(int32(1))),
 			initialNodes: nil,
 			watchEvents: []watchEvent{
 				{eventType: watch.Added, object: nodeObjectReadyTainted},
@@ -273,7 +272,7 @@ func TestCheckNodeStatusInformerHandler_Handle_Ready(t *testing.T) {
 		},
 		{
 			name:         "timeout when no events received",
-			action:       newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, lo.ToPtr(int32(1))),
+			action:       newActionCheckNodeStatus(nodeName, nodeID, providerID, castai.ActionCheckNodeStatus_READY, new(int32(1))),
 			initialNodes: nil,
 			watchEvents:  nil,
 			advanceTime:  2 * time.Second,

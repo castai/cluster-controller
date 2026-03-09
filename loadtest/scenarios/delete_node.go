@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/samber/lo"
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -66,7 +65,7 @@ func (s *deleteNodeScenario) Preparation(ctx context.Context, namespace string, 
 			deployment := Deployment(fmt.Sprintf("fake-deployment-%s-%d", node.Name, i))
 			deployment.Namespace = namespace
 			//nolint:gosec // Not afraid of overflow here.
-			deployment.Spec.Replicas = lo.ToPtr(int32(s.deploymentReplicas))
+			deployment.Spec.Replicas = new(int32(s.deploymentReplicas))
 			deployment.Spec.Template.Spec.NodeName = nodeName
 
 			_, err = clientset.AppsV1().Deployments(namespace).Create(ctx, deployment, metav1.CreateOptions{})

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/require"
@@ -750,12 +749,12 @@ func TestShouldWaitForVolumeDetach(t *testing.T) {
 		},
 		{
 			name:                "returns true when WaitForVolumeDetach is true",
-			waitForVolumeDetach: lo.ToPtr(true),
+			waitForVolumeDetach: new(true),
 			want:                true,
 		},
 		{
 			name:                "returns false when WaitForVolumeDetach is false",
-			waitForVolumeDetach: lo.ToPtr(false),
+			waitForVolumeDetach: new(false),
 			want:                false,
 		},
 	}

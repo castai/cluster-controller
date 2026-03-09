@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -44,7 +43,7 @@ func Test_newDeleteHandler(t *testing.T) {
 							Version:  appsv1.SchemeGroupVersion.Version,
 							Resource: "deployments",
 						},
-						Namespace: lo.ToPtr("default"),
+						Namespace: new("default"),
 						Name:      "nginx",
 					},
 				},
@@ -65,7 +64,7 @@ func Test_newDeleteHandler(t *testing.T) {
 							Version:  appsv1.SchemeGroupVersion.Version,
 							Resource: "deployments",
 						},
-						Namespace: lo.ToPtr("default"),
+						Namespace: new("default"),
 						Name:      "nginx",
 					},
 				},

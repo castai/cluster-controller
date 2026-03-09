@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/samber/lo"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -132,7 +131,7 @@ func (ts *gkeTestSuite) Run(ctx context.Context, t *testing.T) {
 	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), 12)))
 
 	drainResp, err := ts.castClient.ExternalClusterAPIDrainNodeWithResponse(ctx, *extCluster.Id, node.Id, client.ExternalclusterV1DrainConfig{
-		TimeoutSeconds: lo.ToPtr(int32(60)),
+		TimeoutSeconds: new(int32(60)),
 	})
 	r.NoError(err)
 	r.NoError(ts.waitForOperation(ctx, drainResp.JSON200.OperationId, ts.drainNodeTimeout))

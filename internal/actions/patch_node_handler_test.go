@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
@@ -237,7 +236,7 @@ func TestPatchNodeHandler_Handle(t *testing.T) {
 			},
 			args: args{
 				action: newPatchNodeAction(nodeName, nodeID, providerID,
-					nil, nil, nil, nil, lo.ToPtr(true)),
+					nil, nil, nil, nil, new(true)),
 			},
 			wantLabels: map[string]string{
 				castai.LabelNodeID: nodeID,

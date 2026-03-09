@@ -312,7 +312,7 @@ func TestDrainer_Evict(t *testing.T) {
 						OwnerReferences: []metav1.OwnerReference{
 							{
 								Kind:       "DaemonSet",
-								Controller: boolPtr(true),
+								Controller: new(true),
 							},
 						},
 					},
@@ -330,7 +330,7 @@ func TestDrainer_Evict(t *testing.T) {
 						OwnerReferences: []metav1.OwnerReference{
 							{
 								Kind:       "Node",
-								Controller: boolPtr(true),
+								Controller: new(true),
 							},
 						},
 					},
@@ -425,7 +425,7 @@ func TestDrainer_Evict(t *testing.T) {
 						Name:      "ds-pod",
 						Namespace: "default",
 						OwnerReferences: []metav1.OwnerReference{
-							{Kind: "DaemonSet", Controller: boolPtr(true)},
+							{Kind: "DaemonSet", Controller: new(true)},
 						},
 					},
 				})
@@ -532,7 +532,7 @@ func TestDrainer_Drain(t *testing.T) {
 						OwnerReferences: []metav1.OwnerReference{
 							{
 								Kind:       "DaemonSet",
-								Controller: boolPtr(true),
+								Controller: new(true),
 							},
 						},
 					},
@@ -579,7 +579,7 @@ func TestDrainer_Drain(t *testing.T) {
 						Name:      "ds-pod",
 						Namespace: "default",
 						OwnerReferences: []metav1.OwnerReference{
-							{Kind: "DaemonSet", Controller: boolPtr(true)},
+							{Kind: "DaemonSet", Controller: new(true)},
 						},
 					},
 				})
@@ -877,7 +877,7 @@ func TestDrainer_PrioritizePods(t *testing.T) {
 						Name:      "daemonset-pod",
 						Namespace: "default",
 						OwnerReferences: []metav1.OwnerReference{
-							{Kind: "DaemonSet", Controller: boolPtr(true)},
+							{Kind: "DaemonSet", Controller: new(true)},
 						},
 					},
 				})
@@ -1318,10 +1318,6 @@ func TestDrainer_TryDrain(t *testing.T) {
 	}
 }
 
-func boolPtr(b bool) *bool {
-	return &b
-}
-
 func addEvictionSupport(c *fake.Clientset) {
 	podsEviction := metav1.APIResource{
 		Name:    "pods/eviction",
@@ -1408,7 +1404,7 @@ func TestDrainer_RetryStale(t *testing.T) {
 						Name:      "ds-pod",
 						Namespace: "default",
 						OwnerReferences: []metav1.OwnerReference{
-							{Kind: "DaemonSet", Controller: boolPtr(true)},
+							{Kind: "DaemonSet", Controller: new(true)},
 						},
 					},
 				},
@@ -1425,7 +1421,7 @@ func TestDrainer_RetryStale(t *testing.T) {
 						Name:      "static-pod",
 						Namespace: "default",
 						OwnerReferences: []metav1.OwnerReference{
-							{Kind: "Node", Controller: boolPtr(true)},
+							{Kind: "Node", Controller: new(true)},
 						},
 					},
 				},
