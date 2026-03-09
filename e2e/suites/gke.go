@@ -78,11 +78,11 @@ func (ts *gkeTestSuite) Run(ctx context.Context, t *testing.T) {
 
 	extCluster := ts.onboardCluster(ctx, t)
 
-	helmCmdBuilder := strings.Builder{}
-	helmCmdBuilder.WriteString("helm upgrade -n castai-agent cluster-controller castai-helm/castai-cluster-controller --wait")
-	helmCmdBuilder.WriteString(" --timeout=1m")
-	helmCmdBuilder.WriteString(" --reset-then-reuse-values")
-	helmCmdBuilder.WriteString(" --set replicas=1")
+	var helmCmdBuilder strings.Builder
+	fmt.Fprint(&helmCmdBuilder, "helm upgrade -n castai-agent cluster-controller castai-helm/castai-cluster-controller --wait")
+	fmt.Fprint(&helmCmdBuilder, " --timeout=1m")
+	fmt.Fprint(&helmCmdBuilder, " --reset-then-reuse-values")
+	fmt.Fprint(&helmCmdBuilder, " --set replicas=1")
 	fmt.Fprintf(&helmCmdBuilder, " --set image.repository=%s", ts.clusterControllerImageRepository)
 	fmt.Fprintf(&helmCmdBuilder, " --set image.tag=%s", ts.clusterControllerImageTag)
 
