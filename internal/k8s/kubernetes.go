@@ -457,7 +457,7 @@ func PartitionPodsForEviction(pods []*v1.Pod, castNamespace string, skipDeletedT
 			continue
 		}
 
-		if IsDaemonSetPod(p) || IsStaticPod(p) {
+		if IsDaemonSetPod(p) || IsStaticPod(p) || HasWildcardToleration(p) {
 			nonEvictable = append(nonEvictable, p)
 			continue
 		}
@@ -493,7 +493,19 @@ func IsControlledBy(p *v1.Pod, kind string) bool {
 }
 
 func IsNonEvictible(p *v1.Pod) bool {
-	return IsDaemonSetPod(p) || IsStaticPod(p)
+	return IsDaemonSetPod(p) || IsStaticPod(p) || HasWildcardToleration(p)
+}
+
+// HasWildcardToleration returns true if the pod has a toleration that matches all taints
+// (i.e. key is empty and operator is Exists). Such pods would be rescheduled back onto
+// a cordoned node since they tolerate the node.kubernetes.io/unschedulable taint.
+func HasWildcardToleration(p *v1.Pod) bool {
+	for _, t := range p.Spec.Tolerations {
+		if t.Key == "" && t.Operator == v1.TolerationOpExists {
+			return true
+		}
+	}
+	return false
 }
 
 // PatchNode patches a node with the given change function.

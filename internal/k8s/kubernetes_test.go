@@ -1088,6 +1088,40 @@ func TestPartitionPodsForEviction(t *testing.T) {
 			wantEvictableLen:       0,
 		},
 		{
+			name: "pod with wildcard toleration is non-evictable",
+			pods: []v1.Pod{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "wildcard-pod", Namespace: "default"},
+					Spec: v1.PodSpec{
+						Tolerations: []v1.Toleration{
+							{Operator: v1.TolerationOpExists},
+						},
+					},
+					Status: v1.PodStatus{Phase: v1.PodRunning},
+				},
+			},
+			castNamespace:            testCastNamespace,
+			wantNonEvictableLen:      1,
+			wantNonEvictablePodNames: []string{"wildcard-pod"},
+		},
+		{
+			name: "pod with specific key toleration is evictable",
+			pods: []v1.Pod{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "specific-toleration-pod", Namespace: "default"},
+					Spec: v1.PodSpec{
+						Tolerations: []v1.Toleration{
+							{Key: "node.kubernetes.io/unschedulable", Operator: v1.TolerationOpExists},
+						},
+					},
+					Status: v1.PodStatus{Phase: v1.PodRunning},
+				},
+			},
+			castNamespace:         testCastNamespace,
+			wantEvictableLen:      1,
+			wantEvictablePodNames: []string{"specific-toleration-pod"},
+		},
+		{
 			name: "mixed pods are partitioned correctly",
 			pods: []v1.Pod{
 				{
