@@ -501,8 +501,6 @@ func IsNonEvictible(p *v1.Pod) bool {
 // a cordoned node since they tolerate the node.kubernetes.io/unschedulable taint.
 func HasWildcardToleration(p *v1.Pod) bool {
 	for _, t := range p.Spec.Tolerations {
-		fmt.Println(p.Name, t.Key == "" && t.Operator == v1.TolerationOpExists)
-		fmt.Println(t)
 		if t.Key == "" && t.Operator == v1.TolerationOpExists {
 			return true
 		}
