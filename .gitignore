@@ -7,3 +7,6 @@ bin
 e2e/**/castai-*.json
 
 .aider*
+
+# Helm chart dependencies (downloaded via helm dependency build)
+hack/loadtest/chart/charts/*.tgz

@@ -48,5 +48,65 @@ generate-e2e-client:
 	go generate ./e2e/client
 .PHONY: generate-e2e-client
 
+## deploy-loadtest: Build, push, and deploy the loadtest environment with cluster-controller
 deploy-loadtest: release
-	IMAGE_REPOSITORY=$(DOCKER_REPOSITORY) IMAGE_TAG=$(VERSION) ./hack/loadtest/deploy.sh $(LOADTEST_VALUES_FILE)
+	IMAGE_REPOSITORY=$(DOCKER_REPOSITORY) \
+	IMAGE_TAG=$(VERSION) \
+	LOADTEST_IMAGE_REPOSITORY=$(DOCKER_REPOSITORY) \
+	LOADTEST_IMAGE_TAG=$(VERSION) \
+	./hack/loadtest/deploy-helm.sh \
+	$(if $(KWOK_VALUES_FILE),--kwok-values $(KWOK_VALUES_FILE)) \
+	$(if $(CC_VALUES_FILE),--cc-values $(CC_VALUES_FILE)) \
+	$(if $(LOADTEST_VALUES_FILE),--loadtest-values $(LOADTEST_VALUES_FILE))
+.PHONY: deploy-loadtest
+
+## deploy-loadtest-only: Deploy loadtest environment without building (uses existing image)
+deploy-loadtest-only:
+	IMAGE_REPOSITORY=$(DOCKER_REPOSITORY) \
+	IMAGE_TAG=$(VERSION) \
+	LOADTEST_IMAGE_REPOSITORY=$(DOCKER_REPOSITORY) \
+	LOADTEST_IMAGE_TAG=$(VERSION) \
+	./hack/loadtest/deploy-helm.sh \
+	$(if $(KWOK_VALUES_FILE),--kwok-values $(KWOK_VALUES_FILE)) \
+	$(if $(CC_VALUES_FILE),--cc-values $(CC_VALUES_FILE)) \
+	$(if $(LOADTEST_VALUES_FILE),--loadtest-values $(LOADTEST_VALUES_FILE))
+.PHONY: deploy-loadtest-only
+
+## undeploy-loadtest: Remove the loadtest environment
+undeploy-loadtest:
+	./hack/loadtest/undeploy-helm.sh
+.PHONY: undeploy-loadtest
+
+## loadtest-status: Check the status of loadtest deployment
+loadtest-status:
+	@echo "==> Helm releases:"
+	@helm list -n castai-agent
+	@echo ""
+	@echo "==> Pods:"
+	@kubectl get pods -n castai-agent
+	@echo ""
+	@echo "==> Services:"
+	@kubectl get svc -n castai-agent | grep -E '(NAME|loadtest|prometheus|grafana|loki)'
+.PHONY: loadtest-status
+
+## loadtest-logs: Tail logs from loadtest agent
+loadtest-logs:
+	kubectl logs -n castai-agent -l app=castai-loadtest-agent -f
+.PHONY: loadtest-logs
+
+## loadtest-forward-grafana: Port-forward Grafana to localhost:3000
+loadtest-forward-grafana:
+	@echo "Grafana will be available at http://localhost:3000"
+	kubectl port-forward -n castai-agent svc/castai-loadtest-grafana 3000:80
+.PHONY: loadtest-forward-grafana
+
+## loadtest-forward-prometheus: Port-forward Prometheus to localhost:9090
+loadtest-forward-prometheus:
+	@echo "Prometheus will be available at http://localhost:9090"
+	kubectl port-forward -n castai-agent svc/castai-loadtest-prometheus-server 9090:9090
+.PHONY: loadtest-forward-prometheus
+
+## loadtest-helm-deps: Build Helm chart dependencies
+loadtest-helm-deps:
+	helm dependency build ./hack/loadtest/chart
+.PHONY: loadtest-helm-deps

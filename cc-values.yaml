@@ -1,0 +1,7 @@
+additionalEnv:
+  INFORMER_ENABLE_NODE: "true"
+  INFORMER_ENABLE_POD: "true"
+
+commonLabels:
+  app: cluster-controller
+

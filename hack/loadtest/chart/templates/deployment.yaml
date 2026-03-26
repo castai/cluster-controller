@@ -1,0 +1,46 @@
+{{- if .Values.loadtestAgent.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "castai-loadtest.fullname" . }}-agent
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "castai-loadtest.labels" . | nindent 4 }}
+    app: castai-loadtest-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "castai-loadtest.selectorLabels" . | nindent 6 }}
+      app: castai-loadtest-agent
+  template:
+    metadata:
+      labels:
+        {{- include "castai-loadtest.selectorLabels" . | nindent 8 }}
+        app: castai-loadtest-agent
+    spec:
+      serviceAccountName: {{ .Values.loadtestAgent.serviceAccount.name }}
+      {{- with .Values.loadtestAgent.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: castai-agent
+          image: "{{ .Values.loadtestAgent.image.repository }}:{{ .Values.loadtestAgent.image.tag }}"
+          imagePullPolicy: {{ .Values.loadtestAgent.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.loadtestAgent.service.port }}
+              name: http
+            - containerPort: {{ .Values.loadtestAgent.service.port }}
+              name: metrics
+          command:
+            - "castai-cluster-controller"
+            - "test-server"
+          env:
+            - name: PORT
+              value: "{{ .Values.loadtestAgent.service.port }}"
+          {{- with .Values.loadtestAgent.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

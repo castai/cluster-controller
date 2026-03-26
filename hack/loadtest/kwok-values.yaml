@@ -1,0 +1,9 @@
+# KWOK values to disable FlowSchema and PriorityClass creation
+# These features are restricted in some Kubernetes clusters
+
+# Number of fake nodes to create
+replicas: 4
+
+# Disable PriorityClass creation globally
+priorityClass:
+  enabled: false

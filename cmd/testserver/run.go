@@ -54,7 +54,7 @@ func run(ctx context.Context) error {
 	// Choose scenarios below by adding/removing/etc. instances of scenarios.XXX()
 	// All scenarios in the list run in parallel (but not necessarily at the same time if preparation takes different time).
 	testScenarios := []scenarios.TestScenario{
-		scenarios.DrainNode(5000, 10, logger),
+		scenarios.DrainNode(5, 10, logger),
 	}
 
 	logger.Info("Starting continuous test scenario execution")
