@@ -48,7 +48,7 @@ func (c *DisconnectClusterHandler) Handle(ctx context.Context, action *castai.Cl
 	})
 
 	log.Infof("deleting namespace %q", ns)
-	gracePeriod := int64(0) // Delete immediately.
+	gracePeriod := int64(60)
 	if err := c.client.CoreV1().Namespaces().Delete(ctx, ns, metav1.DeleteOptions{GracePeriodSeconds: &gracePeriod}); err != nil {
 		return fmt.Errorf("deleting namespace %q: %w", ns, err)
 	}
