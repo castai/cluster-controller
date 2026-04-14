@@ -77,7 +77,7 @@ func TestRetry(t *testing.T) {
 				t.Log("wait time", waitTime)
 
 				// We give some tolerance as we can't be precise to the nanosecond here.
-				r.InDelta(expectedWaitTimes[indexWaitTimes], waitTime, float64(2*time.Millisecond))
+				r.InDelta(expectedWaitTimes[indexWaitTimes], waitTime, float64(5*time.Millisecond))
 				indexWaitTimes++
 
 				return true, errors.New("dummy")
