@@ -1,5 +1,10 @@
 # CAST AI cluster controller
 
+> [!WARNING]
+> **This repository is archived and no longer maintained.**
+> Development has been migrated to an internal GitLab repository.
+> Please do not submit issues or pull requests here.
+
 The official CAST AI kubernetes cluster controller written in Go
 
 ## Installation
